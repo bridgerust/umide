@@ -176,7 +176,10 @@ impl AppData {
     pub fn reload_config(&self) {
         let config =
             LapceConfig::load(&LapceWorkspace::default(), &[], &self.plugin_paths);
+
         self.config.set(Arc::new(config));
+        self.window_scale.set(self.config.get().ui.scale());
+
         let windows = self.windows.get_untracked();
         for (_, window) in windows {
             window.reload_config();

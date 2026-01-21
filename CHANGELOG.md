@@ -6,9 +6,22 @@
 
 ### Bug Fixes
 
+## 0.4.6
+
+### Features/Changes
+
+- Add `.har` file extension as recognised JSON language (<https://github.com/lapce/lapce/pull/3853>)
+- Remove builds for Ubuntu Oracular, add Ubuntu Plucky (<https://github.com/lapce/lapce/pull/3808>)
+
+### Bug Fixes
+
 - Fix mouse wheel scrolling when viewing diff (<https://github.com/lapce/lapce/issues/3821>)
-- Fix editor tabs not selectable while appearing selectable
-- Fix flickering when reordering editor tabs
+- Fix editor tabs not selectable while appearing selectable (<https://github.com/lapce/lapce/pull/3818>)
+- Fix flickering when reordering editor tabs (<https://github.com/lapce/lapce/pull/3818>)
+- Fix diff viewer to scroll using mouse (<https://github.com/lapce/lapce/issues/3821>)
+- Fix updating window scale when it changes via settings tab (<https://github.com/lapce/lapce/issues/3832>)
+- Fix vendor tarball not being included in GitHub release
+- Fix cursor style inconsistencies (<https://github.com/lapce/lapce/pull/3819>)
 
 ## 0.4.5
 

@@ -105,7 +105,7 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
                 s.size(logo_size, logo_size)
                     .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
             }),
-            label(|| "Lapce".to_string()).style(move |s| {
+            label(|| "UMIDE".to_string()).style(move |s| {
                 s.font_bold()
                     .margin_top(10.0)
                     .color(config.get().color(LapceColor::EDITOR_FOREGROUND))

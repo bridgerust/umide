@@ -6,21 +6,21 @@
 #
 # See `docs/building-from-source.md`.
 
-TARGET = lapce
+TARGET = umide
 
 CODESIGN_IDENTITY = FAC8FBEA99169DC1980731029648F110628D6A32
 
 ASSETS_DIR = extra
 RELEASE_DIR = target/release-lto
 
-APP_NAME = Lapce.app
-APP_TEMPLATE = $(ASSETS_DIR)/macos/$(APP_NAME)
+APP_NAME = UMIDE.app
+APP_TEMPLATE = $(ASSETS_DIR)/macos/Lapce.app
 APP_DIR = $(RELEASE_DIR)/macos
 APP_BINARY = $(RELEASE_DIR)/$(TARGET)
 APP_BINARY_DIR = $(APP_DIR)/$(APP_NAME)/Contents/MacOS
 APP_EXTRAS_DIR = $(APP_DIR)/$(APP_NAME)/Contents/Resources
 
-DMG_NAME = Lapce.dmg
+DMG_NAME = UMIDE.dmg
 DMG_DIR = $(RELEASE_DIR)/macos
 
 vpath $(TARGET) $(RELEASE_DIR)

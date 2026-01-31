@@ -19,8 +19,8 @@ use lapce_rpc::{
 use thiserror::Error;
 use tracing::{debug, error};
 
-const UNIX_PROXY_SCRIPT: &[u8] = include_bytes!("../../../extra/proxy.sh");
-const WINDOWS_PROXY_SCRIPT: &[u8] = include_bytes!("../../../extra/proxy.ps1");
+const UNIX_PROXY_SCRIPT: &[u8] = include_bytes!("../../../../extra/proxy.sh");
+const WINDOWS_PROXY_SCRIPT: &[u8] = include_bytes!("../../../../extra/proxy.ps1");
 
 #[derive(Clone, Copy, Error, Debug, PartialEq, Eq, strum_macros::Display)]
 #[strum(ascii_case_insensitive)]

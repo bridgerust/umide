@@ -44,7 +44,19 @@ pub fn default_panel_order() -> PanelOrder {
     );
     order.insert(
         PanelPosition::RightTop,
-        im::vector![PanelKind::DocumentSymbol,],
+        im::vector![PanelKind::DocumentSymbol, PanelKind::Emulator],
+    );
+    order.insert(
+        PanelPosition::RightBottom,
+        im::vector![PanelKind::Video],
+    );
+    order.insert(
+        PanelPosition::LeftBottom,
+        im::vector![PanelKind::Terminal],
+    );
+    order.insert(
+        PanelPosition::BottomRight,
+        im::vector![],
     );
 
     order
@@ -91,82 +103,34 @@ pub struct PanelData {
     pub available_size: Memo<Size>,
     pub sections: RwSignal<im::HashMap<PanelSection, RwSignal<bool>>>,
     pub common: Rc<CommonData>,
+    pub emulator_frame: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PanelDataInfo {
+    pub panels: PanelOrder,
+    pub styles: im::HashMap<PanelPosition, PanelStyle>,
+    pub size: PanelSize,
+    pub sections: im::HashMap<PanelSection, bool>,
 }
 
 impl PanelData {
     pub fn new(
         cx: Scope,
-        panels: im::HashMap<PanelPosition, im::Vector<PanelKind>>,
+        info: PanelDataInfo,
         available_size: Memo<Size>,
-        sections: im::HashMap<PanelSection, bool>,
         common: Rc<CommonData>,
     ) -> Self {
-        let panels = cx.create_rw_signal(panels);
-
-        let mut styles = im::HashMap::new();
-        styles.insert(
-            PanelPosition::LeftTop,
-            PanelStyle {
-                active: 0,
-                shown: true,
-                maximized: false,
-            },
-        );
-        styles.insert(
-            PanelPosition::LeftBottom,
-            PanelStyle {
-                active: 0,
-                shown: false,
-                maximized: false,
-            },
-        );
-        styles.insert(
-            PanelPosition::BottomLeft,
-            PanelStyle {
-                active: 0,
-                shown: true,
-                maximized: false,
-            },
-        );
-        styles.insert(
-            PanelPosition::BottomRight,
-            PanelStyle {
-                active: 0,
-                shown: false,
-                maximized: false,
-            },
-        );
-        styles.insert(
-            PanelPosition::RightTop,
-            PanelStyle {
-                active: 0,
-                shown: false,
-                maximized: false,
-            },
-        );
-        styles.insert(
-            PanelPosition::RightBottom,
-            PanelStyle {
-                active: 0,
-                shown: false,
-                maximized: false,
-            },
-        );
-        let styles = cx.create_rw_signal(styles);
-        let size = cx.create_rw_signal(PanelSize {
-            left: 250.0,
-            left_split: 0.5,
-            bottom: 300.0,
-            bottom_split: 0.5,
-            right: 250.0,
-            right_split: 0.5,
-        });
+        let panels = cx.create_rw_signal(info.panels);
+        let styles = cx.create_rw_signal(info.styles);
+        let size = cx.create_rw_signal(info.size);
         let sections = cx.create_rw_signal(
-            sections
+            info.sections
                 .into_iter()
                 .map(|(key, value)| (key, cx.create_rw_signal(value)))
                 .collect(),
         );
+        let emulator_frame = cx.create_rw_signal(None);
 
         Self {
             panels,
@@ -175,6 +139,7 @@ impl PanelData {
             available_size,
             sections,
             common,
+            emulator_frame,
         }
     }
 

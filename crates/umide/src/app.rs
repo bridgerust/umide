@@ -447,6 +447,8 @@ impl AppData {
             );
         }
 
+
+
         app
     }
 
@@ -3726,11 +3728,11 @@ pub fn launch() {
 
         const FONT_DEJAVU_SANS_REGULAR: &[u8] = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../extra/fonts/DejaVu/DejaVuSans.ttf"
+            "/../../extra/fonts/DejaVu/DejaVuSans.ttf"
         ));
         const FONT_DEJAVU_SANS_MONO_REGULAR: &[u8] = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../extra/fonts/DejaVu/DejaVuSansMono.ttf"
+            "/../../extra/fonts/DejaVu/DejaVuSansMono.ttf"
         ));
 
         FONT_SYSTEM

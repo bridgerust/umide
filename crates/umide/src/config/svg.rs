@@ -9,8 +9,8 @@ use include_dir::{Dir, include_dir};
 use crate::config::LOGO;
 
 const CODICONS_ICONS_DIR: Dir =
-    include_dir!("$CARGO_MANIFEST_DIR/../icons/codicons");
-const LAPCE_ICONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../icons/lapce");
+    include_dir!("$CARGO_MANIFEST_DIR/../../icons/codicons");
+const LAPCE_ICONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../icons/lapce");
 
 #[derive(Debug, Clone)]
 pub struct SvgStore {
@@ -46,7 +46,10 @@ impl SvgStore {
             } else {
                 CODICONS_ICONS_DIR
                     .get_file(name)
-                    .unwrap_or_else(|| panic!("Failed to unwrap {name}"))
+                    .unwrap_or_else(|| {
+                        tracing::error!("Failed to find icon: {}", name);
+                        CODICONS_ICONS_DIR.get_file("error.svg").unwrap()
+                    })
             };
             let content = file.contents_utf8().unwrap();
             self.svgs.insert(name.to_string(), content.to_string());

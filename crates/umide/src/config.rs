@@ -41,11 +41,11 @@ pub mod terminal;
 pub mod ui;
 pub mod watcher;
 
-pub const LOGO: &str = include_str!("../../extra/images/logo.svg");
-const DEFAULT_SETTINGS: &str = include_str!("../../defaults/settings.toml");
-const DEFAULT_LIGHT_THEME: &str = include_str!("../../defaults/light-theme.toml");
-const DEFAULT_DARK_THEME: &str = include_str!("../../defaults/dark-theme.toml");
-const DEFAULT_ICON_THEME: &str = include_str!("../../defaults/icon-theme.toml");
+pub const LOGO: &str = include_str!("../../../extra/images/logo.svg");
+const DEFAULT_SETTINGS: &str = include_str!("../../../defaults/settings.toml");
+const DEFAULT_LIGHT_THEME: &str = include_str!("../../../defaults/light-theme.toml");
+const DEFAULT_DARK_THEME: &str = include_str!("../../../defaults/dark-theme.toml");
+const DEFAULT_ICON_THEME: &str = include_str!("../../../defaults/icon-theme.toml");
 
 static DEFAULT_CONFIG: Lazy<config::Config> = Lazy::new(LapceConfig::default_config);
 static DEFAULT_LAPCE_CONFIG: Lazy<LapceConfig> =
@@ -946,10 +946,10 @@ impl LapceConfig {
         }
     }
 
-    fn get_file_table() -> Option<toml_edit::Document> {
+    fn get_file_table() -> Option<toml_edit::DocumentMut> {
         let path = Self::settings_file()?;
         let content = std::fs::read_to_string(path).ok()?;
-        let document: toml_edit::Document = content.parse().ok()?;
+        let document: toml_edit::DocumentMut = content.parse().ok()?;
         Some(document)
     }
 

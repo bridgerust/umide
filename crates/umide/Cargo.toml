@@ -9,6 +9,7 @@ rust-version = { workspace = true }
 [dependencies]
 alacritty_terminal = { workspace = true }
 anyhow             = { workspace = true }
+umide_emulator     = { workspace = true }
 backtrace          = { workspace = true }
 chrono             = { workspace = true }
 clap               = { workspace = true }
@@ -61,11 +62,16 @@ structdesc       = { git = "https://github.com/lapce/structdesc", rev = "bb56969
 base64           = { version = "0.22.1" }
 sha2             = { version = "0.10.8" }
 zip              = { version = "7.2.0", default-features = false, features = ["deflate"] }
+tokio            = { version = "1.28", features = ["full"] }
+tokio-stream     = { version = "0.1" }
 percent-encoding = { version = "2.3.1" }
+wgpu = "28.0.0"
+floem_renderer = { git = "https://github.com/lapce/floem", rev = "e0dd862564e3afbad5cba8ebe60df166a7a41e56" }
 
 [target.'cfg(target_os="macos")'.dependencies]
 fs_extra = "1.2.0"
 dmg      = "0.1.1"
+umide_native = { workspace = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 workspace = true

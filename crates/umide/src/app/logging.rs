@@ -6,10 +6,14 @@ use tracing_subscriber::{filter::Targets, reload::Handle};
 use crate::tracing::*;
 
 #[inline(always)]
-pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
+pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
     use tracing_subscriber::{filter, fmt, prelude::*, reload};
 
-    let (log_file, guard) = match Directory::logs_directory()
+    let registry = tracing_subscriber::registry();
+    let mut guards = Vec::new();
+
+    // 1. Rolling File Appender (Original)
+    let log_file_writer = match Directory::logs_directory()
         .and_then(|dir| {
             tracing_appender::rolling::Builder::new()
                 .max_log_files(10)
@@ -21,15 +25,32 @@ pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
         })
         .map(tracing_appender::non_blocking)
     {
-        Some((log_file, guard)) => (Some(log_file), Some(guard)),
-        None => (None, None),
+        Some((writer, guard)) => {
+            guards.push(guard);
+            Some(writer)
+        },
+        None => None,
     };
 
+    // 2. Debug File Appender (User Request)
+    let (debug_writer, debug_guard) = tracing_appender::non_blocking(
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("/tmp/umide_debug.log")
+            .unwrap_or_else(|_| std::fs::File::create("/dev/null").unwrap())
+    );
+    guards.push(debug_guard);
+
+    // Filters
     let log_file_filter_targets = filter::Targets::new()
         .with_target("lapce_app", LevelFilter::DEBUG)
         .with_target("lapce_proxy", LevelFilter::DEBUG)
         .with_target("lapce_core", LevelFilter::DEBUG)
+        .with_target("umide_emulator", LevelFilter::TRACE) // Added emulator trace
         .with_default(LevelFilter::from_level(TraceLevel::INFO));
+    
     let (log_file_filter, reload_handle) =
         reload::Subscriber::new(log_file_filter_targets);
 
@@ -38,29 +59,34 @@ pub(super) fn logging() -> (Handle<Targets>, Option<WorkerGuard>) {
         .parse::<filter::Targets>()
         .unwrap_or_default();
 
-    let registry = tracing_subscriber::registry();
-    if let Some(log_file) = log_file {
-        let file_layer = tracing_subscriber::fmt::subscriber()
+    // Layers
+    let debug_layer = tracing_subscriber::fmt::subscriber()
+        .with_ansi(false)
+        .with_writer(debug_writer)
+        .with_filter(filter::Targets::new().with_default(LevelFilter::DEBUG));
+
+    let rolling_layer = if let Some(writer) = log_file_writer {
+        Some(tracing_subscriber::fmt::subscriber()
             .with_ansi(false)
-            .with_writer(log_file)
-            .with_filter(log_file_filter);
-        registry
-            .with(file_layer)
-            .with(
-                fmt::Subscriber::default()
-                    .with_line_number(true)
-                    .with_target(true)
-                    .with_thread_names(true)
-                    .with_filter(console_filter_targets),
-            )
-            .init();
+            .with_writer(writer)
+            .with_filter(log_file_filter))
     } else {
-        registry
-            .with(fmt::Subscriber::default().with_filter(console_filter_targets))
-            .init();
+        None
     };
 
-    (reload_handle, guard)
+    let console_layer = fmt::Subscriber::default()
+        .with_line_number(true)
+        .with_target(true)
+        .with_thread_names(true)
+        .with_filter(console_filter_targets);
+
+    registry
+        .with(rolling_layer)
+        .with(debug_layer)
+        .with(console_layer)
+        .init();
+
+    (reload_handle, guards)
 }
 
 pub(super) fn panic_hook() {

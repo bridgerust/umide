@@ -25,6 +25,8 @@ use super::{
     problem_view::problem_panel,
     source_control_view::source_control_panel,
     terminal_view::terminal_panel,
+    emulator_view::emulator_panel,
+    video_view::video_view,
 };
 use crate::{
     app::{clickable_icon, clickable_icon_base},
@@ -507,6 +509,13 @@ fn panel_view(
                     implementation_panel(window_tab_data.clone(), position)
                         .into_any()
                 }
+                PanelKind::Emulator => {
+                    emulator_panel(window_tab_data.clone(), position).into_any()
+                }
+                PanelKind::Video => {
+                    let frame = window_tab_data.panel.emulator_frame;
+                    video_view(frame, |_x, _y| {}).into_any()
+                }
             };
             view.style(|s| s.size_pct(100.0, 100.0))
         },
@@ -563,6 +572,8 @@ fn panel_picker(
                 PanelKind::DocumentSymbol => "Document Symbol",
                 PanelKind::References => "References",
                 PanelKind::Implementation => "Implementation",
+                PanelKind::Emulator => "Emulator",
+                PanelKind::Video => "Video",
             };
             let icon = p.svg_name();
             let is_active = {

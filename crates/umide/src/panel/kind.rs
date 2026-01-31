@@ -19,6 +19,8 @@ pub enum PanelKind {
     DocumentSymbol,
     References,
     Implementation,
+    Emulator,
+    Video,
 }
 
 impl PanelKind {
@@ -35,6 +37,8 @@ impl PanelKind {
             PanelKind::DocumentSymbol => LapceIcons::DOCUMENT_SYMBOL,
             PanelKind::References => LapceIcons::REFERENCES,
             PanelKind::Implementation => LapceIcons::IMPLEMENTATION,
+            PanelKind::Emulator => LapceIcons::EMULATOR,
+            PanelKind::Video => LapceIcons::DEBUG_CONSOLE,
         }
     }
 
@@ -61,6 +65,8 @@ impl PanelKind {
             PanelKind::DocumentSymbol => PanelPosition::RightTop,
             PanelKind::References => PanelPosition::BottomLeft,
             PanelKind::Implementation => PanelPosition::BottomLeft,
+            PanelKind::Emulator => PanelPosition::RightTop,
+            PanelKind::Video => PanelPosition::RightBottom,
         }
     }
 }

@@ -24,7 +24,7 @@ use lapce_xi_rope::{
     Interval, Rope,
     spans::{Spans, SpansBuilder},
 };
-use slotmap::{DefaultKey as LayerId, HopSlotMap};
+use slotmap::{DefaultKey as LayerId, SlotMap};
 use thiserror::Error;
 use tree_sitter::{Node, Parser, Point, QueryCursor, Tree};
 
@@ -458,7 +458,7 @@ impl LanguageLayer {
 
 #[derive(Clone)]
 pub struct SyntaxLayers {
-    layers: HopSlotMap<LayerId, LanguageLayer>,
+    layers: SlotMap<LayerId, LanguageLayer>,
     root: LayerId,
 }
 impl SyntaxLayers {
@@ -484,7 +484,7 @@ impl SyntaxLayers {
             rev: 0,
         };
 
-        let mut layers = HopSlotMap::default();
+        let mut layers = SlotMap::default();
         let root = layers.insert(root_layer);
 
         let mut syntax = SyntaxLayers { root, layers };

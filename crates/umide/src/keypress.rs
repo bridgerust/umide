@@ -33,11 +33,11 @@ use crate::{
 };
 
 const DEFAULT_KEYMAPS_COMMON: &str =
-    include_str!("../../defaults/keymaps-common.toml");
+    include_str!("../../../defaults/keymaps-common.toml");
 const DEFAULT_KEYMAPS_MACOS: &str =
-    include_str!("../../defaults/keymaps-macos.toml");
+    include_str!("../../../defaults/keymaps-macos.toml");
 const DEFAULT_KEYMAPS_NONMACOS: &str =
-    include_str!("../../defaults/keymaps-nonmacos.toml");
+    include_str!("../../../defaults/keymaps-nonmacos.toml");
 
 pub trait KeyPressFocus: std::fmt::Debug {
     fn get_mode(&self) -> Mode;
@@ -605,7 +605,7 @@ impl KeyPressData {
     fn get_file_array() -> Option<toml_edit::ArrayOfTables> {
         let path = Self::file()?;
         let content = std::fs::read_to_string(path).ok()?;
-        let document: toml_edit::Document = content.parse().ok()?;
+        let document: toml_edit::DocumentMut = content.parse().ok()?;
         document
             .as_table()
             .get("keymaps")?
@@ -684,7 +684,7 @@ impl KeyPressData {
             }
         }
 
-        let mut table = toml_edit::Document::new();
+        let mut table = toml_edit::DocumentMut::new();
         table.insert("keymaps", toml_edit::Item::ArrayOfTables(array));
         let path = Self::file()?;
         std::fs::write(path, table.to_string().as_bytes()).ok()?;

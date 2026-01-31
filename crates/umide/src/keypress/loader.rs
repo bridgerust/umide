@@ -23,7 +23,7 @@ impl KeyMapLoader {
         s: &str,
         modal: bool,
     ) -> Result<&'a mut Self> {
-        let toml_keymaps: toml_edit::Document = s.parse()?;
+        let toml_keymaps: toml_edit::DocumentMut = s.parse()?;
         let toml_keymaps = toml_keymaps
             .get("keymaps")
             .and_then(|v| v.as_array_of_tables())

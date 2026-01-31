@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::{rc::Rc, sync::Arc, process::Command};
 use tracing::{info, error};
 use floem::{
     View, prelude::{SignalGet, SignalUpdate, SignalWith}, reactive::{create_rw_signal, create_effect}, 
@@ -12,6 +12,121 @@ use crate::{
     config::{icon::LapceIcons, color::LapceColor},
 };
 use umide_emulator::{list_all_devices, launch_device, stop_device, DeviceInfo, DevicePlatform, DeviceState};
+
+/// Capture a single frame from an iOS Simulator using simctl
+fn capture_ios_simulator_frame(device_udid: &str) -> Result<umide_emulator::decoder::DecodedFrame, String> {
+    // Run: xcrun simctl io <udid> screenshot --type=png -
+    // This outputs PNG to stdout
+    let output = Command::new("xcrun")
+        .args(["simctl", "io", device_udid, "screenshot", "--type=png", "-"])
+        .output()
+        .map_err(|e| format!("Failed to run simctl: {}", e))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("simctl screenshot failed: {}", stderr));
+    }
+    
+    let png_data = output.stdout;
+    if png_data.is_empty() {
+        return Err("Empty screenshot data".to_string());
+    }
+    
+    // Decode PNG to RGBA
+    let img = image::load_from_memory_with_format(&png_data, image::ImageFormat::Png)
+        .map_err(|e| format!("Failed to decode PNG: {}", e))?
+        .to_rgba8();
+    
+    let width = img.width();
+    let height = img.height();
+    let rgba_data = img.into_raw();
+    
+    Ok(umide_emulator::decoder::DecodedFrame {
+        width,
+        height,
+        frame: umide_emulator::decoder::GpuFrame::Software(Arc::new(rgba_data), width * 4, height),
+    })
+}
+
+/// Find the ADB serial for a running Android emulator by AVD name
+fn find_android_emulator_serial(avd_name: &str) -> Option<String> {
+    let output = Command::new("adb")
+        .args(["devices", "-l"])
+        .output()
+        .ok()?;
+    
+    if !output.status.success() {
+        return None;
+    }
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    
+    // Look for emulator lines and try to match by AVD name
+    // Format: "emulator-5554 device product:sdk_gphone64_arm64 model:sdk_gphone64_arm64 ..."
+    for line in stdout.lines() {
+        if line.starts_with("emulator-") && line.contains("device") {
+            // If the line contains the AVD name, use this serial
+            if line.to_lowercase().contains(&avd_name.to_lowercase()) {
+                if let Some(serial) = line.split_whitespace().next() {
+                    return Some(serial.to_string());
+                }
+            }
+        }
+    }
+    
+    // Fallback: return the first emulator found
+    for line in stdout.lines() {
+        if line.starts_with("emulator-") && line.contains("device") {
+            if let Some(serial) = line.split_whitespace().next() {
+                info!("Using first available emulator: {}", serial);
+                return Some(serial.to_string());
+            }
+        }
+    }
+    
+    None
+}
+
+/// Capture a single frame from an Android emulator using ADB screencap
+fn capture_android_emulator_frame(serial: Option<&str>) -> Result<umide_emulator::decoder::DecodedFrame, String> {
+    // Run: adb [-s serial] exec-out screencap -p
+    // This outputs PNG to stdout
+    let mut cmd = Command::new("adb");
+    
+    if let Some(s) = serial {
+        cmd.args(["-s", s]);
+    }
+    
+    cmd.args(["exec-out", "screencap", "-p"]);
+    
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to run adb: {}", e))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("adb screencap failed: {}", stderr));
+    }
+    
+    let png_data = output.stdout;
+    if png_data.is_empty() {
+        return Err("Empty screenshot data from adb".to_string());
+    }
+    
+    // Decode PNG to RGBA
+    let img = image::load_from_memory_with_format(&png_data, image::ImageFormat::Png)
+        .map_err(|e| format!("Failed to decode Android PNG: {}", e))?
+        .to_rgba8();
+    
+    let width = img.width();
+    let height = img.height();
+    let rgba_data = img.into_raw();
+    
+    Ok(umide_emulator::decoder::DecodedFrame {
+        width,
+        height,
+        frame: umide_emulator::decoder::GpuFrame::Software(Arc::new(rgba_data), width * 4, height),
+    })
+}
 
 pub fn emulator_panel(
     window_tab_data: Rc<WindowTabData>,
@@ -35,24 +150,82 @@ pub fn emulator_panel(
     let emulator_frame = window_tab_data.panel.emulator_frame;
     {
         create_effect(move |_| {
-            if running_device.get().is_some() {
+            if let Some(device) = running_device.get() {
                 let (tx, rx) = std::sync::mpsc::channel::<umide_emulator::decoder::DecodedFrame>();
                 let frame_signal = floem::ext_event::create_signal_from_channel(rx);
                 
                 create_effect(move |_| {
                     frame_signal.with(|frame: &Option<umide_emulator::decoder::DecodedFrame>| {
                         if let Some(frame) = frame {
-                            // println!("UI: Received Frame {}x{}", frame.width, frame.height);
                             emulator_frame.set(Some(Arc::new(frame.clone())));
                         }
                     });
                 });
 
+                // Clone device info for thread
+                let device_id = device.id.clone();
+                let device_platform = device.platform.clone();
+                let device_name = device.name.clone();
+
                 std::thread::spawn(move || {
-                    // VERIFICATION HARNESS (Option A)
-                    // Check for test file
+                    // For iOS Simulator, use simctl screenshot capture
+                    if device_platform == DevicePlatform::Ios {
+                        info!("Starting iOS Simulator capture for: {}", device_name);
+                        
+                        loop {
+                            // Capture screenshot using simctl
+                            match capture_ios_simulator_frame(&device_id) {
+                                Ok(frame) => {
+                                    if tx.send(frame).is_err() {
+                                        info!("Frame channel closed, stopping capture");
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to capture iOS frame: {}", e);
+                                    // Sleep longer on error
+                                    std::thread::sleep(std::time::Duration::from_millis(500));
+                                    continue;
+                                }
+                            }
+                            // ~30 FPS target
+                            std::thread::sleep(std::time::Duration::from_millis(33));
+                        }
+                        return;
+                    }
+
+                    // For Android, use ADB screencap
+                    if device_platform == DevicePlatform::Android {
+                        info!("Starting Android emulator capture for: {}", device_name);
+                        
+                        // Wait for emulator to be ready
+                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        
+                        // Find the emulator serial (e.g., emulator-5554)
+                        let serial = find_android_emulator_serial(&device_id);
+                        
+                        loop {
+                            match capture_android_emulator_frame(serial.as_deref()) {
+                                Ok(frame) => {
+                                    if tx.send(frame).is_err() {
+                                        info!("Frame channel closed, stopping Android capture");
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to capture Android frame: {}", e);
+                                    std::thread::sleep(std::time::Duration::from_millis(500));
+                                    continue;
+                                }
+                            }
+                            // ~15 FPS target for Android (adb is slower)
+                            std::thread::sleep(std::time::Duration::from_millis(66));
+                        }
+                        return;
+                    }
+
+                    // For other platforms or test mode, check for test file
                     let test_file = "/tmp/test.h264";
-                    
                     if std::path::Path::new(test_file).exists() {
                         info!("Found test file: {}", test_file);
                         if let Ok(mut source) = umide_emulator::video::h264_source::H264FileSource::new(test_file) {
@@ -61,7 +234,6 @@ pub fn emulator_panel(
                                 use umide_emulator::decoder::VideoDecoder;
                                 
                                 info!("Initializing Hardware Decoder...");
-                                // Wrap in block to catch errors
                                 match umide_emulator::video::macos_hardware::VideoToolboxDecoder::new() {
                                     Ok(mut decoder) => {
                                         loop {
@@ -74,7 +246,7 @@ pub fn emulator_panel(
                                                 } else {
                                                     info!("Decode failed");
                                                 }
-                                                std::thread::sleep(std::time::Duration::from_millis(16)); // ~60fps
+                                                std::thread::sleep(std::time::Duration::from_millis(16));
                                             } else {
                                                 info!("EOF, restarting loop");
                                                 source = umide_emulator::video::h264_source::H264FileSource::new(test_file).unwrap();
@@ -91,18 +263,17 @@ pub fn emulator_panel(
                         }
                     }
 
-                    // FALLBACK: Noise loop (Updated for visibility)
+                    // FALLBACK: Noise loop
                     info!("Running Noise Loop (No test file found at {})", test_file);
                     let mut i: u8 = 0;
                     loop {
                         let mut data = vec![0u8; 200 * 400 * 4];
-                        // Draw BLUE gradients
                         for y in 0..400 {
                             for x in 0..200 {
                                 let idx = (y * 200 + x) * 4;
-                                data[idx] = 0; // R
-                                data[idx + 1] = 0; // G
-                                data[idx + 2] = (x as u8).wrapping_add(i); // B
+                                data[idx] = 0;
+                                data[idx + 1] = 0;
+                                data[idx + 2] = (x as u8).wrapping_add(i);
                                 data[idx + 3] = 255;
                             }
                         }

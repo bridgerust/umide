@@ -1,0 +1,126 @@
+// Android Emulator gRPC Protocol
+// Based on AOSP android/android-grpc/android/emulation/control/emulator_controller.proto
+// Simplified version with screenshot streaming and touch input
+
+syntax = "proto3";
+
+package android.emulation.control;
+
+option java_multiple_files = true;
+option java_package = "com.android.emulator.control";
+
+// The EmulatorController service provides methods to control the emulator
+service EmulatorController {
+    // Stream a series of screenshots from the emulator
+    // This will return a new frame whenever the emulated device produces one
+    rpc streamScreenshot(ImageFormat) returns (stream Image) {}
+    
+    // Get a single screenshot from the emulator
+    rpc getScreenshot(ImageFormat) returns (Image) {}
+    
+    // Send a touch event to the emulator
+    rpc sendTouch(TouchEvent) returns (Empty) {}
+    
+    // Send a key event to the emulator
+    rpc sendKey(KeyboardEvent) returns (Empty) {}
+    
+    // Get the status of the emulator
+    rpc getStatus(Empty) returns (EmulatorStatus) {}
+}
+
+// Empty message for methods that don't need parameters
+message Empty {}
+
+// Image format specification for screenshots
+message ImageFormat {
+    // Format of the image
+    enum ImgFormat {
+        PNG = 0;
+        RGB888 = 1;
+        RGBA8888 = 2;
+    }
+    
+    ImgFormat format = 1;
+    
+    // Optional width/height for resized images
+    // If not specified, uses native resolution
+    uint32 width = 2;
+    uint32 height = 3;
+}
+
+// The screenshot image returned by the emulator
+message Image {
+    // Image format
+    ImageFormat format = 1;
+    
+    // Width of the image in pixels
+    uint32 width = 2;
+    
+    // Height of the image in pixels
+    uint32 height = 3;
+    
+    // The actual image data (raw bytes)
+    bytes image = 4;
+    
+    // Sequence number for frame ordering
+    uint32 seq = 5;
+    
+    // Timestamp in microseconds
+    uint64 timestampUs = 6;
+}
+
+// Touch event types
+message TouchEvent {
+    // List of touches (supports multi-touch)
+    repeated Touch touches = 1;
+}
+
+message Touch {
+    // X coordinate in device pixels
+    int32 x = 1;
+    
+    // Y coordinate in device pixels
+    int32 y = 2;
+    
+    // Touch identifier for multi-touch
+    int32 identifier = 3;
+    
+    // Pressure (0-1)
+    float pressure = 4;
+    
+    // Touch type
+    enum TouchType {
+        DOWN = 0;
+        UP = 1;
+        MOVE = 2;
+    }
+    TouchType type = 5;
+}
+
+// Keyboard event
+message KeyboardEvent {
+    // Key code
+    int32 keycode = 1;
+    
+    // Event type
+    enum KeyEventType {
+        DOWN = 0;
+        UP = 1;
+    }
+    KeyEventType type = 2;
+}
+
+// Emulator status information
+message EmulatorStatus {
+    // Whether the emulator is running
+    bool running = 1;
+    
+    // The AVD name
+    string avd_name = 2;
+    
+    // Display width
+    uint32 width = 3;
+    
+    // Display height
+    uint32 height = 4;
+}

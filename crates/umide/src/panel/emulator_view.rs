@@ -128,6 +128,30 @@ fn capture_android_emulator_frame(serial: Option<&str>) -> Result<umide_emulator
     })
 }
 
+/// Send a touch/tap to an iOS Simulator at device coordinates
+fn send_ios_touch(device_udid: &str, x: i32, y: i32) {
+    // iOS Simulator requires us to use the Accessibility API or simctl io
+    // For now, we'll use osascript with System Events (works when Simulator is focused)
+    // A more robust solution would use simctl io or idb
+    
+    // Alternative: Use xcrun simctl io with touch injection (requires newer Xcode)
+    let _ = Command::new("xcrun")
+        .args(["simctl", "io", device_udid, "touch", &x.to_string(), &y.to_string()])
+        .spawn();
+}
+
+/// Send a tap to an Android emulator at device coordinates
+fn send_android_touch(serial: Option<&str>, x: i32, y: i32) {
+    let mut cmd = Command::new("adb");
+    
+    if let Some(s) = serial {
+        cmd.args(["-s", s]);
+    }
+    
+    cmd.args(["shell", "input", "tap", &x.to_string(), &y.to_string()]);
+    let _ = cmd.spawn();
+}
+
 pub fn emulator_panel(
     window_tab_data: Rc<WindowTabData>,
     position: PanelPosition,
@@ -412,7 +436,20 @@ pub fn emulator_panel(
                                 let running_device = running_device.clone();
                                 crate::panel::emulator_host_view::emulator_host_view(window_tab_data.panel.emulator_frame, move |x, y| {
                                     if let Some(device) = running_device.get_untracked() {
-                                        println!("Sending touch to {}: ({}, {})", device.name, x, y);
+                                        let x_int = x as i32;
+                                        let y_int = y as i32;
+                                        info!("Touch at device coords ({}, {}) on {}", x_int, y_int, device.name);
+                                        
+                                        match device.platform {
+                                            DevicePlatform::Ios => {
+                                                send_ios_touch(&device.id, x_int, y_int);
+                                            }
+                                            DevicePlatform::Android => {
+                                                // Use first available emulator
+                                                let serial = find_android_emulator_serial(&device.id);
+                                                send_android_touch(serial.as_deref(), x_int, y_int);
+                                            }
+                                        }
                                     }
                                 })
                             },

@@ -3,10 +3,58 @@ use floem::{
     reactive::{create_memo, create_effect, create_rw_signal},
     peniko::{Blob, Color, ImageFormat, Image},
     views::{canvas, container, label, stack, Decorators},
+    kurbo::Rect,
 };
 use floem_renderer::Img;
 use umide_emulator::decoder::DecodedFrame;
 use std::sync::Arc;
+
+/// Calculate the destination rectangle that preserves aspect ratio
+fn calculate_aspect_fit(image_width: u32, image_height: u32, container_width: f64, container_height: f64) -> Rect {
+    let image_aspect = image_width as f64 / image_height as f64;
+    let container_aspect = container_width / container_height;
+    
+    let (draw_width, draw_height) = if image_aspect > container_aspect {
+        // Image is wider - fit to width
+        let w = container_width;
+        let h = container_width / image_aspect;
+        (w, h)
+    } else {
+        // Image is taller - fit to height
+        let h = container_height;
+        let w = container_height * image_aspect;
+        (w, h)
+    };
+    
+    // Center in container
+    let x = (container_width - draw_width) / 2.0;
+    let y = (container_height - draw_height) / 2.0;
+    
+    Rect::new(x, y, x + draw_width, y + draw_height)
+}
+
+/// Map click coordinates from canvas space to device coordinates
+fn map_to_device_coords(
+    click_x: f64, click_y: f64,
+    image_rect: Rect,
+    device_width: u32, device_height: u32
+) -> Option<(i32, i32)> {
+    // Check if click is within the image bounds
+    if click_x < image_rect.x0 || click_x > image_rect.x1 ||
+       click_y < image_rect.y0 || click_y > image_rect.y1 {
+        return None;
+    }
+    
+    // Map to normalized coordinates (0-1)
+    let norm_x = (click_x - image_rect.x0) / image_rect.width();
+    let norm_y = (click_y - image_rect.y0) / image_rect.height();
+    
+    // Map to device coordinates
+    let device_x = (norm_x * device_width as f64) as i32;
+    let device_y = (norm_y * device_height as f64) as i32;
+    
+    Some((device_x, device_y))
+}
 
 pub fn emulator_host_view(
     frame_signal: impl SignalGet<Option<Arc<DecodedFrame>>> + Copy + 'static,
@@ -15,69 +63,73 @@ pub fn emulator_host_view(
     // Track frame updates for repaint trigger
     let repaint_trigger = create_rw_signal(0u64);
     
+    // Store the last image rect for touch mapping
+    let last_image_rect = create_rw_signal(Rect::ZERO);
+    let device_dims = create_rw_signal((0u32, 0u32));
+    
     // Effect to trigger repaint when frame signal changes
     create_effect(move |_| {
         let _frame = frame_signal.get();
-        // Increment repaint trigger to force canvas invalidation
         repaint_trigger.update(|v| *v = v.wrapping_add(1));
     });
 
-    // Create a memo that extracts RGBA data and creates a peniko::Image directly
-    // This avoids PNG encoding overhead (~5-10ms per frame)
+    // Create a memo that extracts RGBA data and creates a peniko::Image
     let image_memo = create_memo(move |_| {
-        let frame_opt = frame_signal.get();
-        if frame_opt.is_some() {
-            println!("DEBUG: Frame signal has data");
-        }
-        frame_opt.and_then(|frame| {
-            println!("DEBUG: Processing frame {}x{}", frame.width, frame.height);
-            let rgba_data = frame.to_rgba();
-            if rgba_data.is_none() {
-                println!("DEBUG: to_rgba() returned None!");
-                return None;
-            }
-            let rgba = rgba_data.unwrap();
-            println!("DEBUG: RGBA data len = {}", rgba.len());
-            let blob = Blob::new(Arc::new(rgba));
+        frame_signal.get().and_then(|frame| {
+            let rgba_data = frame.to_rgba()?;
+            let blob = Blob::new(Arc::new(rgba_data));
+            device_dims.set((frame.width, frame.height));
             Some(Image::new(blob, ImageFormat::Rgba8, frame.width, frame.height))
         })
     });
 
-    // Use a frame counter as a simple hash for cache invalidation
+    // Frame counter for cache invalidation
     let frame_counter = std::sync::atomic::AtomicU64::new(0);
     
     // Check if we have any frames
-    let has_frame = create_memo(move |_| {
-        frame_signal.get().is_some()
-    });
+    let has_frame = create_memo(move |_| frame_signal.get().is_some());
     
     stack((
-        // Canvas for rendering frames
+        // Canvas for rendering frames with proper aspect ratio
         canvas(move |cx, size| {
-            // Read repaint trigger to subscribe to updates
             let _trigger = repaint_trigger.get();
             
-            let rect = size.to_rect();
-            println!("DEBUG: Canvas paint, size = {:?}, trigger = {}", size, _trigger);
+            // Fill background
+            let full_rect = size.to_rect();
+            cx.fill(&full_rect, Color::from_rgb8(20, 20, 25), 0.0);
             
             if let Some(image) = image_memo.get() {
-                println!("DEBUG: Drawing image {}x{}", image.width, image.height);
-                // Increment frame counter for cache hash
+                // Calculate aspect-fit rectangle
+                let img_rect = calculate_aspect_fit(
+                    image.width, image.height,
+                    size.width, size.height
+                );
+                
+                // Store for touch mapping
+                last_image_rect.set(img_rect);
+                
+                // Draw image
                 let counter = frame_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let hash_bytes = counter.to_ne_bytes();
                 let img = Img {
                     img: image,
                     hash: &hash_bytes,
                 };
-                cx.draw_img(img, rect);
-            } else {
-                // Draw a dark gray background with a gradient to show the canvas is working
-                cx.fill(&rect, Color::from_rgb8(30, 30, 40), 0.0);
+                cx.draw_img(img, img_rect);
             }
         })
         .on_click_stop(move |e| {
             if let floem::event::Event::PointerDown(pe) = e {
-                on_click(pe.pos.x, pe.pos.y);
+                let img_rect = last_image_rect.get();
+                let (dev_w, dev_h) = device_dims.get();
+                
+                if dev_w > 0 && dev_h > 0 {
+                    if let Some((device_x, device_y)) = map_to_device_coords(
+                        pe.pos.x, pe.pos.y, img_rect, dev_w, dev_h
+                    ) {
+                        on_click(device_x as f64, device_y as f64);
+                    }
+                }
             }
         })
         .style(|s| s.width_full().height_full().min_width(200.0).min_height(400.0)),

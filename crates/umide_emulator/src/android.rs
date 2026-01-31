@@ -44,6 +44,7 @@ impl AndroidEmulator {
         Command::new("emulator")
             .arg("-avd")
             .arg(avd_name)
+            .arg("-no-window")  // Headless mode - no external window
             .arg("-grpc")
             .arg("5556")
             .stdout(Stdio::null())

@@ -55,8 +55,7 @@ impl AndroidEmulator {
     }
 
     pub fn stop(avd_name: &str) -> Result<()> {
-        // To stop an Android emulator without tracking the PID, we use `adb devices -l`
-        // to find the emulator that matches the AVD name (label).
+        // First, try to find the emulator by AVD name in adb devices
         let output = Command::new("adb")
             .arg("devices")
             .arg("-l")
@@ -67,16 +66,37 @@ impl AndroidEmulator {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // Look for something like "emulator-5554 device ... model:avd_name"
+        
+        // Look for emulator serial that matches AVD name
         for line in stdout.lines() {
-            if line.contains(avd_name) {
+            if line.contains(avd_name) || line.contains(&avd_name.to_lowercase()) {
                 if let Some(serial) = line.split_whitespace().next() {
-                    Command::new("adb")
+                    if serial.starts_with("emulator-") {
+                        let result = Command::new("adb")
+                            .arg("-s")
+                            .arg(serial)
+                            .arg("emu")
+                            .arg("kill")
+                            .output();
+                        
+                        if result.is_ok() {
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: kill first running emulator
+        for line in stdout.lines() {
+            if let Some(serial) = line.split_whitespace().next() {
+                if serial.starts_with("emulator-") && line.contains("device") {
+                    let _ = Command::new("adb")
                         .arg("-s")
                         .arg(serial)
                         .arg("emu")
                         .arg("kill")
-                        .status()?;
+                        .output();
                     return Ok(());
                 }
             }

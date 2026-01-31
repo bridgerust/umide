@@ -129,14 +129,33 @@ fn capture_android_emulator_frame(serial: Option<&str>) -> Result<umide_emulator
 }
 
 /// Send a touch/tap to an iOS Simulator at device coordinates
-fn send_ios_touch(device_udid: &str, x: i32, y: i32) {
-    // iOS Simulator requires us to use the Accessibility API or simctl io
-    // For now, we'll use osascript with System Events (works when Simulator is focused)
-    // A more robust solution would use simctl io or idb
+/// Uses AppleScript to click in the Simulator window
+fn send_ios_touch(_device_udid: &str, x: i32, y: i32) {
+    // iOS Simulator doesn't have a direct touch injection API via simctl
+    // We use AppleScript to activate Simulator and perform a click
+    // Note: This requires Simulator window to be visible for the click
     
-    // Alternative: Use xcrun simctl io with touch injection (requires newer Xcode)
-    let _ = Command::new("xcrun")
-        .args(["simctl", "io", device_udid, "touch", &x.to_string(), &y.to_string()])
+    // First, get the window position and send a click there
+    // The script activates Simulator and clicks at the relative position
+    let script = format!(
+        r#"tell application "Simulator"
+            activate
+            delay 0.1
+        end tell
+        tell application "System Events"
+            tell process "Simulator"
+                set simWindow to front window
+                set {{winX, winY}} to position of simWindow
+                -- Click at device coordinates relative to window (with toolbar offset)
+                click at {{winX + {} + 10, winY + {} + 50}}
+            end tell
+        end tell"#,
+        x, y
+    );
+    
+    let _ = Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
         .spawn();
 }
 
@@ -192,41 +211,43 @@ pub fn emulator_panel(
                 let device_name = device.name.clone();
 
                 std::thread::spawn(move || {
-                    // For iOS Simulator, use simctl screenshot capture
+                    // For iOS Simulator, use simctl screenshot capture (reliable)
                     if device_platform == DevicePlatform::Ios {
                         info!("Starting iOS Simulator capture for: {}", device_name);
                         
+                        // Wait a moment for simulator to be ready
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        
                         loop {
-                            // Capture screenshot using simctl
                             match capture_ios_simulator_frame(&device_id) {
                                 Ok(frame) => {
                                     if tx.send(frame).is_err() {
-                                        info!("Frame channel closed, stopping capture");
+                                        info!("Frame channel closed, stopping iOS capture");
                                         break;
                                     }
                                 }
                                 Err(e) => {
                                     error!("Failed to capture iOS frame: {}", e);
-                                    // Sleep longer on error
-                                    std::thread::sleep(std::time::Duration::from_millis(500));
+                                    std::thread::sleep(std::time::Duration::from_millis(200));
                                     continue;
                                 }
                             }
-                            // ~30 FPS target
-                            std::thread::sleep(std::time::Duration::from_millis(33));
+                            // ~20 FPS target
+                            std::thread::sleep(std::time::Duration::from_millis(50));
                         }
                         return;
                     }
 
-                    // For Android, use ADB screencap
+                    // For Android, use ADB screencap (reliable)
                     if device_platform == DevicePlatform::Android {
                         info!("Starting Android emulator capture for: {}", device_name);
                         
-                        // Wait for emulator to be ready
-                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        // Wait for emulator to boot
+                        std::thread::sleep(std::time::Duration::from_secs(3));
                         
-                        // Find the emulator serial (e.g., emulator-5554)
+                        // Find the emulator serial
                         let serial = find_android_emulator_serial(&device_id);
+                        info!("Using serial: {:?}", serial);
                         
                         loop {
                             match capture_android_emulator_frame(serial.as_deref()) {
@@ -238,11 +259,11 @@ pub fn emulator_panel(
                                 }
                                 Err(e) => {
                                     error!("Failed to capture Android frame: {}", e);
-                                    std::thread::sleep(std::time::Duration::from_millis(500));
+                                    std::thread::sleep(std::time::Duration::from_millis(200));
                                     continue;
                                 }
                             }
-                            // ~15 FPS target for Android (adb is slower)
+                            // ~15 FPS target
                             std::thread::sleep(std::time::Duration::from_millis(66));
                         }
                         return;

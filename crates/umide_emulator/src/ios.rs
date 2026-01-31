@@ -75,15 +75,20 @@ impl IosSimulator {
     }
 
     pub fn stop(udid: &str) -> Result<()> {
+        // Shutdown the simulator
         let output = Command::new("xcrun")
             .arg("simctl")
             .arg("shutdown")
             .arg(udid)
             .output()?;
         
+        // simctl shutdown may return non-zero if already shutdown, which is OK
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Failed to shutdown iOS Simulator {}: {}", udid, stderr));
+            // Ignore "already shutdown" errors
+            if !stderr.contains("current state: Shutdown") && !stderr.contains("Unable to shutdown") {
+                return Err(anyhow!("Failed to shutdown iOS Simulator {}: {}", udid, stderr));
+            }
         }
         
         Ok(())

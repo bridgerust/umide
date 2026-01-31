@@ -276,7 +276,7 @@ fn inline_completion_text(
     let prefix = rope_text.slice_to_cow(range);
     // We strip the prefix of the current input from the label.
     // So that, for example `p` with a completion of `println` will show `rintln`.
-    let Some(text) = text.strip_prefix(prefix.as_ref()) else {
+    let Some(text) = text.strip_prefix::<&str>(prefix.as_ref()) else {
         return ICompletionRes::Hide;
     };
 

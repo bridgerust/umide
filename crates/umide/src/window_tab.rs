@@ -81,7 +81,7 @@ use crate::{
         call_hierarchy_view::{CallHierarchyData, CallHierarchyItemData},
         data::{PanelData, PanelSection, default_panel_order},
         kind::PanelKind,
-        position::PanelContainerPosition,
+        position::{PanelContainerPosition, PanelPosition},
     },
     plugin::PluginData,
     proxy::{ProxyData, new_proxy},
@@ -453,33 +453,62 @@ impl WindowTabData {
         let panel = workspace_info
             .as_ref()
             .map(|i| {
-                let panel_order = db
+                let mut panel_order = db
                     .get_panel_orders()
                     .unwrap_or_else(|_| default_panel_order());
-                PanelData {
-                    panels: cx.create_rw_signal(panel_order),
-                    styles: cx.create_rw_signal(i.panel.styles.clone()),
-                    size: cx.create_rw_signal(i.panel.size.clone()),
-                    available_size: panel_available_size,
-                    sections: cx.create_rw_signal(
-                        i.panel
-                            .sections
-                            .iter()
-                            .map(|(key, value)| (*key, cx.create_rw_signal(*value)))
-                            .collect(),
-                    ),
-                    common: common.clone(),
+                if !super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_some() {
+                    let panels = panel_order.entry(PanelPosition::RightTop).or_default();
+                    panels.push_back(PanelKind::Emulator);
                 }
-            })
-            .unwrap_or_else(|| {
-                let panel_order = db
-                    .get_panel_orders()
-                    .unwrap_or_else(|_| default_panel_order());
                 PanelData::new(
                     cx,
-                    panel_order,
+                    super::panel::data::PanelDataInfo {
+                        panels: panel_order,
+                        styles: i.panel.styles.clone(),
+                        size: i.panel.size.clone(),
+                        sections: i.panel
+                            .sections
+                            .iter()
+                            .map(|(k, v)| (*k, *v))
+                            .collect(),
+                    },
                     panel_available_size,
-                    im::HashMap::new(),
+                    common.clone(),
+                )
+            })
+            .unwrap_or_else(|| {
+                let mut panel_order = db
+                    .get_panel_orders()
+                    .unwrap_or_else(|_| default_panel_order());
+                if !super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_some() {
+                    let panels = panel_order.entry(PanelPosition::RightTop).or_default();
+                    panels.push_back(PanelKind::Emulator);
+                }
+
+                let mut styles = im::HashMap::new();
+                styles.insert(PanelPosition::LeftTop, super::panel::style::PanelStyle { active: 0, shown: true, maximized: false });
+                styles.insert(PanelPosition::LeftBottom, super::panel::style::PanelStyle { active: 0, shown: false, maximized: false });
+                styles.insert(PanelPosition::BottomLeft, super::panel::style::PanelStyle { active: 0, shown: true, maximized: false });
+                styles.insert(PanelPosition::BottomRight, super::panel::style::PanelStyle { active: 0, shown: false, maximized: false });
+                styles.insert(PanelPosition::RightTop, super::panel::style::PanelStyle { active: 0, shown: true, maximized: false });
+                styles.insert(PanelPosition::RightBottom, super::panel::style::PanelStyle { active: 0, shown: false, maximized: false });
+
+                PanelData::new(
+                    cx,
+                    super::panel::data::PanelDataInfo {
+                        panels: panel_order,
+                        styles,
+                        size: super::panel::data::PanelSize {
+                            left: 250.0,
+                            left_split: 0.5,
+                            bottom: 300.0,
+                            bottom_split: 0.5,
+                            right: 250.0,
+                            right_split: 0.5,
+                        },
+                        sections: im::HashMap::new(),
+                    },
+                    panel_available_size,
                     common.clone(),
                 )
             });
@@ -2636,7 +2665,9 @@ impl WindowTabData {
             | PanelKind::CallHierarchy
             | PanelKind::DocumentSymbol
             | PanelKind::References
-            | PanelKind::Implementation => {
+            | PanelKind::Implementation
+            | PanelKind::Emulator
+            | PanelKind::Video => {
                 // Some panels don't accept focus (yet). Fall back to visibility check
                 // in those cases.
                 self.panel.is_panel_visible(&kind)

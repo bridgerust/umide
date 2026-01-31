@@ -2,468 +2,372 @@
 trigger: always_on
 ---
 
-# UMIDE Agent Prompt: Mobile IDE Development
+UMIDE — Global System Architecture (Source of Truth)
 
-You are an expert Rust developer building UMIDE, a unified IDE for cross-platform mobile development (React Native + Flutter). You are working from a Lapce fork that has already been cloned in the `umide` directory.
+1. Vision & Non-Negotiable Goals
+   Vision
 
-## Project Context
+UMIDE (Unified Mobile IDE) is a native, high-performance mobile development IDE that eliminates context switching for Flutter and React Native developers by embedding real device emulators/simulators directly inside the IDE, with zero abstraction leaks.
 
-**Project Name:** UMIDE (Unified Mobile IDE)  
-**Base:** Lapce (Rust + Floem GUI framework)  
-**Goal:** Create an IDE that embeds Android Emulator and iOS Simulator directly as panels, eliminating context-switching for mobile developers.
+Primary Pain Points UMIDE Solves
 
-**Tech Stack:**
+External emulators breaking focus & flow
 
-- Language: Rust
-- UI Framework: Floem
-- Emulator Integration: gRPC (Android), simctl (iOS)
-- Video Streaming: H.264 decode + GPU rendering
+Slow hot reload feedback loops
 
-## Current Status
+Fragmented tooling (terminal, logs, inspector, emulator)
 
-- Lapce has been cloned to `/umide` directory
-- Lapce builds and runs successfully
-- Ready to rename and begin mobile feature development
+Weak debugging across RN / Flutter layers
 
-## Your Tasks (In Order)
+Poor GPU embedding in existing IDEs
 
-### Phase 1: Rename Lapce to UMIDE (Week 1)
+Platform-specific emulator handling chaos
 
-**Objective:** Rename the project from "Lapce" to "UMIDE" without breaking functionality.
+Non-Negotiable Constraints
 
-**Steps:**
+Native performance
 
-1. **Update root Cargo.toml:**
-   - Change `[package] name = "lapce"` → `name = "umide"`
-   - Change `[[bin]] name = "lapce"` → `name = "umide"`
-   - Update `default-members = ["crates/lapce"]` → `["crates/umide"]`
+GPU-first rendering
 
-2. **Rename core crate folder:**
+Cross-platform (macOS, Linux, Windows)
 
-   ```bash
-   cd crates
-   mv lapce umide
-   ```
+Future-proof for complex graphics (Metal/Vulkan/OpenGL)
 
-3. **Update crates/umide/Cargo.toml:**
-   - Change `name = "lapce"` → `name = "umide"`
+No IDE rewrite
 
-4. **Update platform metadata:**
-   - **macOS:** `crates/umide/macos/Info.plist`
-     - `<string>Lapce</string>` → `<string>UMIDE</string>`
-     - `<string>com.lapce.app</string>` → `<string>com.umide.app</string>`
-   - **Linux:** `crates/umide/linux/lapce.desktop` → `umide.desktop`
-     - `Name=Lapce` → `Name=UMIDE`
-   - **Windows:** `crates/umide/windows/installer.nsi`
-     - `Name "Lapce"` → `Name "UMIDE"`
+Lapce remains the editor core
 
-5. **Update README.md:**
-   - Replace title from "Lapce" to "UMIDE"
-   - Add tagline: "The Unified IDE for Cross-Platform Mobile Development"
-   - Replace description (use the clean README provided)
+2. High-Level Architecture (Layered & Decoupled)
+   ┌────────────────────────────────────────────┐
+   │ UMIDE (Shell) │
+   │ │
+   │ ┌───────────── Lapce / Floem ───────────┐ │
+   │ │ Editor, LSP, Git, Commands, Panels │ │
+   │ └────────────────────────────────────────┘ │
+   │ │
+   │ ┌──────────── Emulator Surface Layer ───┐ │
+   │ │ Native GPU View (wgpu-backed) │ │
+   │ │ Zero Floem image rendering │ │
+   │ └────────────────────────────────────────┘ │
+   │ │
+   │ ┌──────────── Native Bridge Layer ──────┐ │
+   │ │ Rust ↔ C++ ABI boundary │ │
+   │ │ Async, message-based IPC │ │
+   │ └────────────────────────────────────────┘ │
+   │ │
+   │ ┌──────────── Emulator Core (C++) ──────┐ │
+   │ │ Android Emulator / iOS Simulators │ │
+   │ │ GPU, Input, Audio, Sensors │ │
+   │ └────────────────────────────────────────┘ │
+   │ │
+   └────────────────────────────────────────────┘
 
-6. **Update LICENSE:**
-   - Add copyright line: `Copyright 2024 UMIDE contributors`
-   - Keep Lapce attribution: `Portions (original editor) Copyright 2023 Lapce contributors`
+3. Why Lapce + C++ Is the Correct Choice
+   Why NOT rewrite the IDE
 
-7. **Search & replace in code:**
+Editor/LSP/keybindings are hard problems already solved
 
-   ```bash
-   # In UI strings, about dialogs, window titles
-   grep -r "Lapce" src/ --include="*.rs" | head -20
-   # Replace "Lapce" → "UMIDE" in about dialogs and window titles ONLY
-   # Do NOT rename internal crate names (lapce_*)
-   ```
+Lapce is fast, native, modern
 
-8. **Build and verify:**
+Floem is evolving rapidly
 
-   ```bash
-   cargo build --release
-   ./target/release/umide
-   # Verify: Window title shows "UMIDE", about dialog says "UMIDE"
-   ```
+Rewriting = multi-year distraction
 
-9. **Commit:**
-   ```bash
-   git add -A
-   git commit -m "refactor: rename Lapce to UMIDE (mobile IDE fork)"
-   ```
+Why Rust alone is insufficient (for THIS use case)
 
-**Success Criteria:**
+Rust is excellent for:
 
-- Binary is named `umide` (not `lapce`)
-- App window title displays "UMIDE"
-- All internal crate names remain unchanged (lapce\_\*)
-- Builds without errors
-- Runs without crashes
+State management
 
----
+Safety
 
-### Phase 2: Understand Floem & Lapce Architecture (Week 2-3)
+Tooling orchestration
 
-**Objective:** Understand the codebase so you can add mobile features.
+IPC
 
-**Required Reading:**
+Plugin systems
 
-1. `crates/umide/src/main.rs` — App entry point, window setup
-2. `crates/umide/src/panel.rs` — How panels are created and managed
-3. `crates/umide/src/editor.rs` — Editor UI and state management
-4. `crates/lapce-ui/src/lib.rs` — UI components (buttons, inputs, layouts)
+Rust is not ideal for:
 
-**Questions to Answer:**
+Emulator internals
 
-- How does Lapce create and manage side panels?
-- Where would you add a new panel for the emulator?
-- How does Floem handle widget state and rendering?
-- What's the data flow from user input to screen?
+GPU driver interfacing
 
-**Deliverable:** Write a document (`docs/architecture.md`) explaining:
+Existing Android/iOS emulator codebases
 
-- How panels work in Lapce/Floem
-- Where you'll add the "Emulator Panel"
-- Data flow for emulator video rendering
+Low-level platform APIs (Metal, EGL, Hypervisor)
 
----
+Why C++ (not C)
 
-### Phase 3: Create Emulator Integration Module (Week 4-5)
+C++ gives:
 
-**Objective:** Create a new Rust crate for emulator integration.
+RAII for GPU resources
 
-**Steps:**
+Object-oriented emulator abstractions
 
-1. **Create new crate structure:**
+Easier binding to existing emulator SDKs
 
-   ```bash
-   mkdir -p crates/umide_emulator/{src,examples}
-   cd crates/umide_emulator
-   ```
+Safer long-term evolution than pure C
 
-2. **Create `Cargo.toml`:**
+👉 Decision:
 
-   ```toml
-   [package]
-   name = "umide_emulator"
-   version = "0.1.0"
-   edition = "2021"
+Rust = IDE + orchestration
 
-   [dependencies]
-   tokio = { version = "1", features = ["full"] }
-   tonic = "0.12"
-   prost = "0.13"
-   anyhow = "1.0"
-   serde = { version = "1.0", features = ["derive"] }
-   serde_json = "1.0"
-   ```
+C++ = emulators + GPU + platform integration
 
-3. **Create module structure:**
+4. Core Principle: Emulator Is NOT a Widget
 
-   ```rust
-   // crates/umide_emulator/src/lib.rs
-   pub mod android;
-   pub mod ios;
-   pub mod common;
+Critical rule for agents:
 
-   pub use android::AndroidEmulator;
-   pub use ios::iOSSimulator;
-   ```
+The emulator is not a Floem image, not a canvas, not a view tree element.
 
-4. **Implement Android module (`src/android.rs`):**
-   - Struct: `AndroidEmulator { device_id, grpc_address }`
-   - Method: `connect()` → connects to emulator gRPC
-   - Method: `get_screenshot()` → returns screenshot bytes
-   - Method: `send_touch(x, y)` → sends touch event
-   - Method: `stream_video()` → opens video stream (stub for now)
+It is a native GPU surface embedded into the window.
 
-5. **Implement iOS module (`src/ios.rs`):**
-   - Struct: `iOSSimulator { udid }`
-   - Method: `detect_simulator()` → finds running iOS Simulator
-   - Method: `get_screenshot()` → captures via simctl
-   - Method: `send_touch(x, y)` → sends touch via simctl
+5. Emulator Embedding Strategy (Future-Proof)
+   The Only Correct Approach
 
-6. **Add to root workspace:**
-   - Add to root `Cargo.toml` members: `"crates/umide_emulator"`
-   - Add dependency: `umide_emulator = { path = "crates/umide_emulator" }`
+Create a native GPU surface
 
-7. **Create tests:**
-   ```bash
-   cargo test -p umide_emulator
-   ```
+Attach it to the same window Lapce owns
 
-**Success Criteria:**
+Share the graphics context
 
-- New crate compiles without errors
-- Can detect running emulators (print to console)
-- Can capture screenshots
-- Tests pass
+Let the emulator render directly to GPU
 
----
+Why This Matters
 
-### Phase 4: Add Emulator Panel to UI (Week 5-6)
+No pixel copies
 
-**Objective:** Add a blank emulator panel to the right side of the editor.
+No CPU bottlenecks
 
-**Steps:**
+No frame drops
 
-1. **Create emulator panel widget:**
+Works for:
 
-   ```rust
-   // crates/umide/src/emulator_panel.rs
-   use floem::prelude::*;
+Vulkan
 
-   pub struct EmulatorPanel {
-       device_type: String,  // "Android" or "iOS"
-   }
+Metal
 
-   impl EmulatorPanel {
-       pub fn new(device_type: String) -> Self {
-           Self { device_type }
-       }
+OpenGL
 
-       pub fn view(self) -> impl IntoView {
-           container(
-               text(format!("Emulator: {}", self.device_type))
-           )
-           .style(|s| s.width_full().height_full())
-       }
-   }
-   ```
+Future rendering APIs
 
-2. **Integrate into workspace:**
-   - Find where panels are created in `src/main.rs`
-   - Add emulator panel alongside editor panel
-   - Layout: Left = file tree, Center = editor, Right = emulator
+6. Emulator Surface Architecture
+   EmulatorView (Rust)
+   │
+   ├─ Window Handle (platform-specific)
+   ├─ Surface ID
+   ├─ Event Forwarder
+   │ ├─ Pointer
+   │ ├─ Keyboard
+   │ └─ Scroll
+   │
+   └─ NativeSurfaceHandle ─────▶ C++ Emulator Core
 
-3. **Add to panel registry:**
-   - Register emulator panel so it can be toggled on/off
-   - Add menu item: "View" → "Show Emulator Panel"
+Responsibilities
+Rust (Lapce side)
 
-4. **Build and test:**
-   ```bash
-   cargo build --release
-   ./target/release/umide
-   # Verify: Emulator panel appears on the right
-   ```
+Layout & docking
 
-**Success Criteria:**
+Window handle acquisition
 
-- Emulator panel displays on right side
-- Shows placeholder text (e.g., "Android Emulator" or "iOS Simulator")
-- Panel can be toggled on/off
-- No crashes
+Input capture & forwarding
 
----
+Lifecycle management (start/stop/pause)
 
-### Phase 5: Integrate Video Streaming (Week 6-8)
+IPC orchestration
 
-**Objective:** Display actual emulator video in the panel.
+C++ (Emulator side)
 
-**Steps:**
+GPU surface creation
 
-1. **Add video decode dependencies:**
+Frame rendering
 
-   ```toml
-   # In crates/umide_emulator/Cargo.toml
-   ffmpeg-sys-next = "4.4"  # Or use pure Rust decoder
-   image = "0.25"
-   ```
+Emulator lifecycle
 
-2. **Implement H.264 decoder:**
+Input injection
 
-   ```rust
-   // crates/umide_emulator/src/video.rs
-   pub struct VideoDecoder {
-       width: u32,
-       height: u32,
-   }
+Audio, sensors, clipboard
 
-   impl VideoDecoder {
-       pub fn decode_h264(&mut self, data: &[u8]) -> Result<Vec<u8>> {
-           // Decode H.264 → RGBA pixels
-           Ok(vec![])  // Stub
-       }
-   }
-   ```
+7. Rust ↔ C++ Boundary (CRITICAL)
+   Rule: No direct object sharing
 
-3. **Connect Android gRPC video stream:**
+Communication must be:
 
-   ```rust
-   // In crates/umide_emulator/src/android.rs
-   pub async fn stream_video(&mut self) -> Result<impl Stream<Item = Vec<u8>>> {
-       // Connect to emulator gRPC on port 5556
-       // Request video stream
-       // Decode frames in real-time
-   }
-   ```
+Message-based
 
-4. **Create GPU texture from decoded video:**
+Asynchronous
 
-   ```rust
-   // Use Floem's rendering context to create textures
-   // Render decoded frames to GPU texture
-   ```
+ABI-stable
 
-5. **Display in panel:**
-   - Update `EmulatorPanel` to render video texture
-   - Update at ~30fps
+Recommended Interface
 
-6. **Build and test:**
+extern "C" API
 
-   ```bash
-   # Launch Android Emulator with gRPC enabled
-   ~/Android/Sdk/emulator/emulator -avd <avd_name> -grpc 5556
+Thin C ABI layer
 
-   cargo build --release
-   ./target/release/umide
-   # Verify: Video from emulator displays in right panel
-   ```
+Internals remain pure C++
 
-**Success Criteria:**
+Example Responsibilities (Conceptual)
 
-- Android Emulator video displays in panel
-- Latency < 200ms
-- Runs at ~30fps
-- No crashes on disconnect
+emulator_create(window_handle)
 
----
+emulator_resize(width, height)
 
-### Phase 6: iOS Simulator Support (Week 8-9)
+emulator_send_input(event)
 
-**Objective:** Add iOS Simulator video streaming.
+emulator_shutdown()
 
-**Steps:**
+Rust never touches emulator internals.
 
-1. **Implement simctl integration:**
+8. IPC & Event Flow
+   Input Flow
+   User Input
+   → Floem Event
+   → Rust Input Mapper
+   → Native Bridge
+   → Emulator Input Injection
 
-   ```rust
-   // crates/umide_emulator/src/ios.rs
-   pub async fn stream_video_loop(&self) -> Result<()> {
-       loop {
-           let screenshot = self.capture_screenshot()?;
-           // Decode PNG
-           // Send to panel
-           tokio::time::sleep(Duration::from_millis(100)).await;
-       }
-   }
-   ```
+Frame Rendering Flow
+Emulator GPU Render
+→ Native Surface
+→ Window Compositor
+→ Screen
 
-2. **Update panel to detect + display both:**
-   - Check: Is Android Emulator running? Show Android stream
-   - Check: Is iOS Simulator running? Show iOS stream
-   - Allow switching between them
+🚫 No CPU readback
+🚫 No image decoding
+🚫 No Floem canvas
 
-3. **Test:**
+9. Emulator Abstraction Layer (Multi-Platform)
 
-   ```bash
-   # Launch iOS Simulator
-   open /Applications/Xcode.app/Contents/Developer/Applications/Simulator.app
+Design C++ emulator core like this:
 
-   cargo build --release
-   ./target/release/umide
-   # Verify: iOS Simulator video displays
-   ```
+EmulatorCore (abstract)
+│
+├─ AndroidEmulator
+│ ├─ AVD / Emulator Engine
+│ └─ Vulkan/OpenGL
+│
+├─ IosSimulator
+│ ├─ CoreSimulator
+│ └─ Metal
+│
+└─ Future Devices
+├─ Physical Devices
+├─ Cloud Devices
 
-**Success Criteria:**
+UMIDE never cares which emulator is underneath.
 
-- iOS Simulator video displays
-- Can switch between Android and iOS
-- Auto-detects running devices
+10. Flutter & React Native First-Class Support
+    Key Integrations (Non-Optional)
+    Logs
 
----
+Structured logs panel
 
-### Phase 7: Touch Input Integration (Week 9-10)
+Filter by app / isolate / JS thread
 
-**Objective:** Send touch events from panel to emulator.
+Hyperlinks to source
 
-**Steps:**
+Hot Reload
 
-1. **Add mouse event handling to panel:**
+One-click
 
-   ```rust
-   // In EmulatorPanel
-   pub fn on_mouse_down(&mut self, x: f64, y: f64) {
-       // Convert panel coordinates to emulator coordinates
-       let emu_x = (x * device_width) as i32;
-       let emu_y = (y * device_height) as i32;
+Per emulator instance
 
-       // Send to emulator
-       emulator.send_touch(emu_x, emu_y)?;
-   }
-   ```
+Status feedback inline
 
-2. **Implement send_touch in Android:**
+Debugging
 
-   ```rust
-   pub async fn send_touch(&self, x: i32, y: i32) -> Result<()> {
-       // Send via gRPC
-   }
-   ```
+RN:
 
-3. **Implement send_touch in iOS:**
+Metro integration
 
-   ```rust
-   pub fn send_touch(&self, x: i32, y: i32) -> Result<()> {
-       // Call simctl
-       Command::new("xcrun")
-           .args(&["simctl", "ui", &self.udid, "tap", &x.to_string(), &y.to_string()])
-           .output()?;
-       Ok(())
-   }
-   ```
+JS thread inspector
 
-4. **Test:**
-   - Click in emulator panel
-   - Verify touch events appear on device
+Flutter:
 
-**Success Criteria:**
+Dart VM Service
 
-- Can tap/click in emulator video
-- App responds to touches
-- Latency < 100ms
+Widget inspector
 
----
+DevTools Embedding (Future)
 
-### Phase 8: Project Detection + Build System (Week 10-12)
+Embed Flutter DevTools
 
-**Objective:** Detect React Native/Flutter projects and integrate build systems.
+Embed React DevTools
 
-**Steps:**
+Dockable panels
 
-1. **Create project detection module:**
+11. Process Model
+    Emulator Lifecycle
 
-   ```rust
-   // crates/umide/src/project_detector.rs
-   pub enum ProjectType {
-       ReactNative,
-       Flutter,
-       Unknown,
-   }
+Lazy-start
 
-   pub fn detect_project(path: &Path) -> ProjectType {
-       if path.join("package.json").exists()
-           && path.join("node_modules/react-native").exists() {
-           return ProjectType::ReactNative;
-       }
-       if path.join("pubspec.yaml").exists() {
-           return ProjectType::Flutter;
-       }
-       ProjectType::Unknown
-   }
-   ```
+Reusable sessions
 
-2. **Integrate Metro (React Native):**
+Fast suspend/resume
 
-   ```rust
-   pub struct MetroBuild {
-       process: Child,
-   }
+Multiple emulators simultaneously
 
-   impl MetroBuild {
-       pub fn start(project_path: &Path) -> Result<Self> {
-           let process = Command::new("npx")
-               .args(&["react-native", "start"])
-               .current_dir(project_path)
-               .spawn()?;
-           Ok(MetroBuild { process })
-       }
-   }
-   ```
+Crash Isolation
+
+Emulator crash ≠ IDE crash
+
+Emulator runs in isolated process
+
+Rust supervises
+
+12. Why This Architecture Is Future-Proof
+
+GPU-native
+
+Emulator-agnostic
+
+Language-agnostic
+
+Toolchain-extensible
+
+No UI toolkit lock-in
+
+No rendering shortcuts
+
+You can later add:
+
+VisionOS simulators
+
+Embedded physical devices
+
+Cloud streaming
+
+AI-powered debugging overlays
+
+Without changing fundamentals.
+
+13. Explicit Agent Instructions
+
+Agent MUST:
+
+Never render emulator frames via Floem images
+
+Never decode RGBA in Rust
+
+Never bind Rust to emulator internals
+
+Treat emulator as a native GPU client
+
+Agent SHOULD:
+
+Optimize for zero-copy paths
+
+Prefer async IPC
+
+Assume multi-emulator scenarios
+
+Design APIs versioned & stable
+
+14. Final North Star
+
+UMIDE must feel like Xcode-level integration
+with VS Code flexibility
+and native performance
+— without ever leaving the editor.

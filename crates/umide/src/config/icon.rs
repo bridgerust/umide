@@ -115,6 +115,8 @@ impl LapceIcons {
 
     pub const IMPLEMENTATION: &'static str = "implementation";
 
+    pub const EMULATOR: &'static str = "emulator";
+
     pub const SYMBOL_KIND_ARRAY: &'static str = "symbol_kind.array";
     pub const SYMBOL_KIND_BOOLEAN: &'static str = "symbol_kind.boolean";
     pub const SYMBOL_KIND_CLASS: &'static str = "symbol_kind.class";

@@ -31,7 +31,7 @@ use crate::{
     window_tab::{Focus, WindowTabData},
 };
 
-pub const VOLT_DEFAULT_PNG: &[u8] = include_bytes!("../../../extra/images/volt.png");
+pub const VOLT_DEFAULT_PNG: &[u8] = include_bytes!("../../../../extra/images/volt.png");
 
 struct IndexMapItems<K, V>(IndexMap<K, V>);
 

@@ -402,7 +402,7 @@ fn completion_lens_text(
     // We strip the prefix of the current input from the label.
     // So that, for example, `p` with a completion of `println` only sets the lens text to `rintln`.
     // If the text does not include a prefix in the expected position, then we do not display it.
-    let item = item.as_ref().strip_prefix(&completion.input)?;
+    let item = <Cow<'_, str> as AsRef<str>>::as_ref(&item).strip_prefix(&completion.input)?;
 
     // Get only the first line of text, because Lapce does not currently support
     // multi-line phantom text.

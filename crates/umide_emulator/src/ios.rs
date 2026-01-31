@@ -61,18 +61,15 @@ impl IosSimulator {
     }
 
     pub fn launch(udid: &str) -> Result<()> {
-        // Boot the simulator
+        // Boot the simulator (no external window)
         Command::new("xcrun")
             .arg("simctl")
             .arg("boot")
             .arg(udid)
             .spawn()?;
             
-        // Open the Simulator application to show it
-        Command::new("open")
-            .arg("-a")
-            .arg("Simulator")
-            .spawn()?;
+        // Note: We don't open Simulator.app - we capture screenshots directly
+        // via simctl without needing the visible window
             
         Ok(())
     }

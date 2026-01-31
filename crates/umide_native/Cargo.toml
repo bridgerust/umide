@@ -12,20 +12,23 @@ crate-type = ["lib"]
 # For raw window/surface handle types
 raw-window-handle = "0.6"
 
+# wgpu for GPU texture integration
+wgpu = "28.0.0"
+
 # Logging
 tracing = "0.1"
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0.18"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Metal bindings (for importing IOSurface as texture)
-metal = "0.29"
+metal = "0.33.0"
 # Core Foundation types
 core-foundation = "0.10"
 # Objective-C runtime
-objc2 = "0.5"
-block2 = "0.5"
+objc2 = "0.6.3"
+block2 = "0.6.2"
 
 [build-dependencies]
 cc = { version = "1.0", features = ["parallel"] }

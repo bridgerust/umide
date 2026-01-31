@@ -7,7 +7,19 @@
 pub mod macos;
 
 #[cfg(target_os = "macos")]
+pub mod wgpu_texture;
+
+#[cfg(target_os = "macos")]
+pub mod simulator;
+
+#[cfg(target_os = "macos")]
 pub use macos::*;
+
+#[cfg(target_os = "macos")]
+pub use wgpu_texture::*;
+
+#[cfg(target_os = "macos")]
+pub use simulator::*;
 
 use thiserror::Error;
 

@@ -7911,14 +7911,15 @@ dependencies = [
 name = "umide_native"
 version = "0.1.0"
 dependencies = [
- "block2 0.5.1",
+ "block2 0.6.2",
  "cc",
  "core-foundation 0.10.1",
- "metal 0.29.0",
- "objc2 0.5.2",
+ "metal 0.33.0",
+ "objc2 0.6.3",
  "raw-window-handle 0.6.2",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing 0.1.44",
+ "wgpu 28.0.0",
 ]
 
 [[package]]

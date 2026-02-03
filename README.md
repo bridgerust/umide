@@ -15,7 +15,7 @@ UMIDE is a unified IDE for cross-platform mobile development (React Native + Flu
 
 ## License
 
-Copyright 2024 UMIDE contributors
+Copyright 2026 UMIDE contributors
 Portions (original editor) Copyright 2023 Lapce contributors
 
 Released under the Apache License Version 2.

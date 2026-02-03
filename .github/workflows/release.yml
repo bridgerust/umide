@@ -76,14 +76,14 @@ jobs:
             -out "./lapce.wixobj" "extra/windows/wix/lapce.wxs"
 
           light.exe -ext WixUIExtension -ext WixUtilExtension \
-            -out "./Lapce-windows.msi" -sice:ICE61 -sice:ICE91 \
+            -out "./Umide-windows.msi" -sice:ICE61 -sice:ICE91 \
             "./lapce.wixobj"
 
       - name: Create portable
         shell: pwsh
         run: |
           cargo build --profile release-lto --features lapce-app/portable
-          Compress-Archive ./target/release-lto/lapce.exe ./Lapce-windows-portable.zip
+          Compress-Archive ./target/release-lto/lapce.exe ./Umide-windows-portable.zip
 
       - name: Create lapce-proxy archive
         shell: pwsh
@@ -100,8 +100,8 @@ jobs:
           name: lapce-windows
           path: |
             ./lapce-proxy-windows-*.gz
-            ./Lapce-windows-portable.zip
-            ./Lapce-windows.msi
+            ./Umide-windows-portable.zip
+            ./Umide-windows.msi
           retention-days: 1
 
   linux:
@@ -118,15 +118,15 @@ jobs:
 
       - name: Gzip
         run: |
-          mkdir Lapce
-          cp ./target/linux_amd64/lapce Lapce/
-          tar -zcvf ./lapce-linux-amd64.tar.gz Lapce
+          mkdir Umide
+          cp ./target/linux_amd64/lapce Umide/
+          tar -zcvf ./lapce-linux-amd64.tar.gz Umide
 
-          rm -rf Lapce
+          rm -rf Umide
 
-          mkdir Lapce
-          cp ./target/linux_arm64/lapce Lapce/
-          tar -zcvf ./lapce-linux-arm64.tar.gz Lapce
+          mkdir Umide
+          cp ./target/linux_arm64/lapce Umide/
+          tar -zcvf ./lapce-linux-arm64.tar.gz Umide
 
       - name: Fetch dependencies
         run: cargo fetch --locked
@@ -276,7 +276,7 @@ jobs:
 
       - name: Rename
         run: |
-          cp ./target/release-lto/macos/Lapce.dmg ./target/release-lto/macos/Lapce-macos.dmg
+          cp ./target/release-lto/macos/Umide.dmg ./target/release-lto/macos/Umide-macos.dmg
 
       - name: Gzip lapce-proxy
         run: |
@@ -286,7 +286,7 @@ jobs:
       - name: Notarize Release Build
         uses: lando/notarize-action@v2
         with:
-          product-path: "./target/release-lto/macos/Lapce-macos.dmg"
+          product-path: "./target/release-lto/macos/Umide-macos.dmg"
           appstore-connect-username: ${{ secrets.NOTARIZE_USERNAME }}
           appstore-connect-password: ${{ secrets.NOTARIZE_PASSWORD }}
           appstore-connect-team-id: CYSGAZFR8D
@@ -296,14 +296,14 @@ jobs:
       - name: "Staple Release Build"
         uses: lapce/xcode-staple@062485d6eeafe841c18a412f012e80f49e23c517
         with:
-          product-path: "./target/release-lto/macos/Lapce-macos.dmg"
+          product-path: "./target/release-lto/macos/Umide-macos.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: lapce-macos
           path: |
             ./target/release-lto/macos/lapce-proxy-darwin-*.gz
-            ./target/release-lto/macos/Lapce-macos.dmg
+            ./target/release-lto/macos/Umide-macos.dmg
           retention-days: 3
 
   publish:
@@ -341,7 +341,7 @@ jobs:
       - if: env.TAG_NAME == 'nightly'
         run: |
           {
-            echo 'SUBJECT=Lapce development build'
+            echo 'SUBJECT=Umide development build'
             echo 'PRERELEASE=--prerelease'
           } | tee -a $GITHUB_ENV
 
@@ -354,7 +354,7 @@ jobs:
       - if: env.TAG_NAME != 'nightly'
         run: |
           {
-            echo 'SUBJECT=Lapce release build'
+            echo 'SUBJECT=Umide release build'
             echo 'PRERELEASE='
           } | tee -a $GITHUB_ENV
 

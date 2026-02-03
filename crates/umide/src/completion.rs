@@ -15,7 +15,7 @@ use lsp_types::{
 };
 use nucleo::Utf32Str;
 
-use crate::{config::LapceConfig, editor::EditorData, snippet::Snippet};
+use crate::{config::UmideConfig, editor::EditorData, snippet::Snippet};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CompletionStatus {
@@ -63,11 +63,11 @@ pub struct CompletionData {
     pub latest_editor_id: Option<EditorId>,
     /// Matcher for filtering the completion items
     matcher: RwSignal<nucleo::Matcher>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 }
 
 impl CompletionData {
-    pub fn new(cx: Scope, config: ReadSignal<Arc<LapceConfig>>) -> Self {
+    pub fn new(cx: Scope, config: ReadSignal<Arc<UmideConfig>>) -> Self {
         let active = cx.create_rw_signal(0);
         Self {
             status: CompletionStatus::Inactive,
@@ -404,7 +404,7 @@ fn completion_lens_text(
     // If the text does not include a prefix in the expected position, then we do not display it.
     let item = <Cow<'_, str> as AsRef<str>>::as_ref(&item).strip_prefix(&completion.input)?;
 
-    // Get only the first line of text, because Lapce does not currently support
+    // Get only the first line of text, because Umide does not currently support
     // multi-line phantom text.
     let item = item.lines().next().unwrap_or(item);
 

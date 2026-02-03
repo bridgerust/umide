@@ -35,14 +35,14 @@ use crate::{
     debug::{RunDebugMode, RunDebugProcess},
     keypress::{KeyPressFocus, condition::Condition},
     window_tab::CommonData,
-    workspace::LapceWorkspace,
+    workspace::UmideWorkspace,
 };
 
 #[derive(Clone, Debug)]
 pub struct TerminalData {
     pub scope: Scope,
     pub term_id: TermId,
-    pub workspace: Arc<LapceWorkspace>,
+    pub workspace: Arc<UmideWorkspace>,
     pub title: RwSignal<String>,
     pub launch_error: RwSignal<Option<String>>,
     pub mode: RwSignal<Mode>,
@@ -63,7 +63,7 @@ impl KeyPressFocus for TerminalData {
 
     fn run_command(
         &self,
-        command: &crate::command::LapceCommand,
+        command: &crate::command::UmideCommand,
         count: Option<usize>,
         _mods: Modifiers,
     ) -> crate::command::CommandExecuted {
@@ -306,7 +306,7 @@ impl KeyPressFocus for TerminalData {
 impl TerminalData {
     pub fn new(
         cx: Scope,
-        workspace: Arc<LapceWorkspace>,
+        workspace: Arc<UmideWorkspace>,
         profile: Option<TerminalProfile>,
         common: Rc<CommonData>,
     ) -> Self {
@@ -315,7 +315,7 @@ impl TerminalData {
 
     pub fn new_run_debug(
         cx: Scope,
-        workspace: Arc<LapceWorkspace>,
+        workspace: Arc<UmideWorkspace>,
         run_debug: Option<RunDebugProcess>,
         profile: Option<TerminalProfile>,
         common: Rc<CommonData>,
@@ -360,7 +360,7 @@ impl TerminalData {
     }
 
     fn new_raw_terminal(
-        workspace: &LapceWorkspace,
+        workspace: &UmideWorkspace,
         term_id: TermId,
         run_debug: Option<&RunDebugProcess>,
         profile: Option<TerminalProfile>,
@@ -765,7 +765,7 @@ pub struct ExpandedRunDebug {
 }
 impl ExpandedRunDebug {
     pub fn expand(
-        workspace: &LapceWorkspace,
+        workspace: &UmideWorkspace,
         run_debug: &RunDebugConfig,
         is_prelaunch: bool,
     ) -> anyhow::Result<Self> {
@@ -837,7 +837,7 @@ impl ExpandedRunDebug {
     }
 
     fn expand_work_dir(
-        workspace: &LapceWorkspace,
+        workspace: &UmideWorkspace,
         run_debug: &RunDebugConfig,
     ) -> Option<Url> {
         let path = run_debug.cwd.as_ref()?;

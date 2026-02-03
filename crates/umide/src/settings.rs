@@ -29,8 +29,8 @@ use serde_json::Value;
 use crate::{
     command::CommandExecuted,
     config::{
-        DropdownInfo, LapceConfig, color::LapceColor, core::CoreConfig,
-        editor::EditorConfig, icon::LapceIcons, terminal::TerminalConfig,
+        DropdownInfo, UmideConfig, color::UmideColor, core::CoreConfig,
+        editor::EditorConfig, icon::UmideIcons, terminal::TerminalConfig,
         ui::UIConfig,
     },
     keypress::KeyPressFocus,
@@ -106,7 +106,7 @@ impl KeyPressFocus for SettingsData {
 
     fn run_command(
         &self,
-        _command: &crate::command::LapceCommand,
+        _command: &crate::command::UmideCommand,
         _count: Option<usize>,
         _mods: Modifiers,
     ) -> crate::command::CommandExecuted {
@@ -415,16 +415,16 @@ pub fn settings_view(
             s.padding_horiz(20.0)
                 .width_pct(100.0)
                 .apply_if(kind == current_kind.get(), |s| {
-                    s.background(config.color(LapceColor::PANEL_CURRENT_BACKGROUND))
+                    s.background(config.color(UmideColor::PANEL_CURRENT_BACKGROUND))
                 })
                 .hover(|s| {
                     s.cursor(CursorStyle::Pointer).background(
-                        config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
                     )
                 })
                 .active(|s| {
                     s.background(
-                        config.color(LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND),
+                        config.color(UmideColor::PANEL_HOVERED_ACTIVE_BACKGROUND),
                     )
                 })
         })
@@ -482,7 +482,7 @@ pub fn settings_view(
             s.height_pct(100.0)
                 .width(200.0)
                 .border_right(1.0)
-                .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                .border_color(config.get().color(UmideColor::LAPCE_BORDER))
         }),
         Stack::new((
             Container::new({
@@ -495,7 +495,7 @@ pub fn settings_view(
                             .border_radius(6.0)
                             .border(1.0)
                             .border_color(
-                                config.get().color(LapceColor::LAPCE_BORDER),
+                                config.get().color(UmideColor::LAPCE_BORDER),
                             )
                     })
                     .request_focus(|| {})
@@ -626,7 +626,7 @@ fn settings_item_view(
                                     };
 
                                     if let Some(value) = value {
-                                        LapceConfig::update_file(
+                                        UmideConfig::update_file(
                                             &kind, &field, value,
                                         );
                                     }
@@ -642,7 +642,7 @@ fn settings_item_view(
                     .style(|s| s.focusable(true))
                     .style(move |s| {
                         s.width(300.0).border(1.0).border_radius(6.0).border_color(
-                            config.get().color(LapceColor::LAPCE_BORDER),
+                            config.get().color(UmideColor::LAPCE_BORDER),
                         )
                     })
                     .into_any()
@@ -674,7 +674,7 @@ fn settings_item_view(
                             .width_pct(100.0)
                             .padding_horiz(10.0)
                             .font_size(config.ui.font_size() as f32 + 2.0)
-                            .background(config.color(LapceColor::PANEL_BACKGROUND))
+                            .background(config.color(UmideColor::PANEL_BACKGROUND))
                     })
                     .into_any()
             } else {
@@ -716,7 +716,7 @@ fn settings_item_view(
                         &checked,
                         toml_edit::ser::ValueSerializer::new(),
                     ) {
-                        LapceConfig::update_file(&kind, &field, value);
+                        UmideConfig::update_file(&kind, &field, value);
                     }
                 });
 
@@ -764,7 +764,7 @@ fn settings_item_view(
 
 pub fn checkbox(
     checked: impl Fn() -> bool + 'static,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     const CHECKBOX_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 16 16"><polygon points="5.19,11.83 0.18,7.44 1.82,5.56 4.81,8.17 10,1.25 12,2.75" /></svg>"#;
     let svg_str = move || if checked() { CHECKBOX_SVG } else { "" }.to_string();
@@ -772,7 +772,7 @@ pub fn checkbox(
     svg(svg_str).style(move |s| {
         let config = config.get();
         let size = config.ui.font_size() as f32;
-        let color = config.color(LapceColor::EDITOR_FOREGROUND);
+        let color = config.color(UmideColor::EDITOR_FOREGROUND);
 
         s.min_width(size)
             .size(size, size)
@@ -914,14 +914,14 @@ fn color_section_list(
                                             .ok();
 
                                             if let Some(value) = value {
-                                                LapceConfig::update_file(
+                                                UmideConfig::update_file(
                                                     &format!("color-theme.{kind}"),
                                                     &field,
                                                     value,
                                                 );
                                             }
                                         } else {
-                                            LapceConfig::reset_setting(
+                                            UmideConfig::reset_setting(
                                                 &format!("color-theme.{kind}"),
                                                 &field,
                                             );
@@ -947,7 +947,7 @@ fn color_section_list(
                             .border(1)
                             .border_radius(6)
                             .border_color(
-                                config.get().color(LapceColor::LAPCE_BORDER),
+                                config.get().color(UmideColor::LAPCE_BORDER),
                             )
                     }),
                     Empty::new().style(move |s| {
@@ -963,9 +963,9 @@ fn color_section_list(
                             .border_radius(6)
                             .size(size, size)
                             .margin_left(10)
-                            .border_color(config.color(LapceColor::LAPCE_BORDER))
+                            .border_color(config.color(UmideColor::LAPCE_BORDER))
                             .background(color.unwrap_or_else(|| {
-                                config.color(LapceColor::EDITOR_FOREGROUND)
+                                config.color(UmideColor::EDITOR_FOREGROUND)
                             }))
                     }),
                     {
@@ -975,7 +975,7 @@ fn color_section_list(
                         let local_kind = kind.clone();
                         Label::new("Reset")
                             .on_click_stop(move |_| {
-                                LapceConfig::reset_setting(
+                                UmideConfig::reset_setting(
                                     &format!("color-theme.{local_kind}"),
                                     &local_key,
                                 );
@@ -1008,13 +1008,13 @@ fn color_section_list(
                                     .border(1)
                                     .border_radius(6)
                                     .border_color(
-                                        config.color(LapceColor::LAPCE_BORDER),
+                                        config.color(UmideColor::LAPCE_BORDER),
                                     )
                                     .apply_if(same, |s| s.hide())
                                     .active(|s| {
                                         s.background(
                                             config
-                                                .color(LapceColor::PANEL_BACKGROUND),
+                                                .color(UmideColor::PANEL_BACKGROUND),
                                         )
                                     })
                             })
@@ -1092,7 +1092,7 @@ pub fn theme_color_settings_view(
                             .border_radius(6.0)
                             .border(1.0)
                             .border_color(
-                                config.get().color(LapceColor::LAPCE_BORDER),
+                                config.get().color(UmideColor::LAPCE_BORDER),
                             )
                     })
                     .request_focus(|| {})
@@ -1184,7 +1184,7 @@ fn dropdown_view(
     dropdown: &DropdownInfo,
     expanded: RwSignal<bool>,
     window_size: RwSignal<Size>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View + use<> {
     let window_origin = RwSignal::new(Point::ZERO);
     let size = RwSignal::new(Size::ZERO);
@@ -1231,16 +1231,16 @@ fn dropdown_view(
         Container::new(
             svg(move || {
                 if expanded.get() {
-                    config.get().ui_svg(LapceIcons::CLOSE)
+                    config.get().ui_svg(UmideIcons::CLOSE)
                 } else {
-                    config.get().ui_svg(LapceIcons::DROPDOWN_ARROW)
+                    config.get().ui_svg(UmideIcons::DROPDOWN_ARROW)
                 }
             })
             .style(move |s| {
                 let config = config.get();
                 let size = config.ui.icon_size() as f32;
                 s.size(size, size)
-                    .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                    .color(config.color(UmideColor::LAPCE_ICON_ACTIVE))
             }),
         )
         .style(|s| s.padding_right(4.0)),
@@ -1262,7 +1262,7 @@ fn dropdown_view(
     .style(move |s| {
         s.items_center()
             .cursor(CursorStyle::Pointer)
-            .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
             .border(1.0)
             .border_radius(6.0)
             .width(250.0)
@@ -1296,7 +1296,7 @@ fn dropdown_scroll_view(
     window_origin: RwSignal<Point>,
     input_size: RwSignal<Size>,
     window_size: RwSignal<Size>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View + use<> {
     dropdown_scroll_focus.set(true);
 
@@ -1313,14 +1313,14 @@ fn dropdown_scroll_view(
                     &item_string,
                     toml_edit::ser::ValueSerializer::new(),
                 ) {
-                    LapceConfig::update_file(&kind, &field, value);
+                    UmideConfig::update_file(&kind, &field, value);
                 }
                 expanded.set(false);
             })
             .style(move |s| {
                 s.text_ellipsis().padding_horiz(10.0).hover(|s| {
                     s.cursor(CursorStyle::Pointer).background(
-                        config.get().color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                        config.get().color(UmideColor::PANEL_HOVERED_BACKGROUND),
                     )
                 })
             })
@@ -1380,16 +1380,16 @@ fn dropdown_scroll_view(
             .line_height(1.8)
             .font_size(config.ui.font_size() as f32)
             .font_family(config.ui.font_family.clone())
-            .color(config.color(LapceColor::EDITOR_FOREGROUND))
-            .background(config.color(LapceColor::EDITOR_BACKGROUND))
+            .color(config.color(UmideColor::EDITOR_FOREGROUND))
+            .background(config.color(UmideColor::EDITOR_BACKGROUND))
             .class(floem::views::scroll::Handle, |s| {
-                s.background(config.color(LapceColor::LAPCE_SCROLL_BAR))
+                s.background(config.color(UmideColor::LAPCE_SCROLL_BAR))
             })
             .border(1)
             .border_radius(6.0)
-            .border_color(config.color(LapceColor::LAPCE_BORDER))
+            .border_color(config.color(UmideColor::LAPCE_BORDER))
             .box_shadow_blur(3.0)
-            .box_shadow_color(config.color(LapceColor::LAPCE_DROPDOWN_SHADOW))
+            .box_shadow_color(config.color(UmideColor::LAPCE_DROPDOWN_SHADOW))
             .inset_left(x)
             .inset_top(y)
     })

@@ -123,10 +123,10 @@ pub fn start_remote(
         .output()
         .map(|output| {
             if meta::RELEASE == ReleaseType::Debug {
-                String::from_utf8_lossy(&output.stdout).starts_with("Lapce-proxy")
+                String::from_utf8_lossy(&output.stdout).starts_with("Umide-proxy")
             } else {
                 String::from_utf8_lossy(&output.stdout).trim()
-                    == format!("Lapce-proxy {}", meta::VERSION)
+                    == format!("Umide-proxy {}", meta::VERSION)
             }
         })
         .unwrap_or(false)

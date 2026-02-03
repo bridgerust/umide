@@ -22,7 +22,7 @@ use umide_core::{
 use lapce_xi_rope::Rope;
 
 use crate::{
-    config::{LapceConfig, color::LapceColor},
+    config::{UmideConfig, color::UmideColor},
     doc::Doc,
     editor::{DocSignal, EditorData, view::editor_style},
     keypress::KeyPressFocus,
@@ -317,7 +317,7 @@ pub struct TextInput {
     cursor_pos: Point,
     on_cursor_pos: Option<Box<dyn Fn(Point)>>,
     hide_cursor: RwSignal<bool>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
     style: Extractor,
 }
 
@@ -719,7 +719,7 @@ impl View for TextInput {
                             &Rect::ZERO
                                 .with_size(Size::new(max - min, height))
                                 .with_origin(Point::new(min + point.x, point.y)),
-                            config.color(LapceColor::EDITOR_SELECTION),
+                            config.color(UmideColor::EDITOR_SELECTION),
                             0.0,
                         );
                     }
@@ -754,7 +754,7 @@ impl View for TextInput {
                 );
                 cx.stroke(
                     &line,
-                    config.color(LapceColor::EDITOR_FOREGROUND),
+                    config.color(UmideColor::EDITOR_FOREGROUND),
                     &Stroke::new(1.0),
                 );
             }
@@ -782,7 +782,7 @@ impl View for TextInput {
 
                 cx.stroke(
                     &line,
-                    self.config.get_untracked().color(LapceColor::EDITOR_CARET),
+                    self.config.get_untracked().color(UmideColor::EDITOR_CARET),
                     &Stroke::new(2.0),
                 );
             }

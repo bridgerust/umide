@@ -30,7 +30,7 @@ pub fn get_latest_release() -> Result<ReleaseInfo> {
         _ => "https://api.github.com/repos/lapce/lapce/releases/latest",
     };
 
-    let resp = umide_proxy::get_url(url, Some("Lapce"))?;
+    let resp = umide_proxy::get_url(url, Some("Umide"))?;
     if !resp.status().is_success() {
         return Err(anyhow!("get release info failed {}", resp.text()?));
     }

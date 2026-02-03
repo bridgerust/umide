@@ -185,15 +185,15 @@ mod tests {
     use config::Config;
     use floem::{peniko::Color, prelude::palette::css};
 
-    use crate::{config::LapceConfig, workspace::LapceWorkspace};
+    use crate::{config::UmideConfig, workspace::UmideWorkspace};
 
     #[test]
     fn test_resolve() {
         // Mimicking load
-        let workspace = LapceWorkspace::default();
+        let workspace = UmideWorkspace::default();
 
-        let config = LapceConfig::merge_config(&workspace, None, None);
-        let mut lapce_config: LapceConfig = config.try_deserialize().unwrap();
+        let config = UmideConfig::merge_config(&workspace, None, None);
+        let mut lapce_config: UmideConfig = config.try_deserialize().unwrap();
 
         let test_theme_str = r##"
 [color-theme]

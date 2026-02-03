@@ -19,7 +19,7 @@ use super::{data::FileExplorerData, node::FileNodeVirtualList};
 use crate::{
     app::clickable_icon,
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{UmideConfig, color::UmideColor, icon::UmideIcons},
     editor_tab::{EditorTabChild, EditorTabData},
     panel::{
         data::PanelSection, kind::PanelKind, position::PanelPosition,
@@ -117,7 +117,7 @@ fn initialize_naming_editor(
 }
 
 fn file_node_text_color(
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
     node: FileNodeViewData,
     source_control: SourceControlData,
 ) -> Color {
@@ -138,11 +138,11 @@ fn file_node_text_color(
 
     let color = match diff {
         Some(FileDiffKind::Modified | FileDiffKind::Renamed) => {
-            LapceColor::SOURCE_CONTROL_MODIFIED
+            UmideColor::SOURCE_CONTROL_MODIFIED
         }
-        Some(FileDiffKind::Added) => LapceColor::SOURCE_CONTROL_ADDED,
-        Some(FileDiffKind::Deleted) => LapceColor::SOURCE_CONTROL_REMOVED,
-        None => LapceColor::PANEL_FOREGROUND,
+        Some(FileDiffKind::Added) => UmideColor::SOURCE_CONTROL_ADDED,
+        Some(FileDiffKind::Deleted) => UmideColor::SOURCE_CONTROL_REMOVED,
+        None => UmideColor::PANEL_FOREGROUND,
     };
 
     config.get().color(color)
@@ -182,7 +182,7 @@ fn file_node_text_view(
                                 .color(
                                     config
                                         .get()
-                                        .color(LapceColor::PANEL_FOREGROUND_DIM),
+                                        .color(UmideColor::PANEL_FOREGROUND_DIM),
                                 )
                                 .selectable(false)
                         },
@@ -256,7 +256,7 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
                 .margin(0.0)
                 .border_radius(6.0)
                 .border(1.0)
-                .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                .border_color(config.get().color(UmideColor::LAPCE_BORDER))
         });
 
     let text_input_id = text_input_view.id();
@@ -270,9 +270,9 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
                     let config = config.get();
 
                     let editor_background_color =
-                        config.color(LapceColor::PANEL_CURRENT_BACKGROUND);
+                        config.color(UmideColor::PANEL_CURRENT_BACKGROUND);
                     let error_background_color =
-                        config.color(LapceColor::ERROR_LENS_ERROR_BACKGROUND);
+                        config.color(UmideColor::ERROR_LENS_ERROR_BACKGROUND);
 
                     let background_color = blend_colors(
                         editor_background_color,
@@ -282,7 +282,7 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
                     s.position(Position::Absolute)
                         .inset_top(ui_line_height.get())
                         .width_full()
-                        .color(config.color(LapceColor::ERROR_LENS_ERROR_FOREGROUND))
+                        .color(config.color(UmideColor::ERROR_LENS_ERROR_FOREGROUND))
                         .background(background_color)
                         .z_index(100)
                 }),
@@ -327,8 +327,8 @@ fn file_explorer_view(
                     svg(move || {
                         let config = config.get();
                         let svg_str = match open {
-                            true => LapceIcons::ITEM_OPENED,
-                            false => LapceIcons::ITEM_CLOSED,
+                            true => UmideIcons::ITEM_OPENED,
+                            false => UmideIcons::ITEM_CLOSED,
                         };
                         config.ui_svg(svg_str)
                     })
@@ -337,7 +337,7 @@ fn file_explorer_view(
                         let size = config.ui.icon_size() as f32;
 
                         let color = if is_dir {
-                            config.color(LapceColor::LAPCE_ICON_ACTIVE)
+                            config.color(UmideColor::LAPCE_ICON_ACTIVE)
                         } else {
                             Color::TRANSPARENT
                         };
@@ -354,14 +354,14 @@ fn file_explorer_view(
                             let config = config.get();
                             if is_dir {
                                 let svg_str = match open {
-                                    true => LapceIcons::DIRECTORY_OPENED,
-                                    false => LapceIcons::DIRECTORY_CLOSED,
+                                    true => UmideIcons::DIRECTORY_OPENED,
+                                    false => UmideIcons::DIRECTORY_CLOSED,
                                 };
                                 config.ui_svg(svg_str)
                             } else if let Some(path) = kind.path() {
                                 config.file_svg(path).0
                             } else {
-                                config.ui_svg(LapceIcons::FILE)
+                                config.ui_svg(UmideIcons::FILE)
                             }
                         })
                         .style(move |s| {
@@ -373,7 +373,7 @@ fn file_explorer_view(
                                 .margin_horiz(6.0)
                                 .apply_if(is_dir, |s| {
                                     s.color(
-                                        config.color(LapceColor::LAPCE_ICON_ACTIVE),
+                                        config.color(UmideColor::LAPCE_ICON_ACTIVE),
                                     )
                                 })
                                 .apply_if(!is_dir, |s| {
@@ -399,7 +399,7 @@ fn file_explorer_view(
                                 s.background(
                                     config
                                         .get()
-                                        .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                        .color(UmideColor::PANEL_HOVERED_BACKGROUND),
                                 )
                                 .cursor(CursorStyle::Pointer)
                             })
@@ -408,7 +408,7 @@ fn file_explorer_view(
                                 |x| {
                                     x.background(
                                         config.get().color(
-                                            LapceColor::PANEL_CURRENT_BACKGROUND,
+                                            UmideColor::PANEL_CURRENT_BACKGROUND,
                                         ),
                                     )
                                 },
@@ -507,9 +507,9 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
             clickable_icon(
                 move || {
                     if hovered.get() || info.with(|info| info.is_pristine) {
-                        LapceIcons::CLOSE
+                        UmideIcons::CLOSE
                     } else {
-                        LapceIcons::UNSAVED
+                        UmideIcons::UNSAVED
                     }
                 },
                 move || {
@@ -562,12 +562,12 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                             == child_index.get(),
                     |s| {
                         s.background(
-                            config.color(LapceColor::PANEL_CURRENT_BACKGROUND),
+                            config.color(UmideColor::PANEL_CURRENT_BACKGROUND),
                         )
                     },
                 )
                 .hover(|s| {
-                    s.background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
+                    s.background(config.color(UmideColor::PANEL_HOVERED_BACKGROUND))
                 })
         })
         .on_event_cont(EventListener::PointerDown, move |_| {

@@ -20,7 +20,7 @@ use super::{data::PanelSection, position::PanelPosition, view::PanelBuilder};
 use crate::{
     app::clickable_icon,
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{UmideConfig, color::UmideColor, icon::UmideIcons},
     debug::{DapVariable, RunDebugMode, StackTraceData},
     editor::location::{EditorLocation, EditorPosition},
     listener::Listener,
@@ -70,7 +70,7 @@ fn debug_process_icons(
     dap_id: DapId,
     mode: RunDebugMode,
     stopped: bool,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let paused = move || {
         let stopped = terminal
@@ -84,7 +84,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_RESTART,
+                    || UmideIcons::DEBUG_RESTART,
                     move || {
                         terminal.restart_run_debug(term_id);
                     },
@@ -98,7 +98,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_STOP,
+                    || UmideIcons::DEBUG_STOP,
                     move || {
                         terminal.stop_run_debug(term_id);
                     },
@@ -112,7 +112,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::CLOSE,
+                    || UmideIcons::CLOSE,
                     move || {
                         terminal.close_terminal(&term_id);
                     },
@@ -128,7 +128,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_CONTINUE,
+                    || UmideIcons::DEBUG_CONTINUE,
                     move || {
                         terminal.dap_continue(term_id);
                     },
@@ -142,7 +142,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_PAUSE,
+                    || UmideIcons::DEBUG_PAUSE,
                     move || {
                         terminal.dap_pause(term_id);
                     },
@@ -156,7 +156,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_STEP_OVER,
+                    || UmideIcons::DEBUG_STEP_OVER,
                     move || {
                         terminal.dap_step_over(term_id);
                     },
@@ -170,7 +170,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_STEP_INTO,
+                    || UmideIcons::DEBUG_STEP_INTO,
                     move || {
                         terminal.dap_step_into(term_id);
                     },
@@ -184,7 +184,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_STEP_OUT,
+                    || UmideIcons::DEBUG_STEP_OUT,
                     move || {
                         terminal.dap_step_out(term_id);
                     },
@@ -198,7 +198,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_RESTART,
+                    || UmideIcons::DEBUG_RESTART,
                     move || {
                         terminal.restart_run_debug(term_id);
                     },
@@ -212,7 +212,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::DEBUG_STOP,
+                    || UmideIcons::DEBUG_STOP,
                     move || {
                         terminal.stop_run_debug(term_id);
                     },
@@ -226,7 +226,7 @@ fn debug_process_icons(
             {
                 let terminal = terminal.clone();
                 clickable_icon(
-                    || LapceIcons::CLOSE,
+                    || UmideIcons::CLOSE,
                     move || {
                         terminal.close_terminal(&term_id);
                     },
@@ -243,7 +243,7 @@ fn debug_process_icons(
 
 fn debug_processes(
     terminal: TerminalPanelData,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     Scroll::new({
         let terminal = terminal.clone();
@@ -260,11 +260,11 @@ fn debug_processes(
                 Stack::new((
                     {
                         let svg_str = match (&p.mode, p.stopped) {
-                            (RunDebugMode::Run, false) => LapceIcons::START,
-                            (RunDebugMode::Run, true) => LapceIcons::RUN_ERRORS,
-                            (RunDebugMode::Debug, false) => LapceIcons::DEBUG,
+                            (RunDebugMode::Run, false) => UmideIcons::START,
+                            (RunDebugMode::Run, true) => UmideIcons::RUN_ERRORS,
+                            (RunDebugMode::Debug, false) => UmideIcons::DEBUG,
                             (RunDebugMode::Debug, true) => {
-                                LapceIcons::DEBUG_DISCONNECT
+                                UmideIcons::DEBUG_DISCONNECT
                             }
                         };
                         svg(move || config.get().ui_svg(svg_str)).style(move |s| {
@@ -273,7 +273,7 @@ fn debug_processes(
                             s.size(size, size)
                                 .margin_vert(5.0)
                                 .margin_horiz(10.0)
-                                .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                                .color(config.color(UmideColor::LAPCE_ICON_ACTIVE))
                         })
                     },
                     Label::new(p.config.name.clone()).style(|s| {
@@ -311,12 +311,12 @@ fn debug_processes(
                         .items_center()
                         .apply_if(is_active(), |s| {
                             s.background(
-                                config.color(LapceColor::PANEL_CURRENT_BACKGROUND),
+                                config.color(UmideColor::PANEL_CURRENT_BACKGROUND),
                             )
                         })
                         .hover(|s| {
                             s.cursor(CursorStyle::Pointer).background(
-                                (config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
+                                (config.color(UmideColor::PANEL_HOVERED_BACKGROUND))
                                     .multiply_alpha(0.3),
                             )
                         })
@@ -374,8 +374,8 @@ fn variables_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                         svg(move || {
                             let config = config.get();
                             let svg_str = match node.expanded {
-                                true => LapceIcons::ITEM_OPENED,
-                                false => LapceIcons::ITEM_CLOSED,
+                                true => UmideIcons::ITEM_OPENED,
+                                false => UmideIcons::ITEM_CLOSED,
                             };
                             config.ui_svg(svg_str)
                         })
@@ -384,7 +384,7 @@ fn variables_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                             let size = config.ui.icon_size() as f32;
 
                             let color = if reference > 0 {
-                                config.color(LapceColor::LAPCE_ICON_ACTIVE)
+                                config.color(UmideColor::LAPCE_ICON_ACTIVE)
                             } else {
                                 Color::TRANSPARENT
                             };
@@ -435,7 +435,7 @@ fn variables_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                                 s.apply_if(reference > 0, |s| {
                                     s.background(
                                         config.get().color(
-                                            LapceColor::PANEL_HOVERED_BACKGROUND,
+                                            UmideColor::PANEL_HOVERED_BACKGROUND,
                                         ),
                                     )
                                 })
@@ -457,7 +457,7 @@ fn debug_stack_frames(
     stack_trace: StackTraceData,
     stopped: RwSignal<bool>,
     internal_command: Listener<InternalCommand>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let expanded = stack_trace.expanded;
     Stack::new((
@@ -470,7 +470,7 @@ fn debug_stack_frames(
             .style(move |s| {
                 s.padding_horiz(10.0).min_width_pct(100.0).hover(move |s| {
                     s.cursor(CursorStyle::Pointer).background(
-                        config.get().color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                        config.get().color(UmideColor::PANEL_HOVERED_BACKGROUND),
                     )
                 })
             }),
@@ -506,13 +506,13 @@ fn debug_stack_frames(
                             s.background(
                                 config
                                     .get()
-                                    .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                    .color(UmideColor::PANEL_HOVERED_BACKGROUND),
                             )
                         })
                     }),
                     Label::new(source_path.clone()).style(move |s| {
                         s.margin_left(10.0)
-                            .color(config.get().color(LapceColor::EDITOR_DIM))
+                            .color(config.get().color(UmideColor::EDITOR_DIM))
                             .font_style(FontStyle::Italic)
                             .apply_if(!has_source, |s| s.hide())
                     }),
@@ -545,11 +545,11 @@ fn debug_stack_frames(
                         .padding_right(10.0)
                         .min_width_pct(100.0)
                         .apply_if(!has_source, |s| {
-                            s.color(config.color(LapceColor::EDITOR_DIM))
+                            s.color(config.color(UmideColor::EDITOR_DIM))
                         })
                         .hover(|s| {
                             s.background(
-                                config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
                             )
                             .apply_if(has_source, |s| s.cursor(CursorStyle::Pointer))
                         })
@@ -564,7 +564,7 @@ fn debug_stack_frames(
 fn debug_stack_traces(
     terminal: TerminalPanelData,
     internal_command: Listener<InternalCommand>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     Container::new(
         Scroll::new({
@@ -664,7 +664,7 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
 
                     Stack::new((
                         clickable_icon(
-                            move || LapceIcons::CLOSE,
+                            move || UmideIcons::CLOSE,
                             move || {
                                 breakpoints.update(|breakpoints| {
                                     if let Some(breakpoints) =
@@ -713,7 +713,7 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                             s.text_ellipsis()
                                 .flex_grow(1.0)
                                 .flex_basis(0.0)
-                                .color(config.get().color(LapceColor::EDITOR_DIM))
+                                .color(config.get().color(UmideColor::EDITOR_DIM))
                                 .min_width(0.0)
                                 .margin_left(6.0)
                                 .apply_if(folder_empty, |s| s.hide())
@@ -725,7 +725,7 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                                 s.background(
                                     config
                                         .get()
-                                        .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                        .color(UmideColor::PANEL_HOVERED_BACKGROUND),
                                 )
                             },
                         )

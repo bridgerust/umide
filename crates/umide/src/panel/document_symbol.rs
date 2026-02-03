@@ -6,7 +6,7 @@ use floem::{
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     style::CursorStyle,
     views::{
-        Decorators, VirtualVector, container, editor::id::Id, label, scroll, stack,
+        Container, Decorators, Label, Scroll, Stack, VirtualVector, editor::id::Id,
         svg, virtual_stack,
     },
 };
@@ -205,7 +205,7 @@ pub fn symbol_panel(
 ) -> impl View {
     let config = window_tab_data.common.config;
     let ui_line_height = window_tab_data.common.ui_line_height;
-    scroll(
+    Scroll::new(
         virtual_stack(
             {
                 let window_tab_data = window_tab_data.clone();
@@ -220,8 +220,8 @@ pub fn symbol_panel(
                 let open = data.open;
                 let has_child = !data.children.is_empty();
                 let kind = data.item.kind;
-                stack((
-                    container(
+                Stack::new((
+                    Container::new(
                         svg(move || {
                             let config = config.get();
                             let svg_str = match open.get() {
@@ -266,13 +266,13 @@ pub fn symbol_panel(
                                     config.color(LapceColor::LAPCE_ICON_ACTIVE)
                                 }))
                         }),
-                    label(move || {
+                    Label::new({
                             data.name.replace('\n', "↵")
                     })
                     .style(move |s| {
                         s.selectable(false)
                     }),
-                    label(move || {
+                    Label::new({
                         data.detail.clone().unwrap_or_default()
                     }).style(move |s| s.margin_left(6.0)
                                               .color(config.get().color(LapceColor::EDITOR_DIM))

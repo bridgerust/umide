@@ -18,6 +18,8 @@ thiserror = "2.0"
 openh264 = "0.9.3"
 h264-reader = "0.8.0"
 tracing.workspace = true
+umide_native = { path = "../umide_native" }
+raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 video-toolbox-sys = "0.2.0"

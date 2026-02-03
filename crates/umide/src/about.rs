@@ -3,12 +3,12 @@ use std::rc::Rc;
 use floem::{
     View,
     event::EventListener,
-    keyboard::Modifiers,
+    prelude::Modifiers,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate},
     style::{CursorStyle, Display, Position},
-    views::{Decorators, container, label, stack, svg},
+    views::{Decorators, Container, Label, Stack, svg},
 };
-use lapce_core::{command::FocusCommand, meta::VERSION, mode::Mode};
+use umide_core::{command::FocusCommand, meta::VERSION, mode::Mode};
 
 use crate::{
     command::{CommandExecuted, CommandKind},
@@ -100,17 +100,17 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
     let logo_size = 100.0;
 
     exclusive_popup(window_tab_data, about_data.visible, move || {
-        stack((
+        Stack::new((
             svg(move || (config.get()).logo_svg()).style(move |s| {
                 s.size(logo_size, logo_size)
                     .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
             }),
-            label(|| "UMIDE".to_string()).style(move |s| {
+            Label::new("UMIDE".to_string()).style(move |s| {
                 s.font_bold()
                     .margin_top(10.0)
                     .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
             }),
-            label(|| format!("Version: {}", VERSION)).style(move |s| {
+            Label::new(format!("Version: {}", VERSION)).style(move |s| {
                 s.margin_top(10.0)
                     .color(config.get().color(LapceColor::EDITOR_DIM))
             }),
@@ -142,7 +142,7 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
                 internal_command,
             )
             .style(|s| s.margin_top(10.0)),
-            label(|| "Attributions".to_string()).style(move |s| {
+            Label::new("Attributions".to_string()).style(move |s| {
                 s.font_bold()
                     .color(config.get().color(LapceColor::EDITOR_DIM))
                     .margin_top(40.0)
@@ -167,9 +167,9 @@ fn exclusive_popup<V: View + 'static>(
 ) -> impl View {
     let config = window_tab_data.common.config;
 
-    container(
-        container(
-            container(content())
+    Container::new(
+        Container::new(
+            Container::new(content())
                 .style(move |s| {
                     let config = config.get();
                     s.padding_vert(25.0)

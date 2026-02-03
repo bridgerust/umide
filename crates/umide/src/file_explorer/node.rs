@@ -1,5 +1,5 @@
 use floem::views::VirtualVector;
-use lapce_rpc::file::{FileNodeItem, FileNodeViewData, Naming};
+use umide_rpc::file::{FileNodeItem, FileNodeViewData, Naming};
 
 pub struct FileNodeVirtualList {
     file_node_item: FileNodeItem,

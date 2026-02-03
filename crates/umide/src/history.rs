@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use lapce_core::buffer::Buffer;
+use umide_core::buffer::Buffer;
 
 #[derive(Clone)]
 pub struct DocumentHistory {

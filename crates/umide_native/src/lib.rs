@@ -3,11 +3,11 @@
 //! This crate provides cross-platform GPU texture sharing for embedding
 //! emulator/simulator output directly into wgpu-rendered views.
 
-#[cfg(target_os = "macos")]
-pub mod macos;
+pub mod wgpu_texture;
+pub mod emulator;
 
 #[cfg(target_os = "macos")]
-pub mod wgpu_texture;
+pub mod macos;
 
 #[cfg(target_os = "macos")]
 pub mod simulator;

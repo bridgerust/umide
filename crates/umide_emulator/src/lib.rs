@@ -1,30 +1,31 @@
 pub mod android;
-pub mod ios;
 pub mod common;
-pub mod video;
 pub mod decoder;
 pub mod grpc_client;
+pub mod ios;
+pub mod native_view;
+pub mod video;
 
 pub use android::AndroidEmulator;
-pub use ios::IosSimulator;
-pub use decoder::create_decoder;
 pub use common::{DeviceInfo, DevicePlatform, DeviceState};
+pub use decoder::create_decoder;
 pub use grpc_client::{EmulatorGrpcClient, GrpcError};
+pub use ios::IosSimulator;
 
 pub fn list_all_devices() -> Vec<DeviceInfo> {
     let mut devices = Vec::new();
-    
+
     if let Ok(mut android_devices) = AndroidEmulator::list_devices() {
         devices.append(&mut android_devices);
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         if let Ok(mut ios_devices) = IosSimulator::list_devices() {
             devices.append(&mut ios_devices);
         }
     }
-    
+
     devices
 }
 

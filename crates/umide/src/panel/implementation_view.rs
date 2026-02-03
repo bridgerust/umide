@@ -5,13 +5,13 @@ use floem::{
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate},
     style::CursorStyle,
     views::{
-        Decorators, VirtualVector, container, label, scroll, stack, svg,
+        Container, Decorators, Label, Scroll, Stack, VirtualVector, svg,
         virtual_stack,
     },
 };
 use im::HashMap;
 use itertools::Itertools;
-use lapce_rpc::file_line::FileLine;
+use umide_rpc::file_line::FileLine;
 use lsp_types::{Location, SymbolKind, request::GotoImplementationResponse};
 
 use super::position::PanelPosition;
@@ -38,14 +38,14 @@ pub fn common_reference_panel(
 ) -> impl View {
     let config = window_tab_data.common.config;
     let ui_line_height = window_tab_data.common.ui_line_height;
-    scroll(
+    Scroll::new(
         virtual_stack(
             each_fn,
             move |(_, _, data)| data.view_id(),
             move |(_, level, rw_data)| {
                 match rw_data {
-                    ReferenceLocation::File { path, open, .. } => stack((
-                        container(
+                    ReferenceLocation::File { path, open, .. } => Stack::new((
+                        Container::new(
                             svg(move || {
                                 let config = config.get();
                                 let svg_str = match open.get() {
@@ -91,7 +91,7 @@ pub fn common_reference_panel(
                                         }),
                                 )
                         }),
-                        label(move || format!("{:?}", path))
+                        Label::derived(move || format!("{:?}", path))
                             .style(move |s| {
                                 s.margin_left(6.0).color(
                                     config.get().color(LapceColor::EDITOR_DIM),
@@ -113,8 +113,8 @@ pub fn common_reference_panel(
                                 .cursor(CursorStyle::Pointer)
                             })
                     }),
-                    ReferenceLocation::Line { file_line, .. } => stack((container(
-                        label(move || format!("{} {}", file_line.position.line + 1, file_line.content))
+                    ReferenceLocation::Line { file_line, .. } => Stack::new((Container::new(
+                        Label::derived(move || format!("{} {}", file_line.position.line + 1, file_line.content))
                             .style(move |s| {
                                 s.margin_left(6.0).color(
                                     config.get().color(LapceColor::EDITOR_DIM),

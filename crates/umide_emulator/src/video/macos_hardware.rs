@@ -1,18 +1,19 @@
-use crate::decoder::{VideoDecoder, DecodedFrame, DecodeError, GpuFrame, HardwareSurfaceHandle};
-use std::ffi::c_void;
-use std::ptr;
-#[allow(unused_imports)]
-use video_toolbox_sys::decompression::{
-    VTDecompressionSessionRef, VTDecompressionSessionCreate, 
-    VTDecompressionSessionDecodeFrame, VTDecodeInfoFlags,
-    VTDecompressionSessionInvalidate, VTDecompressionOutputCallbackRecord,
+use crate::decoder::{
+    DecodeError, DecodedFrame, GpuFrame, HardwareSurfaceHandle, VideoDecoder,
 };
 use core_media_sys::{
-    CMBlockBufferCreateWithMemoryBlock,
-    CMBlockBufferRef, CMSampleBufferRef, CMVideoFormatDescriptionRef,
-    CMTime, 
+    CMBlockBufferCreateWithMemoryBlock, CMBlockBufferRef, CMSampleBufferRef, CMTime,
+    CMVideoFormatDescriptionRef,
 };
-use tracing::{info, error};
+use std::ffi::c_void;
+use std::ptr;
+use tracing::{error, info};
+#[allow(unused_imports)]
+use video_toolbox_sys::decompression::{
+    VTDecodeInfoFlags, VTDecompressionOutputCallbackRecord,
+    VTDecompressionSessionCreate, VTDecompressionSessionDecodeFrame,
+    VTDecompressionSessionInvalidate, VTDecompressionSessionRef,
+};
 
 #[link(name = "CoreMedia", kind = "framework")]
 extern "C" {
@@ -28,7 +29,7 @@ extern "C" {
         sample_timing_array: *const c_void, // CMSampleTimingInfo
         num_sample_size_entries: i32,
         sample_size_array: *const usize,
-        sample_buffer_out: *mut CMSampleBufferRef
+        sample_buffer_out: *mut CMSampleBufferRef,
     ) -> i32;
 
     pub fn CMVideoFormatDescriptionCreateFromH264ParameterSets(
@@ -37,10 +38,9 @@ extern "C" {
         parameter_set_pointers: *const *const u8,
         parameter_set_sizes: *const usize,
         nal_unit_header_length: i32,
-        format_description_out: *mut CMVideoFormatDescriptionRef
+        format_description_out: *mut CMVideoFormatDescriptionRef,
     ) -> i32;
 }
-
 
 #[allow(unused_imports)]
 use core_foundation_sys::base::kCFAllocatorDefault;
@@ -59,33 +59,33 @@ extern "C" fn decode_callback(
         unsafe {
             let frames_ptr = source_frame_ref_con as *mut Vec<DecodedFrame>;
             if !frames_ptr.is_null() {
-                 let image_buffer = image_buffer as CVPixelBufferRef;
-                 CVPixelBufferRetain(image_buffer);
-                 let width = core_video_sys::CVPixelBufferGetWidth(image_buffer) as u32;
-                 let height = core_video_sys::CVPixelBufferGetHeight(image_buffer) as u32;
-                 
-                 let handle = HardwareSurfaceHandle {
-                     ptr: image_buffer as usize,
-                     width,
-                     height,
-                 };
-                 
-                 (*frames_ptr).push(DecodedFrame {
-                     width,
-                     height,
-                     frame: GpuFrame::Hardware(handle),
-                 });
-                 // tracing::info!("Callback: Pushed frame {}x{}", width, height);
+                let image_buffer = image_buffer as CVPixelBufferRef;
+                CVPixelBufferRetain(image_buffer);
+                let width =
+                    core_video_sys::CVPixelBufferGetWidth(image_buffer) as u32;
+                let height =
+                    core_video_sys::CVPixelBufferGetHeight(image_buffer) as u32;
+
+                let handle = HardwareSurfaceHandle {
+                    ptr: image_buffer as usize,
+                    width,
+                    height,
+                };
+
+                (*frames_ptr).push(DecodedFrame {
+                    width,
+                    height,
+                    frame: GpuFrame::Hardware(handle),
+                });
+                // tracing::info!("Callback: Pushed frame {}x{}", width, height);
             } else {
-                 // tracing::error!("Callback: frames_ptr is null!");
+                // tracing::error!("Callback: frames_ptr is null!");
             }
         }
     } else if status != 0 {
         // tracing::error!("Callback error: {}", status);
     }
 }
-
-
 
 #[cfg(target_os = "macos")]
 pub struct VideoToolboxDecoder {
@@ -106,7 +106,7 @@ impl Drop for VideoToolboxDecoder {
                 VTDecompressionSessionInvalidate(self.session);
                 // CFRelease(self.session as _); // TODO: Need CoreFoundation bindings for release
             }
-             if let Some(_desc) = self.format_desc {
+            if let Some(_desc) = self.format_desc {
                 // CFRelease(desc as _);
             }
         }
@@ -128,7 +128,7 @@ impl VideoToolboxDecoder {
         unsafe {
             let parameter_sets = [sps.as_ptr(), pps.as_ptr()];
             let parameter_set_sizes = [sps.len(), pps.len()];
-            
+
             let mut format_desc = ptr::null_mut();
             let status = CMVideoFormatDescriptionCreateFromH264ParameterSets(
                 ptr::null_mut(), // kCFAllocatorDefault
@@ -136,35 +136,54 @@ impl VideoToolboxDecoder {
                 parameter_sets.as_ptr(),
                 parameter_set_sizes.as_ptr(),
                 4, // NALUnitHeaderLength (4 bytes for AVCC)
-                &mut format_desc
+                &mut format_desc,
             );
 
             if status != 0 {
-                return Err(DecodeError::DecodeFailed(format!("Failed to create format description: {}", status)));
+                return Err(DecodeError::DecodeFailed(format!(
+                    "Failed to create format description: {}",
+                    status
+                )));
             }
             self.format_desc = Some(format_desc);
 
             // Create Decompression Session
             let callback_record = VTDecompressionOutputCallbackRecord {
-                decompressionOutputCallback: core::mem::transmute(decode_callback as *const ()), // Brute force cast to expected fn pointer type. 
+                decompressionOutputCallback: core::mem::transmute::<
+                    *const (),
+                    extern "C" fn(
+                        *mut std::ffi::c_void,
+                        *mut std::ffi::c_void,
+                        i32,
+                        u32,
+                        *mut video_toolbox_sys::cv_types::__CVBuffer,
+                        core_media_sys::CMTime,
+                        core_media_sys::CMTime,
+                    ),
+                >(
+                    decode_callback as *const ()
+                ), // Brute force cast to expected fn pointer type.
                 // Or better: decode_callback as _ fails if signatures differ.
                 // Given the complexities of cross-crate types, transmute is nuclear option but works if ABI matches (it does, c_void).
-                decompressionOutputRefCon: ptr::null_mut(), 
+                decompressionOutputRefCon: ptr::null_mut(),
             };
 
-            let mut session: VTDecompressionSessionRef = ptr::null_mut(); 
-            
+            let mut session: VTDecompressionSessionRef = ptr::null_mut();
+
             let status = VTDecompressionSessionCreate(
-                ptr::null_mut(), 
+                ptr::null_mut(),
                 format_desc,
                 ptr::null_mut(), // videoDecoderSpecification
                 ptr::null_mut(), // destinationImageBufferAttributes
                 &callback_record,
-                &mut session as *mut _ as *mut _ 
+                &mut session as *mut _ as *mut _,
             );
 
             if status != 0 {
-                return Err(DecodeError::DecodeFailed(format!("Failed to create decompression session: {}", status)));
+                return Err(DecodeError::DecodeFailed(format!(
+                    "Failed to create decompression session: {}",
+                    status
+                )));
             }
             self.session = session;
         }
@@ -174,28 +193,31 @@ impl VideoToolboxDecoder {
 
 #[cfg(target_os = "macos")]
 impl VideoDecoder for VideoToolboxDecoder {
-    fn decode_frame(&mut self, data: &[u8]) -> Result<Vec<DecodedFrame>, DecodeError> {
+    fn decode_frame(
+        &mut self,
+        data: &[u8],
+    ) -> Result<Vec<DecodedFrame>, DecodeError> {
         let mut frames = Vec::new();
         // nalus removed as we process directly
-        
+
         // Simple Annex-B splitter
         // Assumes start codes are 00 00 00 01 or 00 00 01.
         let mut start_indices = Vec::new();
         let mut i = 0;
         while i < data.len() - 3 {
-             if data[i] == 0 && data[i+1] == 0 {
-                 if data[i+2] == 1 {
-                     start_indices.push((i, 3)); // 00 00 01
-                     i += 3;
-                 } else if data[i+2] == 0 && data[i+3] == 1 {
-                     start_indices.push((i, 4)); // 00 00 00 01
-                     i += 4;
-                 } else {
-                     i += 1;
-                 }
-             } else {
-                 i += 1;
-             }
+            if data[i] == 0 && data[i + 1] == 0 {
+                if data[i + 2] == 1 {
+                    start_indices.push((i, 3)); // 00 00 01
+                    i += 3;
+                } else if data[i + 2] == 0 && data[i + 3] == 1 {
+                    start_indices.push((i, 4)); // 00 00 00 01
+                    i += 4;
+                } else {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
         }
 
         let mut avcc_buffer = Vec::with_capacity(data.len()); // May grow slightly or shrink
@@ -203,14 +225,14 @@ impl VideoDecoder for VideoToolboxDecoder {
         for idx in 0..start_indices.len() {
             let (start, len) = start_indices[idx];
             let end = if idx + 1 < start_indices.len() {
-                start_indices[idx+1].0
+                start_indices[idx + 1].0
             } else {
                 data.len()
             };
-            
-            let nalu_data = &data[start+len..end];
+
+            let nalu_data = &data[start + len..end];
             let nalu_type = nalu_data[0] & 0x1F;
-            
+
             // Debug Log
             info!("Found NALU Type: {} Len: {}", nalu_type, nalu_data.len());
 
@@ -218,14 +240,14 @@ impl VideoDecoder for VideoToolboxDecoder {
                 7 => {
                     info!("Captured SPS");
                     self.sps = Some(nalu_data.to_vec());
-                },
+                }
                 8 => {
                     info!("Captured PPS");
                     self.pps = Some(nalu_data.to_vec());
-                },
+                }
                 _ => {}
             }
-            
+
             // Append length-prefixed NALU to buffer
             let len_u32 = nalu_data.len() as u32;
             avcc_buffer.extend_from_slice(&len_u32.to_be_bytes());
@@ -238,9 +260,9 @@ impl VideoDecoder for VideoToolboxDecoder {
             if let (Some(s), Some(p)) = (sps, pps) {
                 info!("Attempting to create session...");
                 match self.create_session(&s, &p) {
-                    Ok(_) => { 
+                    Ok(_) => {
                         info!("Session created successfully!");
-                    },
+                    }
                     Err(e) => {
                         error!("Session creation failed: {:?}", e);
                         return Err(e);
@@ -253,72 +275,81 @@ impl VideoDecoder for VideoToolboxDecoder {
         }
 
         if self.session.is_null() {
-             // Can't decode without session (SPS/PPS)
-             return Ok(vec![]); 
+            // Can't decode without session (SPS/PPS)
+            return Ok(vec![]);
         }
 
         unsafe {
-            let mut block_buffer = ptr::null(); 
+            let mut block_buffer = ptr::null();
 
-             let status = CMBlockBufferCreateWithMemoryBlock(
+            let status = CMBlockBufferCreateWithMemoryBlock(
                 ptr::null_mut(),
                 avcc_buffer.as_ptr() as *mut c_void, // memoryBlock
-                avcc_buffer.len() as usize,         // blockLength
-                ptr::null_mut(),                    // blockAllocator (NULL = use default)
-                ptr::null_mut(),                    // customBlockSource
-                0,                                  // offsetToData
-                avcc_buffer.len() as usize,         // dataLength
-                0,                                  // flags
-                &mut block_buffer as *mut _ as *mut _ // Cast to fit my extern decl
+                avcc_buffer.len(),                   // blockLength
+                ptr::null_mut(), // blockAllocator (NULL = use default)
+                ptr::null_mut(), // customBlockSource
+                0,               // offsetToData
+                avcc_buffer.len(), // dataLength
+                0,               // flags
+                &mut block_buffer as *mut _ as *mut _, // Cast to fit my extern decl
             );
-            
+
             if status != 0 {
-                 return Err(DecodeError::DecodeFailed(format!("Failed to create block buffer: {}", status)));
+                return Err(DecodeError::DecodeFailed(format!(
+                    "Failed to create block buffer: {}",
+                    status
+                )));
             }
 
             // Create CMSampleBuffer
             let mut sample_buffer: CMSampleBufferRef = ptr::null_mut();
 
             let sample_size = avcc_buffer.len();
-             let status = CMSampleBufferCreate(
-                ptr::null_mut(), // Allocator
-                block_buffer,    // data_buffer (pass value)
-                1,               // dataReady
-                None,            // makeDataReadyCallback
-                ptr::null_mut(), // makeDataReadyRefCon
-                self.format_desc.unwrap(), // FormatDescription
-                1,               // numSamples
-                0,               // numSampleTimingEntries
-                ptr::null_mut(), // timingArray
-                1,               // numSampleSizeEntries
-                &(sample_size as usize) as *const usize, // sampleSizeArray
-                &mut sample_buffer as *mut _ as *mut _   // sampleBufferOut
+            let status = CMSampleBufferCreate(
+                ptr::null_mut(),                        // Allocator
+                block_buffer,                           // data_buffer (pass value)
+                1,                                      // dataReady
+                None,                                   // makeDataReadyCallback
+                ptr::null_mut(),                        // makeDataReadyRefCon
+                self.format_desc.unwrap(),              // FormatDescription
+                1,                                      // numSamples
+                0,                                      // numSampleTimingEntries
+                ptr::null_mut(),                        // timingArray
+                1,                                      // numSampleSizeEntries
+                &(sample_size),                         // sampleSizeArray
+                &mut sample_buffer as *mut _ as *mut _, // sampleBufferOut
             );
-            
+
             if status != 0 {
-                return Err(DecodeError::DecodeFailed(format!("Failed to create sample buffer: {}", status)));
+                return Err(DecodeError::DecodeFailed(format!(
+                    "Failed to create sample buffer: {}",
+                    status
+                )));
             }
 
             // Decode
             let flags = 0; // kVTDecodeFrame_EnableAsynchronousDecompression = 1<<0
             let mut info_flags = 0;
-            
+
             let status = VTDecompressionSessionDecodeFrame(
                 self.session,
-                sample_buffer as *mut c_void, // Cast to *mut c_void for sys crate compatibility
+                sample_buffer, // Cast to *mut c_void for sys crate compatibility
                 flags,
                 &mut frames as *mut _ as *mut c_void, // sourceFrameContext
-                &mut info_flags
+                &mut info_flags,
             );
 
             // Cleanup buffers (CoreFoundation usually handles this via Release, but we need to verify sys crate hygiene)
-             // CMSampleBufferRelease(sample_buffer); // Need bindings
-             // CMBlockBufferRelease(block_buffer); 
-            // We probably leak here without CFRelease bindings? 
+            // CMSampleBufferRelease(sample_buffer); // Need bindings
+            // CMBlockBufferRelease(block_buffer);
+            // We probably leak here without CFRelease bindings?
             // Yes, we need CFRelease. I commented it out earlier.
-             
+
             if status != 0 {
-                 return Err(DecodeError::DecodeFailed(format!("Decode failed: {}", status)));
+                return Err(DecodeError::DecodeFailed(format!(
+                    "Decode failed: {}",
+                    status
+                )));
             }
         }
 

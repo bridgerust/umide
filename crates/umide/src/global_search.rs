@@ -2,13 +2,13 @@ use std::{ops::Range, path::PathBuf, rc::Rc};
 
 use floem::{
     ext_event::create_ext_action,
-    keyboard::Modifiers,
+    prelude::Modifiers,
     reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::VirtualVector,
 };
 use indexmap::IndexMap;
-use lapce_core::{mode::Mode, selection::Selection};
-use lapce_rpc::proxy::{ProxyResponse, SearchMatch};
+use umide_core::{cursor::CursorAffinity, mode::Mode, selection::Selection};
+use umide_rpc::proxy::{ProxyResponse, SearchMatch};
 use lapce_xi_rope::Rope;
 
 use crate::{
@@ -195,6 +195,6 @@ impl GlobalSearchData {
         self.editor.doc().reload(Rope::from(pattern), true);
         self.editor
             .cursor()
-            .update(|cursor| cursor.set_insert(Selection::region(0, pattern_len)));
+            .update(|cursor| cursor.set_insert(Selection::region(0, pattern_len, CursorAffinity::Forward)));
     }
 }

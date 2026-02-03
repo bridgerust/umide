@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use lapce_core::line_ending::LineEnding;
-use lapce_rpc::dap_types::RunDebugConfig;
+use umide_core::line_ending::LineEnding;
+use umide_rpc::dap_types::RunDebugConfig;
 use lsp_types::{Range, SymbolKind};
 
 use crate::{
@@ -82,6 +82,6 @@ pub enum PaletteItemContent {
     },
     TerminalProfile {
         name: String,
-        profile: lapce_rpc::terminal::TerminalProfile,
+        profile: umide_rpc::terminal::TerminalProfile,
     },
 }

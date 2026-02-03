@@ -12,7 +12,7 @@ use alacritty_terminal::{
     },
     vte::ansi,
 };
-use lapce_rpc::{proxy::ProxyRpcHandler, terminal::TermId};
+use umide_rpc::{proxy::ProxyRpcHandler, terminal::TermId};
 
 use super::event::TermNotification;
 

@@ -9,19 +9,19 @@ default-run  = "umide"
 
 [dependencies]
 umide-app = { path = "./crates/umide" }
-lapce-proxy = { path = "./lapce-proxy" }
+umide-proxy = { path = "./umide-proxy" }
 floem_renderer = "0.2.0"
 
 [[bin]]
 name = "umide"
-path = "crates/umide/src/bin/lapce.rs"
+path = "crates/umide/src/bin/umide.rs"
 
 [[bin]]
-name = "lapce-proxy"
-path = "lapce-proxy/src/bin/lapce-proxy.rs"
+name = "umide-proxy"
+path = "umide-proxy/src/bin/umide-proxy.rs"
 
 [workspace]
-members = ["crates/umide", "lapce-proxy", "lapce-rpc", "lapce-core", "crates/umide_emulator", "crates/umide_native"]
+members = ["crates/umide", "umide-proxy", "umide-rpc", "umide-core", "crates/umide_emulator", "crates/umide_native"]
 
 [workspace.package]
 version      = "0.4.6"
@@ -71,27 +71,22 @@ zstd              = { version = "0.11.2" }                                      
 lsp-types = { version = "0.95.1", features = ["proposed"] }                                                  # not following semver, so should be locked to patch version updates only
 psp-types = { git = "https://github.com/lapce/psp-types", rev = "f7fea28f59e7b2d6faa1034a21679ad49b3524ad" }
 
-lapce-xi-rope = { version = "0.3.2", features = ["serde"] }
+lapce-xi-rope = { version = "0.4.0", features = ["serde"] }
 
-lapce-core  = { path = "./lapce-core" }
-lapce-rpc   = { path = "./lapce-rpc" }
-lapce-proxy = { path = "./lapce-proxy" }
+umide-core  = { path = "./umide-core" }
+umide-rpc   = { path = "./umide-rpc" }
+umide-proxy = { path = "./umide-proxy" }
 umide_emulator = { path = "./crates/umide_emulator" }
 umide_native = { path = "./crates/umide_native" }
 
-floem = { git = "https://github.com/lapce/floem", rev = "e0dd862564e3afbad5cba8ebe60df166a7a41e56", features = ["editor", "serde", "default-image-formats", "rfd-async-std"] }
-# floem = { path = "../floem", features = ["editor", "serde", "default-image-formats", "rfd-async-std"] }
-floem-editor-core = { git = "https://github.com/lapce/floem", rev = "e0dd862564e3afbad5cba8ebe60df166a7a41e56", features = ["serde"] }
-# floem-editor-core = { path = "../floem/editor-core/", features = ["serde"] }
+# floem = { git = "https://github.com/lapce/floem", rev = "e0dd862564e3afbad5cba8ebe60df166a7a41e56", features = ["editor", "serde", "default-image-formats", "rfd-async-std"] }
+floem = { path = "../floem", features = ["editor", "serde", "default-image-formats"] }
+# floem-editor-core = { git = "https://github.com/lapce/floem", rev = "e0dd862564e3afbad5cba8ebe60df166a7a41e56", features = ["serde"] }
+floem-editor-core = { path = "../floem/editor-core/", features = ["serde"] }
 
 [patch.crates-io]
 # Temporarily patch lsp-types with a version that adds message-type debug
 lsp-types = { git = "https://github.com/lapce/lsp-types", rev = "feaa1e2ec80975c9dadd400a238ceacf071058e6" }
-regalloc2 = { rev = "5d79e12d0a93b10fc181f4da409b4671dd365228", git = "https://github.com/bytecodealliance/regalloc2" }
-
-# cargo vendor issue: https://github.com/rust-lang/cargo/issues/10310
-# dpi comes from winit (source) and muda (crate)
-dpi = { git = "https://github.com/rust-windowing/winit", rev = "ee245c569d65fdeacf705ee5eedb564508d10ebe" }
 
 
 [workspace.dependencies.tracing]

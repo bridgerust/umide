@@ -1,20 +1,11 @@
 use std::rc::Rc;
 
 use floem::{
-    View, ViewId,
-    action::show_context_menu,
-    event::{Event, EventListener, EventPropagation},
-    kurbo::Size,
-    menu::{Menu, MenuItem},
-    reactive::{SignalGet, SignalUpdate, SignalWith, create_rw_signal},
-    style::CursorStyle,
-    views::{
-        Decorators, container, dyn_stack, empty, label,
-        scroll::{Thickness, VerticalScrollAsHorizontal, scroll},
-        stack, svg, tab,
-    },
+    View, ViewId, action::show_context_menu, event::{EventListener, EventPropagation}, kurbo::Size, menu::Menu, prelude::RwSignal, reactive::{SignalGet, SignalUpdate, SignalWith}, style::CursorStyle, views::{
+        Container, Decorators, Empty, Label, Scroll, Stack, dyn_stack, scroll::{Thickness, VerticalScrollAsHorizontal}, svg, tab
+    }
 };
-use lapce_rpc::terminal::TermId;
+use umide_rpc::terminal::TermId;
 
 use super::kind::PanelKind;
 use crate::{
@@ -31,7 +22,7 @@ use crate::{
 
 pub fn terminal_panel(window_tab_data: Rc<WindowTabData>) -> impl View {
     let focus = window_tab_data.common.focus;
-    stack((
+    Stack::new((
         terminal_tab_header(window_tab_data.clone()),
         terminal_tab_content(window_tab_data.clone()),
     ))
@@ -50,14 +41,14 @@ fn terminal_tab_header(window_tab_data: Rc<WindowTabData>) -> impl View {
     let focus = window_tab_data.common.focus;
     let active_index = move || terminal.tab_info.with(|info| info.active);
     let tab_info = terminal.tab_info;
-    let header_width = create_rw_signal(0.0);
-    let header_height = create_rw_signal(0.0);
-    let icon_width = create_rw_signal(0.0);
-    let scroll_size = create_rw_signal(Size::ZERO);
+    let header_width = RwSignal::new(0.0);
+    let header_height = RwSignal::new(0.0);
+    let icon_width = RwSignal::new(0.0);
+    let scroll_size = RwSignal::new(Size::ZERO);
     let workbench_command = window_tab_data.common.workbench_command;
 
-    stack((
-        scroll(dyn_stack(
+    Stack::new((
+        Scroll::new(dyn_stack(
             move || {
                 let tabs = terminal.tab_info.with(|info| info.tabs.clone());
                 for (i, (index, _)) in tabs.iter().enumerate() {
@@ -112,10 +103,10 @@ fn terminal_tab_header(window_tab_data: Rc<WindowTabData>) -> impl View {
                     }
                     LapceIcons::TERMINAL
                 };
-                stack((
-                    container({
-                        stack((
-                            container(
+                Stack::new((
+                    Container::new({
+                        Stack::new((
+                            Container::new(
                                 svg(move || config.get().ui_svg(svg_string()))
                                     .style(move |s| {
                                         let config = config.get();
@@ -128,7 +119,7 @@ fn terminal_tab_header(window_tab_data: Rc<WindowTabData>) -> impl View {
                                     }),
                             )
                             .style(|s| s.padding_horiz(10.0).padding_vert(12.0)),
-                            label(title).style(|s| {
+                            Label::derived(title).style(|s| {
                                 s.min_width(0.0)
                                     .flex_basis(0.0)
                                     .flex_grow(1.0)
@@ -146,7 +137,7 @@ fn terminal_tab_header(window_tab_data: Rc<WindowTabData>) -> impl View {
                                 config,
                             )
                             .style(|s| s.margin_horiz(6.0)),
-                            empty().style(move |s| {
+                            Empty::new().style(move |s| {
                                 s.absolute()
                                     .width_full()
                                     .height(header_height.get() - 15.0)
@@ -164,8 +155,8 @@ fn terminal_tab_header(window_tab_data: Rc<WindowTabData>) -> impl View {
                         })
                     })
                     .style(|s| s.items_center()),
-                    container({
-                        label(|| "".to_string()).style(move |s| {
+                    Container::new({
+                        Label::new("".to_string()).style(move |s| {
                             s.size_pct(100.0, 100.0)
                                 .border_bottom(if active_index() == index.get() {
                                     2.0
@@ -219,11 +210,11 @@ fn terminal_tab_header(window_tab_data: Rc<WindowTabData>) -> impl View {
                 .max_width(header_width - icon_width)
                 .set(Thickness, 3)
         }),
-        empty().style(move |s| {
+        Empty::new().style(move |s| {
             let size = scroll_size.get();
             s.size(size.width, size.height).pointer_events_none()
         }),
-        container(clickable_icon(
+        Container::new(clickable_icon(
             || LapceIcons::ADD,
             move || {
                 workbench_command.send(LapceWorkbenchCommand::NewTerminalTab);
@@ -289,7 +280,7 @@ fn terminal_tab_split(
         move |(index, terminal)| {
             let terminal_panel_data = terminal_panel_data.clone();
             let terminal_scope = terminal.scope;
-            container({
+            Container::new({
                 let terminal_view = terminal_view(
                     terminal.term_id,
                     terminal.raw.read_only(),
@@ -318,8 +309,8 @@ fn terminal_tab_split(
                         }
                     })
                     .on_event(EventListener::PointerWheel, move |event| {
-                        if let Event::PointerWheel(pointer_event) = event {
-                            terminal.clone().wheel_scroll(pointer_event.delta.y);
+                        if let Some(delta) = event.pixel_scroll_delta_vec2() {
+                            terminal.clone().wheel_scroll(delta.y);
                             EventPropagation::Stop
                         } else {
                             EventPropagation::Continue
@@ -351,7 +342,7 @@ fn terminal_tab_split(
 fn terminal_tab_content(window_tab_data: Rc<WindowTabData>) -> impl View {
     let terminal = window_tab_data.terminal.clone();
     tab(
-        move || terminal.tab_info.with(|info| info.active),
+        move || Some(terminal.tab_info.with(|info| info.active)),
         move || terminal.tab_info.with(|info| info.tabs.clone()),
         |(_, tab)| tab.terminal_tab_id,
         move |(tab_index, tab)| {
@@ -368,15 +359,15 @@ fn tab_secondary_click(
     terminal_index: usize,
     term_id: TermId,
 ) {
-    let mut menu = Menu::new("");
+    let mut menu = Menu::new();
     menu = menu
-        .entry(MenuItem::new("Stop").action(move || {
+        .item("Stop", |i| i.action(move || {
             internal_command.send(InternalCommand::StopTerminal { term_id });
         }))
-        .entry(MenuItem::new("Restart").action(move || {
+        .item("Restart", |i| i.action(move || {
             internal_command.send(InternalCommand::RestartTerminal { term_id });
         }))
-        .entry(MenuItem::new("Clear All").action(move || {
+        .item("Clear All", |i| i.action(move || {
             internal_command.send(InternalCommand::ClearTerminalBuffer {
                 view_id,
                 tab_index,

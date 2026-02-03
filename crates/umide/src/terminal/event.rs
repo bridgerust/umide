@@ -7,7 +7,7 @@ use std::{
     time::Instant,
 };
 
-use lapce_rpc::terminal::TermId;
+use umide_rpc::terminal::TermId;
 use parking_lot::RwLock;
 
 use super::raw::RawTerminal;

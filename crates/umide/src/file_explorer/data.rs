@@ -8,21 +8,15 @@ use std::{
 };
 
 use floem::{
-    action::show_context_menu,
-    event::EventPropagation,
-    ext_event::create_ext_action,
-    keyboard::Modifiers,
-    menu::{Menu, MenuItem},
-    reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
-    views::editor::text::SystemClipboard,
+    action::show_context_menu, event::EventPropagation, ext_event::create_ext_action, menu::Menu, prelude::Modifiers, reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith}, views::editor::text::SystemClipboard
 };
 use globset::Glob;
-use lapce_core::{
+use umide_core::{
     command::{EditCommand, FocusCommand},
     mode::Mode,
     register::Clipboard,
 };
-use lapce_rpc::{
+use umide_rpc::{
     file::{
         Duplicating, FileNodeItem, FileNodeViewKind, Naming, NamingState, NewNode,
         Renaming,
@@ -500,12 +494,13 @@ impl FileExplorerData {
         };
         let base_path_a = base_path_a.as_ref().unwrap_or(workspace_path);
 
-        let mut menu = Menu::new("");
+        let mut menu = Menu::new();
 
         let base_path = base_path_a.clone();
         let data = self.clone();
         let naming = self.naming;
-        menu = menu.entry(MenuItem::new("New File").action(move || {
+        menu = menu.item("New File", |i|
+            i.action(move || {
             let base_path_b = &base_path;
             let base_path = base_path.clone();
             data.read_dir_cb(base_path_b, move |was_read| {
@@ -529,7 +524,8 @@ impl FileExplorerData {
         let base_path = base_path_a.clone();
         let data = self.clone();
         let naming = self.naming;
-        menu = menu.entry(MenuItem::new("New Directory").action(move || {
+        menu = menu.item("New Directory", |i|
+            i.action(move || {
             let base_path_b = &base_path;
             let base_path = base_path.clone();
             data.read_dir_cb(base_path_b, move |was_read| {
@@ -559,7 +555,8 @@ impl FileExplorerData {
             let title = "Reveal in system file explorer";
             #[cfg(target_os = "macos")]
             let title = "Reveal in Finder";
-            menu = menu.entry(MenuItem::new(title).action(move || {
+            menu = menu.item(title, |i|
+                i.action(move || {
                 let path = path.parent().unwrap_or(&path);
                 if !path.exists() {
                     return;
@@ -576,7 +573,8 @@ impl FileExplorerData {
 
         if !is_workspace {
             let path = path_a.clone();
-            menu = menu.entry(MenuItem::new("Rename").action(move || {
+            menu = menu.item("Rename", |i|
+                i.action(move || {
                 naming.set(Naming::Renaming(Renaming {
                     state: NamingState::Naming,
                     path: path.clone(),
@@ -585,7 +583,8 @@ impl FileExplorerData {
             }));
 
             let path = path_a.clone();
-            menu = menu.entry(MenuItem::new("Duplicate").action(move || {
+            menu = menu.item("Duplicate", |i|
+                i.action(move || {
                 naming.set(Naming::Duplicating(Duplicating {
                     state: NamingState::Naming,
                     path: path.clone(),
@@ -602,7 +601,8 @@ impl FileExplorerData {
             } else {
                 "Move File to Trash"
             };
-            menu = menu.entry(MenuItem::new(trash_text).action(move || {
+            menu = menu.item(trash_text, |i|
+                i.action(move || {
                 proxy.trash_path(path.clone(), |res| {
                     if let Err(err) = res {
                         tracing::warn!("Failed to trash path: {:?}", err);
@@ -614,14 +614,16 @@ impl FileExplorerData {
         menu = menu.separator();
 
         let path = path_a.clone();
-        menu = menu.entry(MenuItem::new("Copy Path").action(move || {
+        menu = menu.item("Copy Path", |i|
+            i.action(move || {
             let mut clipboard = SystemClipboard::new();
             clipboard.put_string(path.to_string_lossy());
         }));
 
         let path = path_a.clone();
         let workspace = common.workspace.clone();
-        menu = menu.entry(MenuItem::new("Copy Relative Path").action(move || {
+        menu = menu.item("Copy Relative Path", |i|
+            i.action(move || {
             let relative_path = if let Some(workspace_path) = &workspace.path {
                 path.strip_prefix(workspace_path).unwrap_or(&path)
             } else {
@@ -635,17 +637,16 @@ impl FileExplorerData {
         menu = menu.separator();
 
         let path = path_a.clone();
-        menu = menu.entry(
-            MenuItem::new("Select for Compare")
-                .action(move || left_diff_path.set(Some(path.clone()))),
-        );
+        menu = menu.item("Select for Compare", |i| {
+            i.action(move || left_diff_path.set(Some(path.clone())))
+        });
 
         if let Some(left_path) = self.left_diff_path.get_untracked() {
             let common = self.common.clone();
             let right_path = path_a.to_owned();
 
-            menu = menu.entry(MenuItem::new("Compare with Selected").action(
-                move || {
+            menu = menu.item("Compare with Selected", |i|
+                i.action(move || {
                     common
                         .internal_command
                         .send(InternalCommand::OpenDiffFiles {
@@ -659,7 +660,8 @@ impl FileExplorerData {
         menu = menu.separator();
 
         let internal_command = common.internal_command;
-        menu = menu.entry(MenuItem::new("Refresh").action(move || {
+        menu = menu.item("Refresh", |i|
+            i.action(move || {
             internal_command.send(InternalCommand::ReloadFileExplorer);
         }));
 

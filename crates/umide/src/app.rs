@@ -16,47 +16,31 @@ use std::{
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use floem::{
-    IntoView, View,
-    action::show_context_menu,
-    event::{Event, EventListener, EventPropagation},
-    ext_event::{create_ext_action, create_signal_from_channel},
-    menu::{Menu, MenuItem},
-    peniko::{
+    IntoView, View, action::show_context_menu, event::{Event, EventListener, EventPropagation, FileDragEvent}, ext_event::create_ext_action, menu::Menu, peniko::{
         Color,
         kurbo::{Point, Rect, Size},
-    },
-    prelude::SignalTrack,
-    reactive::{
-        ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        create_effect, create_memo, create_rw_signal, provide_context, use_context,
-    },
-    style::{
+    }, prelude::{PointerButtonEvent, SignalTrack}, reactive::{
+        Context, Effect, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
+    }, receiver_signal::ChannelSignal, style::{
         AlignItems, CursorStyle, Display, FlexDirection, JustifyContent, Position,
         Style,
-    },
-    taffy::{
+    }, taffy::{
         Line,
         style_helpers::{self, auto, fr},
-    },
-    text::{Style as FontStyle, Weight},
-    unit::PxPctAuto,
-    views::{
-        Decorators, VirtualVector, clip, container, drag_resize_window_area,
-        drag_window_area, dyn_stack,
-        editor::{core::register::Clipboard, text::SystemClipboard},
-        empty, label, rich_text,
-        scroll::{PropagatePointerWheel, VerticalScrollAsHorizontal, scroll},
-        stack, svg, tab, text, tooltip, virtual_stack,
-    },
-    window::{ResizeDirection, WindowConfig, WindowId},
+    }, text::{Style as FontStyle, Weight}, ui_events::{
+        keyboard::KeyState,
+        pointer::{PointerEvent, PointerUpdate},
+    }, unit::PxPctAuto, views::{
+        Clip, Container, Decorators, Empty, Label, Scroll, Stack, VirtualVector, drag_resize_window_area, drag_window_area, dyn_stack, editor::{core::register::Clipboard, text::SystemClipboard}, rich_text, scroll::{PropagatePointerWheel, VerticalScrollAsHorizontal}, svg, tab, tooltip, virtual_stack
+    }, window::{ResizeDirection, WindowConfig, WindowId}
 };
-use lapce_core::{
+use umide_core::{
     command::{EditCommand, FocusCommand},
     directory::Directory,
     meta,
     syntax::{Syntax, highlight::reset_highlight_configs},
 };
-use lapce_rpc::{
+use umide_rpc::{
     RpcMessage,
     core::{CoreMessage, CoreNotification},
     file::PathObject,
@@ -137,7 +121,7 @@ struct Cli {
     /// When path is a file (that exists or not),
     /// it accepts `path:line:column` syntax
     /// to specify line and column at which it should open the file
-    #[clap(value_parser = lapce_proxy::cli::parse_file_line_column)]
+    #[clap(value_parser = umide_proxy::cli::parse_file_line_column)]
     #[clap(value_hint = clap::ValueHint::AnyPath)]
     paths: Vec<PathObject>,
 }
@@ -217,7 +201,7 @@ impl AppData {
                     .position(window.position.get_untracked() + (50.0, 50.0))
             })
             .or_else(|| {
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> = Context::get().unwrap();
                 db.get_window().ok().map(|info| {
                     self.default_window_config()
                         .size(info.size)
@@ -262,7 +246,7 @@ impl AppData {
     pub fn run_app_command(&self, cmd: AppCommand) {
         match cmd {
             AppCommand::SaveApp => {
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> = Context::get().unwrap();
                 if let Err(err) = db.save_app(self) {
                     tracing::error!("{:?}", err);
                 }
@@ -271,7 +255,7 @@ impl AppData {
                 if self.app_terminated.get_untracked() {
                     return;
                 }
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> = Context::get().unwrap();
                 if self.windows.with_untracked(|w| w.len()) == 1 {
                     if let Err(err) = db.insert_app(self.clone()) {
                         tracing::error!("{:?}", err);
@@ -458,7 +442,7 @@ impl AppData {
         info: WindowInfo,
         files: Vec<PathObject>,
     ) -> impl View + use<> {
-        let app_view_id = create_rw_signal(floem::ViewId::new());
+        let app_view_id = RwSignal::new(floem::ViewId::new());
         let window_data = WindowData::new(
             window_id,
             app_view_id,
@@ -505,17 +489,17 @@ impl AppData {
         let config = window_data.config;
         // The KeyDown and PointerDown event handlers both need ownership of a WindowData object.
         let key_down_window_data = window_data.clone();
-        let view = stack((
+        let view = Stack::new((
             workspace_tab_header(window_data.clone()),
             window(window_data.clone()),
-            stack((
-                drag_resize_window_area(ResizeDirection::West, empty()).style(|s| {
+            Stack::new((
+                drag_resize_window_area(ResizeDirection::West, Empty::new()).style(|s| {
                     s.absolute().width(4.0).height_full().pointer_events_auto()
                 }),
-                drag_resize_window_area(ResizeDirection::North, empty()).style(
+                drag_resize_window_area(ResizeDirection::North, Empty::new()).style(
                     |s| s.absolute().width_full().height(4.0).pointer_events_auto(),
                 ),
-                drag_resize_window_area(ResizeDirection::East, empty()).style(
+                drag_resize_window_area(ResizeDirection::East, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_left(window_size.get().width as f32 - 4.0)
@@ -524,7 +508,7 @@ impl AppData {
                             .pointer_events_auto()
                     },
                 ),
-                drag_resize_window_area(ResizeDirection::South, empty()).style(
+                drag_resize_window_area(ResizeDirection::South, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_top(window_size.get().height as f32 - 4.0)
@@ -533,13 +517,13 @@ impl AppData {
                             .pointer_events_auto()
                     },
                 ),
-                drag_resize_window_area(ResizeDirection::NorthWest, empty()).style(
+                drag_resize_window_area(ResizeDirection::NorthWest, Empty::new()).style(
                     |s| s.absolute().width(20.0).height(4.0).pointer_events_auto(),
                 ),
-                drag_resize_window_area(ResizeDirection::NorthWest, empty()).style(
+                drag_resize_window_area(ResizeDirection::NorthWest, Empty::new()).style(
                     |s| s.absolute().width(4.0).height(20.0).pointer_events_auto(),
                 ),
-                drag_resize_window_area(ResizeDirection::NorthEast, empty()).style(
+                drag_resize_window_area(ResizeDirection::NorthEast, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_left(window_size.get().width as f32 - 20.0)
@@ -548,7 +532,7 @@ impl AppData {
                             .pointer_events_auto()
                     },
                 ),
-                drag_resize_window_area(ResizeDirection::NorthEast, empty()).style(
+                drag_resize_window_area(ResizeDirection::NorthEast, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_left(window_size.get().width as f32 - 4.0)
@@ -557,7 +541,7 @@ impl AppData {
                             .pointer_events_auto()
                     },
                 ),
-                drag_resize_window_area(ResizeDirection::SouthWest, empty()).style(
+                drag_resize_window_area(ResizeDirection::SouthWest, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_top(window_size.get().height as f32 - 4.0)
@@ -566,7 +550,7 @@ impl AppData {
                             .pointer_events_auto()
                     },
                 ),
-                drag_resize_window_area(ResizeDirection::SouthWest, empty()).style(
+                drag_resize_window_area(ResizeDirection::SouthWest, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_top(window_size.get().height as f32 - 20.0)
@@ -575,7 +559,7 @@ impl AppData {
                             .pointer_events_auto()
                     },
                 ),
-                drag_resize_window_area(ResizeDirection::SouthEast, empty()).style(
+                drag_resize_window_area(ResizeDirection::SouthEast, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_left(window_size.get().width as f32 - 20.0)
@@ -585,7 +569,7 @@ impl AppData {
                             .pointer_events_auto()
                     },
                 ),
-                drag_resize_window_area(ResizeDirection::SouthEast, empty()).style(
+                drag_resize_window_area(ResizeDirection::SouthEast, Empty::new()).style(
                     move |s| {
                         s.absolute()
                             .margin_left(window_size.get().width as f32 - 4.0)
@@ -615,26 +599,25 @@ impl AppData {
         view_id.request_focus();
 
         view.window_scale(move || window_scale.get())
-            .keyboard_navigable()
+            .style(|s| s.focusable(true))
             .on_event(EventListener::KeyDown, move |event| {
-                if let Event::KeyDown(key_event) = event {
-                    if key_down_window_data.key_down(key_event) {
-                        view_id.request_focus();
+                if let Event::Key(key_event) = event {
+                    if key_event.state == KeyState::Down {
+                        if key_down_window_data.key_down(key_event) {
+                            view_id.request_focus();
+                        }
+                        return EventPropagation::Stop;
                     }
-                    EventPropagation::Stop
-                } else {
-                    EventPropagation::Continue
                 }
+                EventPropagation::Continue
             })
             .on_event(EventListener::PointerDown, {
                 let window_data = window_data.clone();
                 move |event| {
-                    if let Event::PointerDown(pointer_event) = event {
+                    if let Event::Pointer(PointerEvent::Down(pointer_event)) = event {
                         window_data.key_down(pointer_event);
-                        EventPropagation::Stop
-                    } else {
-                        EventPropagation::Continue
                     }
+                    EventPropagation::Continue
                 }
             })
             .on_event_stop(EventListener::WindowResized, move |event| {
@@ -653,26 +636,28 @@ impl AppData {
             .on_event_stop(EventListener::WindowClosed, move |_| {
                 app_command.send(AppCommand::WindowClosed(window_id));
             })
-            .on_event_stop(EventListener::DroppedFile, move |event: &Event| {
-                if let Event::DroppedFile(file) = event {
-                    if file.path.is_dir() {
-                        app_command.send(AppCommand::NewWindow {
-                            folder: Some(file.path.clone()),
-                        });
-                    } else if let Some(win_tab_data) =
-                        window_data.active_window_tab()
-                    {
-                        win_tab_data.common.internal_command.send(
-                            InternalCommand::GoToLocation {
-                                location: EditorLocation {
-                                    path: file.path.clone(),
-                                    position: None,
-                                    scroll_offset: None,
-                                    ignore_unconfirmed: false,
-                                    same_editor_tab: false,
+            .on_event_stop(EventListener::DroppedFiles, move |event: &Event| {
+                if let Event::FileDrag(FileDragEvent::DragDropped { paths, .. }) = event {
+                    for path in paths {
+                         if path.is_dir() {
+                            app_command.send(AppCommand::NewWindow {
+                                folder: Some(path.clone()),
+                            });
+                        } else if let Some(win_tab_data) =
+                            window_data.active_window_tab()
+                        {
+                            win_tab_data.common.internal_command.send(
+                                InternalCommand::GoToLocation {
+                                    location: EditorLocation {
+                                        path: path.clone(),
+                                        position: None,
+                                        scroll_offset: None,
+                                        ignore_unconfirmed: false,
+                                        same_editor_tab: false,
+                                    },
                                 },
-                            },
-                        )
+                            )
+                        }
                     }
                 }
             })
@@ -699,7 +684,7 @@ fn editor_tab_header(
         editor_tab.with_untracked(|editor_tab| editor_tab.editor_tab_id);
 
     let editor_tab_active =
-        create_memo(move |_| editor_tab.with(|editor_tab| editor_tab.active));
+        Memo::new(move |_| editor_tab.with(|editor_tab| editor_tab.active));
     let items = move || {
         let editor_tab = editor_tab.get();
         for (i, (index, _, _)) in editor_tab.children.iter().enumerate() {
@@ -734,11 +719,11 @@ fn editor_tab_header(
         let plugin = plugin.clone();
         let child_view = {
             let info = child.view_info(editors, diff_editors, plugin, config);
-            let hovered = create_rw_signal(false);
+            let hovered = RwSignal::new(false);
 
             use crate::config::ui::TabCloseButton;
 
-            let tab_icon = container({
+            let tab_icon = Container::new({
                 svg("")
                     .update_value(move || info.with(|info| info.icon.clone()))
                     .style(move |s| {
@@ -759,7 +744,7 @@ fn editor_tab_header(
             .style(|s| s.padding(4.));
 
             let tab_content = tooltip(
-                label(move || info.with(|info| info.name.clone())).style(move |s| {
+                Label::derived(move || info.with(|info| info.name.clone())).style(move |s| {
                     s.apply_if(
                         !info
                             .with(|info| info.confirmed)
@@ -772,7 +757,7 @@ fn editor_tab_header(
                 move || {
                     tooltip_tip(
                         config,
-                        text(info.with(|info| {
+                        Label::derived(move || info.with(|info| {
                             info.path
                                 .clone()
                                 .map(|path| path.display().to_string())
@@ -811,7 +796,7 @@ fn editor_tab_header(
                 hovered.set(false);
             });
 
-            stack((
+            Stack::new((
                 tab_icon.style(move |s| {
                     let tab_close_button = config.get().ui.tab_close_button;
                     s.apply_if(tab_close_button == TabCloseButton::Left, |s| {
@@ -875,9 +860,9 @@ fn editor_tab_header(
             _ => None,
         };
 
-        let header_content_size = create_rw_signal(Size::ZERO);
-        let drag_over_left: RwSignal<Option<bool>> = create_rw_signal(None);
-        stack((
+        let header_content_size = RwSignal::new(Size::ZERO);
+        let drag_over_left: RwSignal<Option<bool>> = RwSignal::new(None);
+        Stack::new((
             child_view
                 .on_double_click_stop(move |_| {
                     if let Some(confirmed) = confirmed {
@@ -885,8 +870,8 @@ fn editor_tab_header(
                     }
                 })
                 .on_event(EventListener::PointerDown, move |event| {
-                    if let Event::PointerDown(pointer_event) = event {
-                        if pointer_event.button.is_auxiliary() {
+                    if let Event::Pointer(PointerEvent::Down(PointerButtonEvent { button, .. })) = event {
+                        if button.is_some() {
                             let editor_tab_id =
                                 editor_tab.with_untracked(|t| t.editor_tab_id);
                             internal_command.send(
@@ -925,7 +910,6 @@ fn editor_tab_header(
                 .on_resize(move |rect| {
                     header_content_size.set(rect.size());
                 })
-                .draggable()
                 .dragging_style(move |s| {
                     let config = config.get();
                     s.border(1.0)
@@ -937,8 +921,8 @@ fn editor_tab_header(
                         )
                         .border_color(config.color(LapceColor::LAPCE_BORDER))
                 })
-                .style(|s| s.align_items(Some(AlignItems::Center)).flex_grow(1.0)),
-            empty()
+                .style(|s| s.align_items(Some(AlignItems::Center)).flex_grow(1.0).draggable(true)),
+            Empty::new()
                 .style(move |s| {
                     s.size_full()
                         .border_bottom(if editor_tab_active.get() == i.get() {
@@ -959,7 +943,7 @@ fn editor_tab_header(
                         .pointer_events_none()
                 })
                 .debug_name("Drop Indicator"),
-            empty()
+            Empty::new()
                 .style(move |s| {
                     let i = i.get();
                     let drag_over_left = drag_over_left.get();
@@ -1006,8 +990,8 @@ fn editor_tab_header(
         .debug_name("Tab and Active Indicator")
         .on_event_stop(EventListener::DragOver, move |event| {
             if dragging.with_untracked(|dragging| dragging.is_some()) {
-                if let Event::PointerMove(pointer_event) = event {
-                    let new_left = pointer_event.pos.x
+                if let Event::Pointer(PointerEvent::Move(PointerUpdate { current, .. })) = event {
+                    let new_left = current.logical_point().x
                         < header_content_size.get_untracked().width / 2.0;
                     if drag_over_left.get_untracked() != Some(new_left) {
                         drag_over_left.set(Some(new_left));
@@ -1019,8 +1003,8 @@ fn editor_tab_header(
             if let Some((from_index, from_editor_tab_id)) = dragging.get_untracked()
             {
                 drag_over_left.set(None);
-                if let Event::PointerUp(pointer_event) = event {
-                    let left = pointer_event.pos.x
+                if let Event::Pointer(PointerEvent::Up(PointerButtonEvent { state, .. })) = event {
+                    let left = state.logical_point().x
                         < header_content_size.get_untracked().width / 2.0;
                     let index = i.get_untracked();
                     let new_index = if left { index } else { index + 1 };
@@ -1041,13 +1025,13 @@ fn editor_tab_header(
         })
     };
 
-    let content_size = create_rw_signal(Size::ZERO);
-    let scroll_offset = create_rw_signal(Rect::ZERO);
-    stack((
-        stack({
-            let size = create_rw_signal(Size::ZERO);
+    let content_size = RwSignal::new(Size::ZERO);
+    let scroll_offset = RwSignal::new(Rect::ZERO);
+    Stack::new((
+        Stack::new({
+            let size = RwSignal::new(Size::ZERO);
             (
-                clip(empty().style(move |s| {
+                Clip::new(Empty::new().style(move |s| {
                     let config = config.get();
                     s.absolute()
                         .height_full()
@@ -1065,7 +1049,7 @@ fn editor_tab_header(
                         .height_full()
                         .apply_if(scroll_offset.x0 == 0.0, |s| s.hide())
                 }),
-                stack((
+                Stack::new((
                     clickable_icon(
                         || LapceIcons::TAB_PREVIOUS,
                         move || {
@@ -1099,8 +1083,8 @@ fn editor_tab_header(
             )
         })
         .style(|s| s.flex_shrink(0.)),
-        container(
-            scroll({
+        Container::new(
+            Scroll::new({
                 dyn_stack(items, key, view_fn)
                     .on_resize(move |rect| {
                         let size = rect.size();
@@ -1129,11 +1113,11 @@ fn editor_tab_header(
         )
         .style(|s| s.height_full().flex_grow(1.0).flex_basis(0.).min_width(10.))
         .debug_name("Tab scroll"),
-        stack({
-            let size = create_rw_signal(Size::ZERO);
+        Stack::new({
+            let size = RwSignal::new(Size::ZERO);
             (
-                clip({
-                    empty().style(move |s| {
+                Clip::new({
+                    Empty::new().style(move |s| {
                         let config = config.get();
                         s.absolute()
                             .height_full()
@@ -1157,7 +1141,7 @@ fn editor_tab_header(
                             s.hide()
                         })
                 }),
-                stack((
+                Stack::new((
                     clickable_icon(
                         || LapceIcons::SPLIT_HORIZONTAL,
                         move || {
@@ -1271,7 +1255,7 @@ fn editor_tab_content(
                             false
                         }
                     };
-                    let editor_data = create_rw_signal(editor_data);
+                    let editor_data = RwSignal::new(editor_data);
                     editor_container_view(
                         window_tab_data.clone(),
                         workspace.clone(),
@@ -1280,7 +1264,7 @@ fn editor_tab_content(
                     )
                     .into_any()
                 } else {
-                    text("empty editor").into_any()
+                    Label::new("empty editor").into_any()
                 }
             }
             EditorTabChild::DiffEditor(diff_editor_id) => {
@@ -1317,14 +1301,14 @@ fn editor_tab_content(
                     let left_scroll_to = diff_editor_data.left.scroll_to();
                     let right_viewport = diff_editor_data.right.viewport();
                     let right_scroll_to = diff_editor_data.right.scroll_to();
-                    create_effect(move |_| {
+                    Effect::new(move |_| {
                         let left_viewport = left_viewport.get();
                         if right_viewport.get_untracked() != left_viewport {
                             right_scroll_to
                                 .set(Some(left_viewport.origin().to_vec2()));
                         }
                     });
-                    create_effect(move |_| {
+                    Effect::new(move |_| {
                         let right_viewport = right_viewport.get();
                         if left_viewport.get_untracked() != right_viewport {
                             left_scroll_to
@@ -1332,11 +1316,11 @@ fn editor_tab_content(
                         }
                     });
                     let left_editor =
-                        create_rw_signal(diff_editor_data.left.clone());
+                        RwSignal::new(diff_editor_data.left.clone());
                     let right_editor =
-                        create_rw_signal(diff_editor_data.right.clone());
-                    stack((
-                        container(
+                        RwSignal::new(diff_editor_data.right.clone());
+                    Stack::new((
+                        Container::new(
                             editor_container_view(
                                 window_tab_data.clone(),
                                 workspace.clone(),
@@ -1364,7 +1348,7 @@ fn editor_tab_content(
                                     config.get().color(LapceColor::LAPCE_BORDER),
                                 )
                         }),
-                        container(
+                        Container::new(
                             editor_container_view(
                                 window_tab_data.clone(),
                                 workspace.clone(),
@@ -1395,7 +1379,7 @@ fn editor_tab_content(
                     })
                     .into_any()
                 } else {
-                    text("empty diff editor").into_any()
+                    Label::new("empty diff editor").into_any()
                 }
             }
             EditorTabChild::Settings(_) => {
@@ -1409,9 +1393,9 @@ fn editor_tab_content(
                 plugin_info_view(plugin.clone(), id).into_any()
             }
         };
-        child.style(|s| s.size_full())
+        child.style(|s: Style| s.size_full())
     };
-    let active = move || editor_tab.with(|t| t.active);
+    let active = move || Some(editor_tab.with(|t| t.active));
 
     tab(active, items, key, view_fn)
         .style(|s| s.size_full())
@@ -1442,23 +1426,23 @@ fn editor_tab(
     let config = common.config;
     let focus = common.focus;
     let internal_command = main_split.common.internal_command;
-    let tab_size = create_rw_signal(Size::ZERO);
-    let drag_over: RwSignal<Option<DragOverPosition>> = create_rw_signal(None);
-    stack((
+    let tab_size = RwSignal::new(Size::ZERO);
+    let drag_over: RwSignal<Option<DragOverPosition>> = RwSignal::new(None);
+    Stack::new((
         editor_tab_header(
             window_tab_data.clone(),
             active_editor_tab,
             editor_tab,
             dragging,
         ),
-        stack((
+        Stack::new((
             editor_tab_content(
                 window_tab_data.clone(),
                 plugin.clone(),
                 active_editor_tab,
                 editor_tab,
             ),
-            empty()
+            Empty::new()
                 .style(move |s| {
                     let pos = drag_over.get();
                     let width = match pos {
@@ -1514,12 +1498,12 @@ fn editor_tab(
                         )
                 })
                 .debug_name("Drag Over Handle"),
-            empty()
+            Empty::new()
                 .on_event_stop(EventListener::DragOver, move |event| {
                     if dragging.with_untracked(|dragging| dragging.is_some()) {
-                        if let Event::PointerMove(pointer_event) = event {
+                        if let Event::Pointer(PointerEvent::Move(PointerUpdate { current, .. })) = event {
                             let size = tab_size.get_untracked();
-                            let pos = pointer_event.pos;
+                            let pos = current.logical_point();
                             let new_drag_over = if pos.x < size.width / 4.0 {
                                 DragOverPosition::Left
                             } else if pos.x > size.width * 3.0 / 4.0 {
@@ -1697,20 +1681,20 @@ fn split_resize_border(
         },
         |(index, (_, content))| (*index, content.id()),
         move |(index, (_, content))| {
-            let drag_start: RwSignal<Option<Point>> = create_rw_signal(None);
-            let view = empty();
+            let drag_start: RwSignal<Option<Point>> = RwSignal::new(None);
+            let view = Empty::new();
             let view_id = view.id();
             view.on_event_stop(EventListener::PointerDown, move |event| {
                 view_id.request_active();
-                if let Event::PointerDown(pointer_event) = event {
-                    drag_start.set(Some(pointer_event.pos));
+                if let Event::Pointer(PointerEvent::Down(PointerButtonEvent { state, .. })) = event {
+                    drag_start.set(Some(state.logical_point()));
                 }
             })
             .on_event_stop(EventListener::PointerUp, move |_| {
                 drag_start.set(None);
             })
             .on_event_stop(EventListener::PointerMove, move |event| {
-                if let Event::PointerMove(pointer_event) = event {
+                if let Event::Pointer(PointerEvent::Move(PointerUpdate { current, .. })) = event {
                     if let Some(drag_start_point) = drag_start.get_untracked() {
                         let rects = split.with_untracked(|split| {
                             split
@@ -1724,7 +1708,7 @@ fn split_resize_border(
                             SplitDirection::Vertical => {
                                 let left = rects[index - 1].width();
                                 let right = rects[index].width();
-                                let shift = pointer_event.pos.x - drag_start_point.x;
+                                let shift = current.logical_point().x - drag_start_point.x;
                                 let left = left + shift;
                                 let right = right - shift;
                                 let total_width =
@@ -1746,7 +1730,7 @@ fn split_resize_border(
                             SplitDirection::Horizontal => {
                                 let up = rects[index - 1].height();
                                 let down = rects[index].height();
-                                let shift = pointer_event.pos.y - drag_start_point.y;
+                                let shift = current.logical_point().y - drag_start_point.y;
                                 let up = up + shift;
                                 let down = down - shift;
                                 let total_height =
@@ -1831,7 +1815,7 @@ fn split_border(
         move || split.get().children.into_iter().skip(1),
         |(_, content)| content.id(),
         move |(_, content)| {
-            container(empty().style(move |s| {
+            Container::new(Empty::new().style(move |s| {
                 let direction = direction();
                 s.width(match direction {
                     SplitDirection::Vertical => PxPctAuto::Px(1.0),
@@ -1936,7 +1920,7 @@ fn split_list(
                         )
                         .into_any()
                     } else {
-                        text("empty editor tab").into_any()
+                        Empty::new().into_any()
                     }
                 }
                 SplitContent::Split(split_id) => {
@@ -1951,7 +1935,7 @@ fn split_list(
                         )
                         .into_any()
                     } else {
-                        text("empty split").into_any()
+                        Label::new("empty split").into_any()
                     }
                 }
             };
@@ -1997,8 +1981,8 @@ fn split_list(
                 .style(move |s| s.flex_grow(split_size.get() as f32).flex_basis(0.0))
         }
     };
-    container(
-        stack((
+    Container::new(
+        Stack::new((
             dyn_stack(items, key, view_fn).style(move |s| {
                 s.flex_direction(match direction() {
                     SplitDirection::Vertical => FlexDirection::Row,
@@ -2035,7 +2019,7 @@ fn main_split(window_tab_data: Rc<WindowTabData>) -> impl View {
     let panel = window_tab_data.panel.clone();
     let plugin = window_tab_data.plugin.clone();
     let dragging: RwSignal<Option<(RwSignal<usize>, EditorTabId)>> =
-        create_rw_signal(None);
+        RwSignal::new(None);
     split_list(
         root_split,
         window_tab_data.clone(),
@@ -2099,7 +2083,7 @@ pub fn clickable_icon_base(
     disabled_fn: impl Fn() -> bool + 'static + Copy,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let view = container(
+    let view = Container::new(
         svg(move || config.get().ui_svg(icon()))
             .style(move |s| {
                 let config = config.get();
@@ -2109,11 +2093,9 @@ pub fn clickable_icon_base(
                     .disabled(|s| {
                         s.color(config.color(LapceColor::LAPCE_ICON_INACTIVE))
                             .cursor(CursorStyle::Default)
-                    })
+                    }).set_disabled(disabled_fn())
             })
-            .disabled(disabled_fn),
     )
-    .disabled(disabled_fn)
     .style(move |s| {
         let config = config.get();
         s.padding(4.0)
@@ -2131,7 +2113,7 @@ pub fn clickable_icon_base(
                 s.background(
                     config.color(LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND),
                 )
-            })
+            }).set_disabled(disabled_fn())
     });
 
     if let Some(on_click) = on_click {
@@ -2154,7 +2136,7 @@ pub fn tooltip_label<S: std::fmt::Display + 'static, V: View + 'static>(
     tooltip(child, move || {
         tooltip_tip(
             config,
-            label(text.clone()).style(move |s| s.selectable(false)),
+            Label::new(text()).style(move |s| s.selectable(false)),
         )
     })
 }
@@ -2163,7 +2145,7 @@ fn tooltip_tip<V: View + 'static>(
     config: ReadSignal<Arc<LapceConfig>>,
     child: V,
 ) -> impl IntoView {
-    container(child).style(move |s| {
+    Container::new(child).style(move |s| {
         let config = config.get();
         s.padding_horiz(10.0)
             .padding_vert(5.0)
@@ -2184,11 +2166,11 @@ fn tooltip_tip<V: View + 'static>(
 fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
     let workbench_size = window_tab_data.common.workbench_size;
     let main_split_width = window_tab_data.main_split.width;
-    stack((
+    Stack::new((
         panel_container_view(window_tab_data.clone(), PanelContainerPosition::Left),
         {
             let window_tab_data = window_tab_data.clone();
-            stack((
+            Stack::new((
                 main_split(window_tab_data.clone()),
                 panel_container_view(
                     window_tab_data,
@@ -2265,8 +2247,8 @@ fn palette_item(
 
             let path = path.to_path_buf();
             let style_path = path.clone();
-            container(
-                stack((
+            Container::new(
+                Stack::new((
                     svg(move || config.get().file_svg(&path).0).style(move |s| {
                         let config = config.get();
                         let size = config.ui.icon_size() as f32;
@@ -2326,8 +2308,8 @@ fn palette_item(
                     }
                 })
                 .collect();
-            container(
-                stack((
+            Container::new(
+                Stack::new((
                     svg(move || {
                         let config = config.get();
                         config
@@ -2404,8 +2386,8 @@ fn palette_item(
                     }
                 })
                 .collect();
-            container(
-                stack((
+            Container::new(
+                Stack::new((
                     svg(move || {
                         let config = config.get();
                         config
@@ -2472,8 +2454,8 @@ fn palette_item(
                     }
                 })
                 .collect();
-            container(
-                stack((
+            Container::new(
+                Stack::new((
                     svg(move || {
                         let config = config.get();
                         match mode {
@@ -2524,8 +2506,8 @@ fn palette_item(
             } else {
                 vec![]
             };
-            container(
-                stack((
+            Container::new(
+                Stack::new((
                     focus_text(
                         move || text.clone(),
                         move || indices.clone(),
@@ -2536,11 +2518,11 @@ fn palette_item(
                             .flex_grow(1.0)
                             .align_items(Some(AlignItems::Center))
                     }),
-                    stack((dyn_stack(
+                    Stack::new((dyn_stack(
                         move || keys.clone(),
                         |k| k.clone(),
                         move |key| {
-                            label(move || key.clone()).style(move |s| {
+                            Label::new(key.clone()).style(move |s| {
                                 s.padding_horiz(5.0)
                                     .padding_vert(1.0)
                                     .margin_right(5.0)
@@ -2568,7 +2550,7 @@ fn palette_item(
         | PaletteItemContent::IconTheme { .. } => {
             let text = item.filter_text;
             let indices = item.indices;
-            container(
+            Container::new(
                 focus_text(
                     move || text.clone(),
                     move || indices.clone(),
@@ -2581,7 +2563,7 @@ fn palette_item(
         PaletteItemContent::WslHost { .. } => {
             let text = item.filter_text;
             let indices = item.indices;
-            container(
+            Container::new(
                 focus_text(
                     move || text.clone(),
                     move || indices.clone(),
@@ -2615,7 +2597,7 @@ fn palette_input(window_tab_data: Rc<WindowTabData>) -> impl View {
         .placeholder(move || window_tab_data.palette.placeholder_text().to_owned())
         .style(|s| s.width_full());
 
-    container(container(input).style(move |s| {
+    Container::new(Container::new(input).style(move |s| {
         let config = config.get();
         s.width_full()
             .height(25.0)
@@ -2666,8 +2648,8 @@ fn palette_content(
     let input = window_tab_data.palette.input.read_only();
     let palette_item_height = 25.0;
     let workspace = window_tab_data.workspace.clone();
-    stack((
-        scroll({
+    Stack::new((
+        Scroll::new({
             let workspace = workspace.clone();
             virtual_stack(
                 move || PaletteItems(items.get()),
@@ -2691,7 +2673,7 @@ fn palette_content(
                             .and_then(|kind| keymaps.get(kind.str()))
                             .and_then(|maps| maps.first())
                     };
-                    container(palette_item(
+                    Container::new(palette_item(
                         workspace,
                         i,
                         item,
@@ -2730,7 +2712,7 @@ fn palette_content(
                 .min_height(0.0)
                 .set(PropagatePointerWheel, false)
         }),
-        text("No matching results").style(move |s| {
+        Label::new("No matching results").style(move |s| {
             s.display(if items.with(|items| items.is_empty()) {
                 Display::Flex
             } else {
@@ -2757,9 +2739,9 @@ fn palette_preview(window_tab_data: Rc<WindowTabData>) -> impl View {
     let preview_editor = palette_data.preview_editor;
     let has_preview = palette_data.has_preview;
     let config = palette_data.common.config;
-    let preview_editor = create_rw_signal(preview_editor);
-    container(
-        container(editor_container_view(
+    let preview_editor = RwSignal::new(preview_editor);
+    Container::new(
+        Container::new(editor_container_view(
             window_tab_data,
             workspace,
             |_tracked: bool| true,
@@ -2790,8 +2772,8 @@ fn palette(window_tab_data: Rc<WindowTabData>) -> impl View {
     let status = palette_data.status.read_only();
     let config = palette_data.common.config;
     let has_preview = palette_data.has_preview.read_only();
-    container(
-        stack((
+    Container::new(
+        Stack::new((
             palette_input(window_tab_data.clone()),
             palette_content(window_tab_data.clone(), layout_rect),
             palette_preview(window_tab_data.clone()),
@@ -2841,7 +2823,7 @@ fn window_message_view(
 ) -> impl View {
     let view_fn =
         move |(i, (title, message)): (usize, (String, ShowMessageParams))| {
-            stack((
+            Stack::new((
                 svg(move || {
                     if let MessageType::ERROR = message.typ {
                         config.get().ui_svg(LapceIcons::ERROR)
@@ -2863,11 +2845,11 @@ fn window_message_view(
                         .margin_top(4.0)
                         .color(color)
                 }),
-                stack((
-                    text(title.clone()).style(|s| {
+                Stack::new((
+                    Label::new(title.clone()).style(|s| {
                         s.min_width(0.0).line_height(1.8).font_weight(Weight::BOLD)
                     }),
-                    text(message.message.clone()).style(|s| {
+                    Label::new(message.message.clone()).style(|s| {
                         s.min_width(0.0).line_height(1.8).margin_top(5.0)
                     }),
                 ))
@@ -2917,10 +2899,10 @@ fn window_message_view(
         };
 
     let id = AtomicU64::new(0);
-    container(
-        container(
-            container(
-                scroll(
+    Container::new(
+        Container::new(
+            Container::new(
+                Scroll::new(
                     dyn_stack(
                         move || messages.get().into_iter().enumerate(),
                         move |_| {
@@ -2995,18 +2977,18 @@ fn hover(window_tab_data: Rc<WindowTabData>) -> impl View {
     let id = AtomicU64::new(0);
     let layout_rect = window_tab_data.common.hover.layout_rect;
 
-    scroll(
+    Scroll::new(
         dyn_stack(
             move || hover_data.content.get(),
             move |_| id.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             move |content| match content {
-                MarkdownContent::Text(text_layout) => container(
+                MarkdownContent::Text(text_layout) => Container::new(
                     rich_text(move || text_layout.clone())
                         .style(|s| s.max_width(600.0)),
                 )
                 .style(|s| s.max_width_full()),
-                MarkdownContent::Image { .. } => container(empty()),
-                MarkdownContent::Separator => container(empty().style(move |s| {
+                MarkdownContent::Image { .. } => Container::new(Empty::new()),
+                MarkdownContent::Separator => Container::new(Empty::new().style(move |s| {
                     s.width_full()
                         .margin_vert(5.0)
                         .height(1.0)
@@ -3052,14 +3034,14 @@ fn completion(window_tab_data: Rc<WindowTabData>) -> impl View {
     let active = completion_data.with_untracked(|c| c.active);
     let request_id =
         move || completion_data.with_untracked(|c| (c.request_id, c.input_id));
-    scroll(
+    Scroll::new(
         virtual_stack(
             move || completion_data.with(|c| VectorItems(c.filtered_items.clone())),
             move |(i, _item)| (request_id(), *i),
             move |(i, item)| {
-                stack((
-                    container(
-                        text(
+                Stack::new((
+                    Container::new(
+                        Label::new(
                             item.item.kind.map(completion_kind_to_str).unwrap_or(""),
                         )
                         .style(move |s| {
@@ -3174,8 +3156,8 @@ fn code_action(window_tab_data: Rc<WindowTabData>) -> impl View {
         .with_untracked(|code_action| (code_action.status, code_action.active));
     let request_id =
         move || code_action.with_untracked(|code_action| code_action.request_id);
-    scroll(
-        container(
+    Scroll::new(
+        Container::new(
             dyn_stack(
                 move || {
                     code_action.with(|code_action| {
@@ -3184,8 +3166,8 @@ fn code_action(window_tab_data: Rc<WindowTabData>) -> impl View {
                 },
                 move |(i, _item)| (request_id(), *i),
                 move |(i, item)| {
-                    container(
-                        text(item.title().replace('\n', " "))
+                    Container::new(
+                        Label::new(item.title().replace('\n', " "))
                             .style(|s| s.text_ellipsis().min_width(0.0)),
                     )
                     .on_click_stop(move |_| {
@@ -3260,8 +3242,8 @@ fn rename(window_tab_data: Rc<WindowTabData>) -> impl View {
     let layout_rect = window_tab_data.rename.layout_rect;
     let config = window_tab_data.common.config;
 
-    container(
-        container(
+    Container::new(
+        Container::new(
             TextInputBuilder::new()
                 .is_focused(move || active.get())
                 .build_editor(editor)
@@ -3305,8 +3287,8 @@ fn window_tab(window_tab_data: Rc<WindowTabData>) -> impl View {
     let hover_active = window_tab_data.common.hover.active;
     let status_height = window_tab_data.status_height;
 
-    let view = stack((
-        stack((
+    let view = Stack::new((
+        Stack::new((
             title(window_tab_data.clone()),
             workbench(window_tab_data.clone()),
             status(
@@ -3377,14 +3359,14 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
     let active = window_data.active;
     let config = window_data.config;
     let window_tab_header_height = window_data.common.window_tab_header_height;
-    let available_width = create_rw_signal(0.0);
-    let add_icon_width = create_rw_signal(0.0);
-    let window_control_width = create_rw_signal(0.0);
+    let available_width = RwSignal::new(0.0);
+    let add_icon_width = RwSignal::new(0.0);
+    let window_control_width = RwSignal::new(0.0);
     let window_maximized = window_data.common.window_maximized;
     let num_window_tabs = window_data.num_window_tabs;
     let window_command = window_data.common.window_command;
 
-    let tab_width = create_memo(move |_| {
+    let tab_width = Memo::new(move |_| {
         let window_control_width = if !cfg!(target_os = "macos")
             && config.get_untracked().core.custom_titlebar
         {
@@ -3406,15 +3388,15 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
     });
 
     let local_window_data = window_data.clone();
-    let dragging_index: RwSignal<Option<RwSignal<usize>>> = create_rw_signal(None);
+    let dragging_index: RwSignal<Option<RwSignal<usize>>> = RwSignal::new(None);
     let view_fn = move |(index, tab): (RwSignal<usize>, Rc<WindowTabData>)| {
-        let drag_over_left = create_rw_signal(None);
+        let drag_over_left = RwSignal::new(None);
         let window_data = local_window_data.clone();
-        stack((
-            container({
-                stack((
-                    stack((
-                        text(
+        Stack::new((
+            Container::new({
+                Stack::new((
+                    Stack::new((
+                        Label::new(
                             workspace_title(&tab.workspace)
                                 .unwrap_or_else(|| String::from("New Tab")),
                         )
@@ -3447,8 +3429,8 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
                     ))
                     .on_event_stop(EventListener::DragOver, move |event| {
                         if dragging_index.get_untracked().is_some() {
-                            if let Event::PointerMove(pointer_event) = event {
-                                let left = pointer_event.pos.x
+                            if let Event::Pointer(PointerEvent::Move(PointerUpdate { current, .. })) = event {
+                                let left = current.logical_point().x
                                     < tab_width.get_untracked() / 2.0;
                                 if drag_over_left.get_untracked() != Some(left) {
                                     drag_over_left.set(Some(left));
@@ -3459,8 +3441,8 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
                     .on_event(EventListener::Drop, move |event| {
                         if dragging_index.get_untracked().is_some() {
                             drag_over_left.set(None);
-                            if let Event::PointerUp(pointer_event) = event {
-                                let left = pointer_event.pos.x
+                            if let Event::Pointer(PointerEvent::Up(PointerButtonEvent { state, .. })) = event {
+                                let left = state.logical_point().x
                                     < tab_width.get_untracked() / 2.0;
                                 let index = index.get_untracked();
                                 let new_index = if left { index } else { index + 1 };
@@ -3494,7 +3476,7 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
                                 |s| s.border_left(1.0),
                             )
                     }),
-                    container(empty().style(move |s| {
+                    Container::new(Empty::new().style(move |s| {
                         s.size_full()
                             .apply_if(active.get() == index.get(), |s| {
                                 s.border_bottom(2.0)
@@ -3514,7 +3496,6 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
                 ))
                 .style(move |s| s.size_full().items_center())
             })
-            .draggable()
             .on_event_stop(EventListener::DragStart, move |_| {
                 dragging_index.set(Some(index));
             })
@@ -3540,8 +3521,8 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
             .on_click_stop(move |_| {
                 active.set(index.get_untracked());
             })
-            .style(move |s| s.size_full()),
-            empty().style(move |s| {
+            .style(move |s| s.size_full().draggable(true)),
+            Empty::new().style(move |s| {
                 let index = index.get();
                 s.absolute()
                     .margin_left(if index == 0 { 0.0 } else { -2.0 })
@@ -3566,8 +3547,8 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
         .style(move |s| s.height_full().width(tab_width.get() as f32))
     };
 
-    stack((
-        empty().style(move |s| {
+    Stack::new((
+        Empty::new().style(move |s| {
             let is_macos = cfg!(target_os = "macos");
             s.min_width(75.0)
                 .width(75.0)
@@ -3587,7 +3568,7 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
             view_fn,
         )
         .style(|s| s.height_full()),
-        container(clickable_icon(
+        Container::new(clickable_icon(
             || LapceIcons::ADD,
             move || {
                 window_data.run_window_command(WindowCommand::NewWorkspaceTab {
@@ -3612,7 +3593,7 @@ fn workspace_tab_header(window_data: WindowData) -> impl View {
                 .padding_right(10.0)
                 .items_center()
         }),
-        drag_window_area(empty())
+        drag_window_area(Empty::new())
             .style(|s| s.height_full().flex_basis(0.0).flex_grow(1.0)),
         window_controls_view(
             window_command,
@@ -3660,8 +3641,8 @@ fn window(window_data: WindowData) -> impl View {
     let key = |(_, window_tab): &(RwSignal<usize>, Rc<WindowTabData>)| {
         window_tab.window_tab_id
     };
-    let active = move || active.get();
-    let window_focus = create_rw_signal(false);
+    let active = move || Some(active.get());
+    let window_focus = RwSignal::new(false);
     let ime_enabled = window_data.ime_enabled;
     let window_maximized = window_data.common.window_maximized;
 
@@ -3672,7 +3653,7 @@ fn window(window_data: WindowData) -> impl View {
         let active = active();
         let window_tabs = window_tabs.get();
         let workspace = window_tabs
-            .get(active)
+            .get(active.unwrap())
             .or_else(|| window_tabs.last())
             .and_then(|(_, window_tab)| window_tab.workspace.display());
         match workspace {
@@ -3698,14 +3679,14 @@ fn window(window_data: WindowData) -> impl View {
         window_focus.track();
         let active = active();
         let window_tabs = window_tabs.get();
-        let window_tab = window_tabs.get(active).or_else(|| window_tabs.last());
+        let window_tab = window_tabs.get(active.unwrap_or(0)).or_else(|| window_tabs.last());
         if let Some((_, window_tab)) = window_tab {
             window_tab.common.keypress.track();
             let workbench_command = window_tab.common.workbench_command;
             let lapce_command = window_tab.common.lapce_command;
             window_menu(lapce_command, workbench_command)
         } else {
-            Menu::new("Lapce")
+            Menu::new()
         }
     })
     .style(|s| s.size_full())
@@ -3816,7 +3797,7 @@ pub fn launch() {
     #[cfg(feature = "updater")]
     crate::update::cleanup();
 
-    if let Err(err) = lapce_proxy::register_lapce_path() {
+    if let Err(err) = umide_proxy::register_lapce_path() {
         tracing::error!("{:?}", err);
     }
     let db = match LapceDb::new() {
@@ -3830,7 +3811,7 @@ pub fn launch() {
         }
     };
     let scope = Scope::new();
-    provide_context(db.clone());
+    Context::provide(db.clone());
 
     let window_scale = scope.create_rw_signal(1.0);
     let latest_release = scope.create_rw_signal(Arc::new(None));
@@ -3885,8 +3866,8 @@ pub fn launch() {
 
     {
         let app_data = app_data.clone();
-        let notification = create_signal_from_channel(rx);
-        create_effect(move |_| {
+        let notification = ChannelSignal::new(rx);
+        Effect::new(move |_| {
             if notification.get().is_some() {
                 tracing::debug!("notification reload_config");
                 app_data.reload_config();
@@ -3958,10 +3939,12 @@ pub fn launch() {
 
     #[cfg(feature = "updater")]
     {
+        use floem::reactive::Effect;
+
         let (tx, rx) = sync_channel(1);
-        let notification = create_signal_from_channel(rx);
+        let notification = ChannelSignal::new(rx);
         let latest_release = app_data.latest_release;
-        create_effect(move |_| {
+        Effect::new(move |_| {
             if let Some(release) = notification.get() {
                 latest_release.set(Arc::new(Some(release)));
             }
@@ -3983,9 +3966,9 @@ pub fn launch() {
 
     {
         let (tx, rx) = sync_channel(1);
-        let notification = create_signal_from_channel(rx);
+        let notification = ChannelSignal::new(rx);
         let app_data = app_data.clone();
-        create_effect(move |_| {
+        Effect::new(move |_| {
             if let Some(CoreNotification::OpenPaths { paths }) = notification.get() {
                 if let Some(window_tab) = app_data.active_window_tab() {
                     window_tab.open_paths(&paths);
@@ -4105,7 +4088,7 @@ pub fn try_open_in_existing_process(
     let msg: CoreMessage = RpcMessage::Notification(CoreNotification::OpenPaths {
         paths: paths.to_vec(),
     });
-    lapce_rpc::stdio::write_msg(&mut socket, msg)?;
+    umide_rpc::stdio::write_msg(&mut socket, msg)?;
 
     let (tx, rx) = crossbeam_channel::bounded(1);
     std::thread::spawn(move || {
@@ -4143,7 +4126,7 @@ fn listen_local_socket(tx: SyncSender<CoreNotification>) -> Result<()> {
             let mut reader = BufReader::new(stream);
             loop {
                 let msg: Option<CoreMessage> =
-                    lapce_rpc::stdio::read_msg(&mut reader)?;
+                    umide_rpc::stdio::read_msg(&mut reader)?;
 
                 if let Some(RpcMessage::Notification(msg)) = msg {
                     tx.send(msg)?;
@@ -4168,152 +4151,164 @@ pub fn window_menu(
     lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
 ) -> Menu {
-    Menu::new("Lapce")
-        .entry({
-            let mut menu = Menu::new("Lapce")
-                .entry(MenuItem::new("About Lapce").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::ShowAbout)
-                }))
-                .separator()
-                .entry(
-                    Menu::new("Settings...")
-                        .entry(MenuItem::new("Open Settings").action(move || {
-                            workbench_command
-                                .send(LapceWorkbenchCommand::OpenSettings);
-                        }))
-                        .entry(MenuItem::new("Open Keyboard Shortcuts").action(
-                            move || {
-                                workbench_command.send(
-                                    LapceWorkbenchCommand::OpenKeyboardShortcuts,
-                                );
-                            },
-                        )),
-                )
-                .separator()
-                .entry(MenuItem::new("Quit Lapce").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::Quit);
-                }));
-            if cfg!(target_os = "macos") {
-                menu = menu
-                    .separator()
-                    .entry(MenuItem::new("Hide Lapce"))
-                    .entry(MenuItem::new("Hide Others"))
-                    .entry(MenuItem::new("Show All"))
-            }
-            menu
-        })
+    let mut menu = Menu::new();
+    
+    // Lapce Menu
+    menu = menu.submenu("Lapce", move |m| {
+        let mut m = m.item("About Lapce", |i| i.action(move || {
+                workbench_command.send(LapceWorkbenchCommand::ShowAbout)
+            }))
+            .separator()
+            .submenu("Settings...", move |s| {
+                s.item("Open Settings", |i| i.action(move || {
+                        workbench_command
+                            .send(LapceWorkbenchCommand::OpenSettings);
+                    }))
+                    .item("Open Keyboard Shortcuts", |i| i.action(move || {
+                        workbench_command.send(
+                            LapceWorkbenchCommand::OpenKeyboardShortcuts,
+                        );
+                    }))
+            })
+            .separator()
+            .item("Quit Lapce", |i| i.action(move || {
+                workbench_command.send(LapceWorkbenchCommand::Quit);
+            }));
+            
+        if cfg!(target_os = "macos") {
+            m = m.separator()
+                .item("Hide Lapce", |i| i)
+                .item("Hide Others", |i| i)
+                .item("Show All", |i| i);
+        }
+        m
+    })
+    .separator();
+
+    // File Menu
+    menu = menu.submenu("File", move |m| {
+        m.item("New File", |i| i.action(move || {
+            workbench_command.send(LapceWorkbenchCommand::NewFile);
+        }))
         .separator()
-        .entry(
-            Menu::new("File")
-                .entry(MenuItem::new("New File").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::NewFile);
-                }))
-                .separator()
-                .entry(MenuItem::new("Open").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::OpenFile);
-                }))
-                .entry(MenuItem::new("Open Folder").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::OpenFolder);
-                }))
-                .separator()
-                .entry(MenuItem::new("Save").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Focus(FocusCommand::Save),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Save All").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::SaveAll);
-                }))
-                .separator()
-                .entry(MenuItem::new("Close Folder").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::CloseFolder);
-                }))
-                .entry(MenuItem::new("Close Window").action(move || {
-                    workbench_command.send(LapceWorkbenchCommand::CloseWindow);
-                })),
-        )
-        .entry(
-            Menu::new("Edit")
-                .entry(MenuItem::new("Cut").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::ClipboardCut),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Copy").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::ClipboardCopy),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Paste").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::ClipboardPaste),
-                        data: None,
-                    });
-                }))
-                .separator()
-                .entry(MenuItem::new("Undo").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::Undo),
-                        data: None,
-                    });
-                }))
-                .entry(MenuItem::new("Redo").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Edit(EditCommand::Redo),
-                        data: None,
-                    });
-                }))
-                .separator()
-                .entry(MenuItem::new("Find").action(move || {
-                    lapce_command.send(LapceCommand {
-                        kind: CommandKind::Focus(FocusCommand::Search),
-                        data: None,
-                    });
-                })),
-        )
+        .item("Open", |i| i.action(move || {
+            workbench_command.send(LapceWorkbenchCommand::OpenFile);
+        }))
+        .item("Open Folder", |i| i.action(move || {
+            workbench_command.send(LapceWorkbenchCommand::OpenFolder);
+        }))
+        .separator()
+        .item("Save", |i| i.action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::Save),
+                data: None,
+            });
+        }))
+        .item("Save All", |i| i.action(move || {
+            workbench_command.send(LapceWorkbenchCommand::SaveAll);
+        }))
+        .separator()
+        .item("Close Folder", |i| i.action(move || {
+            workbench_command.send(LapceWorkbenchCommand::CloseFolder);
+        }))
+        .item("Close Window", |i| i.action(move || {
+            workbench_command.send(LapceWorkbenchCommand::CloseWindow);
+        }))
+    });
+
+    // Edit Menu
+    menu = menu.submenu("Edit", move |m| {
+        m.item("Cut", |i| i.action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Edit(EditCommand::ClipboardCut),
+                data: None,
+            });
+        }))
+        .item("Copy", |i| i.action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Edit(EditCommand::ClipboardCopy),
+                data: None,
+            });
+        }))
+        .item("Paste", |i| i.action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Edit(EditCommand::ClipboardPaste),
+                data: None,
+            });
+        }))
+        .separator()
+        .item("Undo", |i| i.action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Edit(EditCommand::Undo),
+                data: None,
+            });
+        }))
+        .item("Redo", |i| i.action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Edit(EditCommand::Redo),
+                data: None,
+            });
+        }))
+        .separator()
+        .item("Find", |i| i.action(move || {
+            lapce_command.send(LapceCommand {
+                kind: CommandKind::Focus(FocusCommand::Search),
+                data: None,
+            });
+        }))
+    });
+
+    menu
 }
 fn tab_secondary_click(
     internal_command: Listener<InternalCommand>,
     editor_tab_id: EditorTabId,
     child: EditorTabChild,
 ) {
-    let mut menu = Menu::new("");
-    let child_other = child.clone();
-    let child_right = child.clone();
-    let child_left = child.clone();
-    menu = menu
-        .entry(MenuItem::new("Close").action(move || {
-            internal_command.send(InternalCommand::EditorTabChildClose {
-                editor_tab_id,
-                child: child.clone(),
-            });
+    let menu = Menu::new()
+        .item("Close", |i| i.action({
+            let child = child.clone();
+            move || {
+                internal_command.send(InternalCommand::EditorTabChildClose {
+                    editor_tab_id,
+                    child: child.clone(),
+                });
+            }
         }))
-        .entry(MenuItem::new("Close Other Tabs").action(move || {
-            internal_command.send(InternalCommand::EditorTabCloseByKind {
-                editor_tab_id,
-                child: child_other.clone(),
-                kind: TabCloseKind::CloseOther,
-            });
+        .item("Close Other Tabs", |i| i.action({
+            let child = child.clone();
+            move || {
+                internal_command.send(InternalCommand::EditorTabCloseByKind {
+                    editor_tab_id,
+                    child: child.clone(),
+                    kind: TabCloseKind::CloseOther,
+                });
+            }
         }))
-        .entry(MenuItem::new("Close All Tabs").action(move || {
-            internal_command.send(InternalCommand::EditorTabClose { editor_tab_id });
+        .item("Close All Tabs", |i| i.action({
+            move || {
+                internal_command.send(InternalCommand::EditorTabClose { editor_tab_id });
+            }
         }))
-        .entry(MenuItem::new("Close Tabs to the Right").action(move || {
-            internal_command.send(InternalCommand::EditorTabCloseByKind {
-                editor_tab_id,
-                child: child_right.clone(),
-                kind: TabCloseKind::CloseToRight,
-            });
+        .item("Close Tabs to the Right", |i| i.action({
+            let child = child.clone();
+            move || {
+                internal_command.send(InternalCommand::EditorTabCloseByKind {
+                    editor_tab_id,
+                    child: child.clone(),
+                    kind: TabCloseKind::CloseToRight,
+                });
+            }
         }))
-        .entry(MenuItem::new("Close Tabs to the Left").action(move || {
-            internal_command.send(InternalCommand::EditorTabCloseByKind {
-                editor_tab_id,
-                child: child_left.clone(),
-                kind: TabCloseKind::CloseToLeft,
-            });
+        .item("Close Tabs to the Left", |i| i.action({
+            let child = child.clone();
+            move || {
+                internal_command.send(InternalCommand::EditorTabCloseByKind {
+                    editor_tab_id,
+                    child: child.clone(),
+                    kind: TabCloseKind::CloseToLeft,
+                });
+            }
         }));
     show_context_menu(menu, None);
 }

@@ -8,17 +8,17 @@ use floem::{
     action::save_as,
     ext_event::create_ext_action,
     file::{FileDialogOptions, FileInfo},
-    keyboard::Modifiers,
     peniko::kurbo::{Point, Rect, Vec2},
+    prelude::Modifiers,
     reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::editor::id::EditorId,
 };
 use itertools::Itertools;
-use lapce_core::{
+use umide_core::{
     buffer::rope_text::RopeText, command::FocusCommand, cursor::Cursor,
     rope_text_pos::RopeTextPosition, selection::Selection, syntax::Syntax,
 };
-use lapce_rpc::{
+use umide_rpc::{
     buffer::BufferId,
     core::FileChanged,
     plugin::{PluginId, VoltID},
@@ -2404,9 +2404,13 @@ impl MainSplitData {
             .doc()
             .buffer
             .with_untracked(|buffer| buffer.len());
-        self.find_editor
-            .cursor()
-            .update(|cursor| cursor.set_insert(Selection::region(0, pattern_len)));
+        self.find_editor.cursor().update(|cursor| {
+            cursor.set_insert(Selection::region(
+                0,
+                pattern_len,
+                umide_core::cursor::CursorAffinity::Forward,
+            ))
+        });
     }
 
     pub fn open_volt_view(&self, id: VoltID) {

@@ -4,9 +4,8 @@ use floem::{
     prelude::SignalTrack,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
 };
-use lapce_core::{
-    selection::{SelRegion, Selection},
-    word::WordCursor,
+use umide_core::{
+    cursor::CursorAffinity, selection::{SelRegion, Selection}, word::WordCursor
 };
 use lapce_xi_rope::{
     Cursor, Interval, Rope,
@@ -394,7 +393,7 @@ impl Find {
                 continue;
             }
 
-            let region = SelRegion::new(start, end, None);
+            let region = SelRegion::new(start, end, CursorAffinity::Forward, None);
             let (_, e) = occurrences.add_range_distinct(region);
             // in case of ambiguous search results (e.g. search "aba" in "ababa"),
             // the search result closer to the beginning of the file wins
@@ -482,7 +481,7 @@ impl Find {
                 continue;
             }
 
-            let region = SelRegion::new(start, end, None);
+            let region = SelRegion::new(start, end, CursorAffinity::Forward, None);
             let (_, e) = occurrences.add_range_distinct(region);
             // in case of ambiguous search results (e.g. search "aba" in "ababa"),
             // the search result closer to the beginning of the file wins

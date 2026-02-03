@@ -4,11 +4,11 @@ use floem::{
     View,
     peniko::Color,
     reactive::{
-        ReadSignal, SignalGet, SignalUpdate, SignalWith, create_effect,
-        create_rw_signal,
+        ReadSignal, SignalGet, SignalUpdate, SignalWith, Effect,
+        RwSignal,
     },
     style::{CursorStyle, Style},
-    views::{Decorators, container, dyn_stack, label, scroll, stack, svg},
+    views::{Decorators, Container, dyn_stack, Label, Scroll, Stack, svg},
 };
 use lsp_types::{DiagnosticRelatedInformation, DiagnosticSeverity};
 
@@ -57,8 +57,8 @@ fn problem_section(
     let config = window_tab_data.common.config;
     let main_split = window_tab_data.main_split.clone();
     let internal_command = window_tab_data.common.internal_command;
-    container({
-        scroll(
+    Container::new({
+        Scroll::new(
             dyn_stack(
                 move || main_split.diagnostics.get(),
                 |(p, _)| p.clone(),
@@ -88,10 +88,10 @@ fn file_view(
     internal_command: Listener<InternalCommand>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let collpased = create_rw_signal(false);
+    let collapsed = RwSignal::new(false);
 
-    let diagnostics = create_rw_signal(im::Vector::new());
-    create_effect(move |_| {
+    let diagnostics = RwSignal::new(im::Vector::new());
+    Effect::new(move |_| {
         let span = diagnostic_data.diagnostics_span.get();
         let d = if !span.is_empty() {
             span.iter()
@@ -160,17 +160,17 @@ fn file_view(
         .unwrap_or("")
         .to_string();
 
-    stack((
-        stack((
-            container(
-                stack((
-                    label(move || file_name.clone()).style(|s| {
+    Stack::new((
+        Stack::new((
+            Container::new(
+                Stack::new((
+                    Label::new( file_name.clone()).style(|s| {
                         s.margin_right(6.0)
                             .max_width_pct(100.0)
                             .text_ellipsis()
                             .selectable(false)
                     }),
-                    label(move || folder.clone()).style(move |s| {
+                    Label::new( folder.clone()).style(move |s| {
                         s.color(config.get().color(LapceColor::EDITOR_DIM))
                             .min_width(0.0)
                             .text_ellipsis()
@@ -180,7 +180,7 @@ fn file_view(
                 .style(move |s| s.width_pct(100.0).min_width(0.0)),
             )
             .on_click_stop(move |_| {
-                collpased.update(|collpased| *collpased = !*collpased);
+                collapsed.update(|collapsed| *collapsed = !*collapsed);
             })
             .style(move |s| {
                 let config = config.get();
@@ -194,9 +194,9 @@ fn file_view(
                         )
                     })
             }),
-            stack((
+            Stack::new((
                 svg(move || {
-                    config.get().ui_svg(if collpased.get() {
+                    config.get().ui_svg(if collapsed.get() {
                         LapceIcons::ITEM_CLOSED
                     } else {
                         LapceIcons::ITEM_OPENED
@@ -217,14 +217,14 @@ fn file_view(
                         .size(size, size)
                         .apply_opt(color, Style::color)
                 }),
-                label(|| " ".to_string()).style(move |s| s.selectable(false)),
+                Label::new(" ".to_string()).style(move |s| s.selectable(false)),
             ))
             .style(|s| s.absolute().items_center().margin_left(10.0)),
         ))
         .style(move |s| s.width_pct(100.0).min_width(0.0)),
         dyn_stack(
             move || {
-                if collpased.get() {
+                if collapsed.get() {
                     im::Vector::new()
                 } else {
                     diagnostics.get()
@@ -273,10 +273,10 @@ fn item_view(
         ignore_unconfirmed: false,
         same_editor_tab: false,
     };
-    stack((
-        container({
-            stack((
-                label(move || d.diagnostic.message.clone()).style(move |s| {
+    Stack::new((
+        Container::new({
+            Stack::new((
+                Label::new( d.diagnostic.message.clone()).style(move |s| {
                     s.width_pct(100.0)
                         .min_width(0.0)
                         .padding_left(
@@ -284,13 +284,13 @@ fn item_view(
                         )
                         .padding_right(10.0)
                 }),
-                stack((
+                Stack::new((
                     svg(move || config.get().ui_svg(icon)).style(move |s| {
                         let config = config.get();
                         let size = config.ui.icon_size() as f32;
                         s.size(size, size).color(icon_color())
                     }),
-                    label(|| " ".to_string()).style(move |s| s.selectable(false)),
+                    Label::new(" ".to_string()).style(move |s| s.selectable(false)),
                 ))
                 .style(move |s| {
                     s.absolute().items_center().margin_left(
@@ -323,7 +323,7 @@ fn related_view(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let is_empty = related.is_empty();
-    stack((
+    Stack::new((
         dyn_stack(
             move || related.clone(),
             |_| 0,
@@ -350,8 +350,8 @@ fn related_view(
                     same_editor_tab: false,
                 };
                 let message = format!("{path}{}", related.message);
-                container(
-                    label(move || message.clone())
+                Container::new(
+                    Label::new( message.clone())
                         .style(move |s| s.width_pct(100.0).min_width(0.0)),
                 )
                 .on_click_stop(move |_| {
@@ -374,14 +374,14 @@ fn related_view(
             },
         )
         .style(|s| s.width_pct(100.0).min_width(0.0).flex_col()),
-        stack((
+        Stack::new((
             svg(move || config.get().ui_svg(LapceIcons::LINK)).style(move |s| {
                 let config = config.get();
                 let size = config.ui.icon_size() as f32;
                 s.size(size, size)
                     .color(config.color(LapceColor::EDITOR_DIM))
             }),
-            label(|| " ".to_string()).style(move |s| s.selectable(false)),
+            Label::new(" ".to_string()).style(move |s| s.selectable(false)),
         ))
         .style(move |s| {
             s.absolute()

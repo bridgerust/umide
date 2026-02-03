@@ -7,13 +7,13 @@ use floem::{
     View,
     event::EventPropagation,
     reactive::{
-        Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
+        Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith,
     },
     style::{AlignItems, CursorStyle, Display},
-    views::{Decorators, dyn_stack, label, stack, svg},
+    views::{Decorators, Label, Stack, dyn_stack, svg},
 };
 use indexmap::IndexMap;
-use lapce_core::mode::{Mode, VisualMode};
+use umide_core::mode::{Mode, VisualMode};
 use lsp_types::{DiagnosticSeverity, ProgressToken};
 
 use crate::{
@@ -40,7 +40,7 @@ pub fn status(
     let editor = window_tab_data.main_split.active_editor;
     let panel = window_tab_data.panel.clone();
     let palette = window_tab_data.palette.clone();
-    let diagnostic_count = create_memo(move |_| {
+    let diagnostic_count = Memo::new(move |_| {
         let mut errors = 0;
         let mut warnings = 0;
         for (_, diagnostics) in diagnostics.get().iter() {
@@ -71,12 +71,12 @@ pub fn status(
     };
 
     let progresses = window_tab_data.progresses;
-    let mode = create_memo(move |_| window_tab_data.mode());
-    let pointer_down = floem::reactive::create_rw_signal(false);
+    let mode = Memo::new(move |_| window_tab_data.mode());
+    let pointer_down = RwSignal::new(false);
 
-    stack((
-        stack((
-            label(move || match mode.get() {
+    Stack::new((
+        Stack::new((
+            Label::derived(move || match mode.get() {
                 Mode::Normal => "Normal".to_string(),
                 Mode::Insert => "Insert".to_string(),
                 Mode::Visual(mode) => match mode {
@@ -124,14 +124,14 @@ pub fn status(
                     .align_items(Some(AlignItems::Center))
                     .selectable(false)
             }),
-            stack((
+            Stack::new((
                 svg(move || config.get().ui_svg(LapceIcons::SCM)).style(move |s| {
                     let config = config.get();
                     let icon_size = config.ui.icon_size() as f32;
                     s.size(icon_size, icon_size)
                         .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
                 }),
-                label(branch).style(move |s| {
+                Label::derived(branch).style(move |s| {
                     s.margin_left(10.0)
                         .color(config.get().color(LapceColor::STATUS_FOREGROUND))
                         .selectable(false)
@@ -168,7 +168,7 @@ pub fn status(
             ),
             {
                 let panel = panel.clone();
-                stack((
+                Stack::new((
                     svg(move || config.get().ui_svg(LapceIcons::ERROR)).style(
                         move |s| {
                             let config = config.get();
@@ -177,7 +177,7 @@ pub fn status(
                                 .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
                         },
                     ),
-                    label(move || diagnostic_count.get().0.to_string()).style(
+                    Label::derived(move || diagnostic_count.get().0.to_string()).style(
                         move |s| {
                             s.margin_left(5.0)
                                 .color(
@@ -197,7 +197,7 @@ pub fn status(
                                 .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
                         },
                     ),
-                    label(move || diagnostic_count.get().1.to_string()).style(
+                    Label::derived(move || diagnostic_count.get().1.to_string()).style(
                         move |s| {
                             s.margin_left(5.0)
                                 .color(
@@ -234,7 +234,7 @@ pub fn status(
                 .flex_grow(1.0)
                 .items_center()
         }),
-        stack((
+        Stack::new((
             {
                 let panel = panel.clone();
                 let icon = {
@@ -318,7 +318,7 @@ pub fn status(
                 .items_center()
                 .color(config.get().color(LapceColor::STATUS_FOREGROUND))
         }),
-        stack({
+        Stack::new({
             let palette_clone = palette.clone();
             let cursor_info = status_text(config, editor, move || {
                 if let Some(editor) = editor.get() {
@@ -423,7 +423,7 @@ fn progress_view(
                 }
                 _ => p.title,
             };
-            label(move || progress.clone()).style(move |s| {
+            Label::derived(move || progress.clone()).style(move |s| {
                 s.height_pct(100.0)
                     .min_width(0.0)
                     .margin_left(10.0)
@@ -442,7 +442,7 @@ fn status_text<S: std::fmt::Display + 'static>(
     editor: Memo<Option<EditorData>>,
     text: impl Fn() -> S + 'static,
 ) -> impl View {
-    label(text).style(move |s| {
+    Label::derived(text).style(move |s| {
         let config = config.get();
         let display = if editor
             .get()

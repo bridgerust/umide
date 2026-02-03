@@ -1,18 +1,13 @@
-use std::{rc::Rc, sync::Arc};
+use std::{rc::Rc, sync::Arc, ops::Range};
 
 use floem::{
-    View,
-    event::{Event, EventListener},
-    reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        create_effect, create_memo, create_rw_signal,
-    },
-    style::CursorStyle,
-    views::{
-        Decorators, container, dyn_stack, label, scroll, stack, text, virtual_stack,
-    },
+    View, event::{Event, EventListener}, prelude::PointerEvent, reactive::{
+        Effect, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
+    }, style::CursorStyle, views::{
+        Container, Decorators, Label, Scroll, Stack, dyn_stack, virtual_stack, VirtualVector
+    }
 };
-use lapce_core::mode::Modes;
+use umide_core::mode::Modes;
 
 use crate::{
     command::LapceCommand,
@@ -33,16 +28,35 @@ pub struct KeymapPicker {
     keys: RwSignal<Vec<(KeyMapPress, bool)>>,
 }
 
+struct KeymapList(im::Vector<(usize, (LapceCommand, Option<KeyMap>))>);
+
+impl VirtualVector<(usize, (LapceCommand, Option<KeyMap>))> for KeymapList {
+    fn total_len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn slice(
+        &mut self,
+        range: Range<usize>,
+    ) -> impl Iterator<Item = (usize, (LapceCommand, Option<KeyMap>))> {
+        self.0
+            .iter()
+            .skip(range.start)
+            .take(range.end - range.start)
+            .cloned()
+    }
+}
+
 pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
     let config = common.config;
     let keypress = common.keypress;
     let ui_line_height_memo = common.ui_line_height;
     let ui_line_height = move || ui_line_height_memo.get() * 1.2;
-    let modal = create_memo(move |_| config.get().core.modal);
+    let modal = Memo::new(move |_| config.get().core.modal);
     let picker = KeymapPicker {
-        cmd: create_rw_signal(None),
-        keymap: create_rw_signal(None),
-        keys: create_rw_signal(Vec::new()),
+        cmd: RwSignal::new(None),
+        keymap: RwSignal::new(None),
+        keys: RwSignal::new(Vec::new()),
     };
 
     let cx = Scope::current();
@@ -99,19 +113,20 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
             }
             Some((cmd.clone(), None))
         }));
-        items
+        let items = items
             .into_iter()
             .enumerate()
-            .collect::<im::Vector<(usize, (LapceCommand, Option<KeyMap>))>>()
+            .collect::<im::Vector<(usize, (LapceCommand, Option<KeyMap>))>>();
+        KeymapList(items)
     };
 
     let view_fn =
         move |(i, (cmd, keymap)): (usize, (LapceCommand, Option<KeyMap>))| {
             let local_keymap = keymap.clone();
             let local_cmd = cmd.clone();
-            stack((
-                container(
-                    text(
+            Stack::new((
+                Container::new(
+                    Label::new(
                         cmd.kind
                             .desc()
                             .map(|desc| desc.to_string())
@@ -152,7 +167,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                         },
                         |k| k.clone(),
                         move |key| {
-                            text(key.clone()).style(move |s| {
+                            Label::new(key.clone()).style(move |s| {
                                 s.padding_horiz(5.0)
                                     .padding_vert(1.0)
                                     .margin_right(5.0)
@@ -201,7 +216,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                         move || modes.clone(),
                         |m| m.clone(),
                         move |mode| {
-                            text(mode.clone()).style(move |s| {
+                            Label::new(mode.clone()).style(move |s| {
                                 s.padding_horiz(5.0)
                                     .padding_vert(1.0)
                                     .margin_right(5.0)
@@ -225,8 +240,8 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                             .apply_if(!modal.get(), |s| s.hide())
                     })
                 },
-                container(
-                    text(
+                Container::new(
+                    Label::new(
                         keymap
                             .as_ref()
                             .and_then(|keymap| keymap.when.clone())
@@ -278,22 +293,22 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
             })
         };
 
-    stack((
-        container(
+    Stack::new((
+        Container::new(
             text_input_view
                 .placeholder(|| "Search Key Bindings".to_string())
-                .keyboard_navigable()
                 .request_focus(|| {})
                 .style(move |s| {
                     s.width_pct(100.0)
                         .border_radius(6.0)
                         .border(1.0)
                         .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                        .focusable(true)
                 }),
         )
         .style(|s| s.padding_bottom(10.0).width_pct(100.0)),
-        stack((
-            container(text("Command").style(move |s| {
+        Stack::new((
+            Container::new(Label::new("Command").style(move |s| {
                 s.text_ellipsis().padding_horiz(10.0).min_width(0.0)
             }))
             .style(move |s| {
@@ -305,7 +320,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .border_right(1.0)
                     .border_color(config.get().color(LapceColor::LAPCE_BORDER))
             }),
-            text("Key Binding").style(move |s| {
+            Label::new("Key Binding").style(move |s| {
                 s.width(200.0)
                     .items_center()
                     .padding_horiz(10.0)
@@ -313,7 +328,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .border_right(1.0)
                     .border_color(config.get().color(LapceColor::LAPCE_BORDER))
             }),
-            text("Modes").style(move |s| {
+            Label::new("Modes").style(move |s| {
                 s.width(200.0)
                     .items_center()
                     .padding_horiz(10.0)
@@ -322,7 +337,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .border_color(config.get().color(LapceColor::LAPCE_BORDER))
                     .apply_if(!modal.get(), |s| s.hide())
             }),
-            container(text("When").style(move |s| {
+            Container::new(Label::new("When").style(move |s| {
                 s.text_ellipsis().padding_horiz(10.0).min_width(0.0)
             }))
             .style(move |s| {
@@ -343,8 +358,8 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .background(config.color(LapceColor::EDITOR_CURRENT_LINE))
         }),
-        container(
-            scroll(
+        Container::new(
+            Scroll::new(
                 virtual_stack(
                     items,
                     |(i, (cmd, keymap)): &(
@@ -377,9 +392,9 @@ fn keyboard_picker_view(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let picker_cmd = picker.cmd;
-    let view = container(
-        stack((
-            label(move || {
+    let view = Container::new(
+        Stack::new((
+            Label::new({
                 picker_cmd.with(|cmd| {
                     cmd.as_ref()
                         .map(|cmd| {
@@ -404,7 +419,7 @@ fn keyboard_picker_view(
                 },
                 |(i, k)| (*i, k.clone()),
                 move |(_, key)| {
-                    text(key.clone()).style(move |s| {
+                    Label::new(key.clone()).style(move |s| {
                         s.padding_horiz(5.0)
                             .padding_vert(1.0)
                             .margin_right(5.0)
@@ -429,8 +444,8 @@ fn keyboard_picker_view(
                     .border_color(config.color(LapceColor::LAPCE_BORDER))
                     .background(config.color(LapceColor::EDITOR_BACKGROUND))
             }),
-            stack((
-                text("Save")
+            Stack::new((
+                Label::new("Save")
                     .style(move |s| {
                         let config = config.get();
                         s.width(100.0)
@@ -465,7 +480,7 @@ fn keyboard_picker_view(
                             );
                         }
                     }),
-                text("Cancel")
+                Label::new("Cancel")
                     .style(move |s| {
                         let config = config.get();
                         s.margin_left(20.0)
@@ -511,11 +526,11 @@ fn keyboard_picker_view(
                 .border_radius(6.0)
                 .border_color(config.color(LapceColor::LAPCE_BORDER))
                 .background(config.color(LapceColor::PANEL_BACKGROUND))
+                
         }),
     )
-    .keyboard_navigable()
     .on_event_stop(EventListener::KeyDown, move |event| {
-        if let Event::KeyDown(key_event) = event {
+        if let Event::Pointer(PointerEvent::Down(key_event)) = event {
             if let Some(keypress) = KeyPressData::keypress(key_event) {
                 if let Some(keypress) = keypress.keymap_press() {
                     picker.keys.update(|keys| {
@@ -534,7 +549,7 @@ fn keyboard_picker_view(
         }
     })
     .on_event_stop(EventListener::KeyUp, move |event| {
-        if let Event::KeyUp(_key_event) = event {
+        if let Event::Pointer(PointerEvent::Up(_key_event))  = event {
             picker.keys.update(|keys| {
                 if let Some((_last_key, last_key_confirmed)) = keys.last_mut() {
                     *last_key_confirmed = true;
@@ -548,11 +563,12 @@ fn keyboard_picker_view(
             .items_center()
             .justify_center()
             .apply_if(picker.keymap.with(|keymap| keymap.is_none()), |s| s.hide())
+            .focusable(true)
     })
     .debug_name("keyboard picker");
 
     let id = view.id();
-    create_effect(move |_| {
+    Effect::new(move |_| {
         if picker.keymap.with(|k| k.is_some()) {
             id.request_focus();
         }

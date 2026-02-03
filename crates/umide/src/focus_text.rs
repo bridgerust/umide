@@ -5,7 +5,7 @@ use floem::{
         kurbo::{Point, Rect},
     },
     prop_extractor,
-    reactive::create_effect,
+    reactive::{Effect},
     style::{FontFamily, FontSize, LineHeight, Style, TextColor},
     taffy::prelude::NodeId,
     text::{Attrs, AttrsList, FamilyOwned, TextLayout, Weight},
@@ -33,17 +33,17 @@ pub fn focus_text(
 ) -> FocusText {
     let id = ViewId::new();
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let new_text = text();
         id.update_state(FocusTextState::Text(new_text));
     });
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let focus_color = focus_color();
         id.update_state(FocusTextState::FocusColor(focus_color));
     });
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let focus_indices = focus_indices();
         id.update_state(FocusTextState::FocusIndices(focus_indices));
     });

@@ -15,14 +15,14 @@ use floem::{
         Color,
         kurbo::{Point, Rect, Size},
     },
-    pointer::PointerInputEvent,
+    ui_events::pointer::{PointerButton, PointerButtonEvent, PointerEvent},
     prelude::SignalTrack,
-    reactive::{ReadSignal, RwSignal, SignalGet, SignalWith, create_effect},
+    reactive::{ReadSignal, RwSignal, SignalGet, SignalWith, Effect},
     text::{Attrs, AttrsList, FamilyOwned, TextLayout, Weight},
     views::editor::{core::register::Clipboard, text::SystemClipboard},
 };
-use lapce_core::mode::Mode;
-use lapce_rpc::{proxy::ProxyRpcHandler, terminal::TermId};
+use umide_core::mode::Mode;
+use umide_rpc::{proxy::ProxyRpcHandler, terminal::TermId};
 use lsp_types::Position;
 use parking_lot::RwLock;
 use regex::Regex;
@@ -88,25 +88,25 @@ pub fn terminal_view(
 ) -> TerminalView {
     let id = ViewId::new();
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let raw = raw.get();
         id.update_state(TerminalViewState::Raw(raw));
     });
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         launch_error.track();
         id.request_paint();
     });
 
     let config = terminal_panel_data.common.config;
-    create_effect(move |_| {
+    Effect::new(move |_| {
         config.with(|_c| {});
         id.update_state(TerminalViewState::Config);
     });
 
     let proxy = terminal_panel_data.common.proxy.clone();
 
-    create_effect(move |last| {
+    Effect::new(move |last| {
         let focus = terminal_panel_data.common.focus.get();
 
         let mut is_focused = false;
@@ -213,32 +213,32 @@ impl TerminalView {
         None
     }
 
-    fn update_mouse_action_by_down(&mut self, mouse: &PointerInputEvent) {
+    fn update_mouse_action_by_down(&mut self, mouse: &PointerButtonEvent) {
         let mut next_action = MouseAction::None;
         match self.current_mouse_action {
             MouseAction::None
             | MouseAction::LeftDouble { .. }
             | MouseAction::LeftSelect { .. }
             | MouseAction::RightOnce { .. } => {
-                if mouse.button.is_primary() {
-                    next_action = MouseAction::LeftDown { pos: mouse.pos };
-                } else if mouse.button.is_secondary() {
-                    next_action = MouseAction::RightDown { pos: mouse.pos };
+                if mouse.button == Some(PointerButton::Primary) {
+                    next_action = MouseAction::LeftDown { pos: mouse.state.logical_point() };
+                } else if mouse.button == Some(PointerButton::Secondary) {
+                    next_action = MouseAction::RightDown { pos: mouse.state.logical_point() };
                 }
             }
             MouseAction::LeftOnce { pos, time } => {
                 let during_mills =
                     time.elapsed().map(|x| x.as_millis()).unwrap_or(u128::MAX);
                 match (
-                    mouse.button.is_primary(),
-                    mouse.pos == pos,
+                    mouse.button == Some(PointerButton::Primary),
+                    mouse.state.logical_point() == pos,
                     during_mills < CLICK_THRESHOLD,
                 ) {
                     (true, true, true) => {
                         next_action = MouseAction::LeftOnceAndDown { pos, time };
                     }
                     (true, _, _) => {
-                        next_action = MouseAction::LeftDown { pos: mouse.pos };
+                        next_action = MouseAction::LeftDown { pos: mouse.state.logical_point() };
                     }
                     _ => {}
                 }
@@ -250,12 +250,12 @@ impl TerminalView {
         self.current_mouse_action = next_action;
     }
 
-    fn update_mouse_action_by_up(&mut self, mouse: &PointerInputEvent) {
+    fn update_mouse_action_by_up(&mut self, mouse: &PointerButtonEvent) {
         let mut next_action = MouseAction::None;
         match self.current_mouse_action {
             MouseAction::None => {}
             MouseAction::LeftDown { pos } => {
-                match (mouse.button.is_primary(), mouse.pos == pos) {
+                match (mouse.button == Some(PointerButton::Primary), mouse.state.logical_point() == pos) {
                     (true, true) => {
                         next_action = MouseAction::LeftOnce {
                             pos,
@@ -265,7 +265,7 @@ impl TerminalView {
                     (true, false) => {
                         next_action = MouseAction::LeftSelect {
                             start_pos: pos,
-                            end_pos: mouse.pos,
+                            end_pos: mouse.state.logical_point(),
                         };
                     }
                     _ => {}
@@ -277,8 +277,8 @@ impl TerminalView {
                 let during_mills =
                     time.elapsed().map(|x| x.as_millis()).unwrap_or(u128::MAX);
                 match (
-                    mouse.button.is_primary(),
-                    mouse.pos == pos,
+                    mouse.button == Some(PointerButton::Primary),
+                    mouse.state.logical_point() == pos,
                     during_mills < CLICK_THRESHOLD,
                 ) {
                     (true, true, true) => {
@@ -286,14 +286,14 @@ impl TerminalView {
                     }
                     (true, true, false) => {
                         next_action = MouseAction::LeftOnce {
-                            pos: mouse.pos,
+                            pos: mouse.state.logical_point(),
                             time: SystemTime::now(),
                         };
                     }
                     (true, false, _) => {
                         next_action = MouseAction::LeftSelect {
                             start_pos: pos,
-                            end_pos: mouse.pos,
+                            end_pos: mouse.state.logical_point(),
                         };
                     }
                     _ => {}
@@ -301,7 +301,7 @@ impl TerminalView {
             }
             MouseAction::LeftDouble { .. } => {}
             MouseAction::RightDown { pos } => {
-                if mouse.button.is_secondary() && mouse.pos == pos {
+                if mouse.button == Some(PointerButton::Secondary) && mouse.state.logical_point() == pos {
                     next_action = MouseAction::RightOnce { pos };
                 }
             }
@@ -502,16 +502,16 @@ impl View for TerminalView {
         event: &Event,
     ) -> EventPropagation {
         match event {
-            Event::PointerDown(e) => {
+            Event::Pointer(PointerEvent::Down(e)) => {
                 self.update_mouse_action_by_down(e);
             }
-            Event::PointerUp(e) => {
+            Event::Pointer(PointerEvent::Up(e)) => {
                 self.update_mouse_action_by_up(e);
                 let mut clear_selection = false;
                 match self.current_mouse_action {
                     MouseAction::LeftOnce { pos, .. } => {
                         clear_selection = true;
-                        if e.modifiers.control() && self.click(pos).is_some() {
+                        if e.state.modifiers.ctrl() && self.click(pos).is_some() {
                             return EventPropagation::Stop;
                         }
                     }
@@ -525,7 +525,7 @@ impl View for TerminalView {
                             .update(self.get_terminal_point(end_pos), Side::Right);
                         selection.include_all();
                         self.raw.write().term.selection = Some(selection);
-                        _cx.app_state_mut().request_paint(self.id);
+                        self.id.request_paint();
                     }
                     MouseAction::LeftDouble { pos } => {
                         let position = self.get_terminal_point(pos);
@@ -541,7 +541,7 @@ impl View for TerminalView {
                         selection.update(end_point, Side::Right);
                         selection.include_all();
                         raw.term.selection = Some(selection);
-                        _cx.app_state_mut().request_paint(self.id);
+                        self.id.request_paint();
                     }
                     MouseAction::RightOnce { pos } => {
                         let position = self.get_terminal_point(pos);
@@ -571,7 +571,7 @@ impl View for TerminalView {
                 }
                 if clear_selection {
                     self.raw.write().term.selection = None;
-                    _cx.app_state_mut().request_paint(self.id);
+                    self.id.request_paint();
                 }
             }
             _ => {}
@@ -594,7 +594,7 @@ impl View for TerminalView {
                     self.raw = raw;
                 }
             }
-            cx.app_state_mut().request_paint(self.id);
+            cx.window_state.request_paint(self.id());
         }
     }
 

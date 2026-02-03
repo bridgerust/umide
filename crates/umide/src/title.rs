@@ -3,16 +3,16 @@ use std::{rc::Rc, sync::Arc};
 use floem::{
     View,
     event::EventListener,
-    menu::{Menu, MenuItem},
+    menu::Menu,
     peniko::Color,
     reactive::{
-        Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo,
+        Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith,
     },
     style::{AlignItems, CursorStyle, JustifyContent},
-    views::{Decorators, container, drag_window_area, empty, label, stack, svg},
+    views::{Container, Decorators, Empty, Label, Stack, drag_window_area, svg},
 };
-use lapce_core::meta;
-use lapce_rpc::proxy::ProxyStatus;
+use umide_core::meta;
+use umide_rpc::proxy::ProxyStatus;
 
 use crate::{
     app::{clickable_icon, not_clickable_icon, tooltip_label, window_menu},
@@ -35,8 +35,8 @@ fn left(
 ) -> impl View {
     let is_local = workspace.kind.is_local();
     let is_macos = cfg!(target_os = "macos");
-    stack((
-        empty().style(move |s| {
+    Stack::new((
+        Empty::new().style(move |s| {
             let should_hide = if is_macos {
                 num_window_tabs.get() > 1
             } else {
@@ -44,7 +44,7 @@ fn left(
             };
             s.width(75.0).apply_if(should_hide, |s| s.hide())
         }),
-        container(svg(move || config.get().ui_svg(LapceIcons::LOGO)).style(
+        Container::new(svg(move || config.get().ui_svg(LapceIcons::LOGO)).style(
             move |s| {
                 let config = config.get();
                 s.size(16.0, 16.0)
@@ -67,7 +67,7 @@ fn left(
         }),
         tooltip_label(
             config,
-            container(svg(move || config.get().ui_svg(LapceIcons::REMOTE)).style(
+            Container::new(svg(move || config.get().ui_svg(LapceIcons::REMOTE)).style(
                 move |s| {
                     let config = config.get();
                     let size = (config.ui.icon_size() as f32 + 2.0).min(30.0);
@@ -85,17 +85,17 @@ fn left(
         )
         .popout_menu(move || {
             #[allow(unused_mut)]
-            let mut menu = Menu::new("").entry(
-                MenuItem::new("Connect to SSH Host").action(move || {
+            let mut menu = Menu::new()
+                .item("Connect to SSH Host", |i| i.action(move || {
                     workbench_command.send(LapceWorkbenchCommand::ConnectSshHost);
-                }),
-            );
+                }));
+
             if !is_local
                 && proxy_status.get().is_some_and(|p| {
                     matches!(p, ProxyStatus::Connecting | ProxyStatus::Connected)
                 })
             {
-                menu = menu.entry(MenuItem::new("Disconnect remote").action(
+                menu = menu.item("Disconnect remote", |i| i.action(
                     move || {
                         workbench_command
                             .send(LapceWorkbenchCommand::DisconnectRemote);
@@ -104,7 +104,7 @@ fn left(
             }
             #[cfg(windows)]
             {
-                menu = menu.entry(MenuItem::new("Connect to WSL Host").action(
+                menu = menu.item("Connect to WSL Host", |i| i.action(
                     move || {
                         workbench_command
                             .send(LapceWorkbenchCommand::ConnectWslHost);
@@ -146,7 +146,7 @@ fn left(
                     )
                 })
         }),
-        drag_window_area(empty())
+        drag_window_area(Empty::new())
             .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
     ))
     .style(move |s| {
@@ -167,10 +167,10 @@ fn middle(
     let local_workspace = workspace.clone();
     let can_jump_backward = {
         let main_split = main_split.clone();
-        create_memo(move |_| main_split.can_jump_location_backward(true))
+        Memo::new(move |_| main_split.can_jump_location_backward(true))
     };
     let can_jump_forward =
-        create_memo(move |_| main_split.can_jump_location_forward(true));
+        Memo::new(move |_| main_split.can_jump_location_forward(true));
 
     let jump_backward = move || {
         clickable_icon(
@@ -208,19 +208,19 @@ fn middle(
             config,
         )
         .popout_menu(move || {
-            Menu::new("")
-                .entry(MenuItem::new("Open Folder").action(move || {
+            Menu::new()
+                .item("Open Folder", |i| i.action(move || {
                     workbench_command.send(LapceWorkbenchCommand::OpenFolder);
                 }))
-                .entry(MenuItem::new("Open Recent Workspace").action(move || {
+                .item("Open Recent Workspace", |i| i.action(move || {
                     workbench_command.send(LapceWorkbenchCommand::PaletteWorkspace);
                 }))
         })
     };
 
-    stack((
-        stack((
-            drag_window_area(empty())
+    Stack::new((
+        Stack::new((
+            drag_window_area(Empty::new())
                 .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
             jump_backward(),
             jump_forward(),
@@ -230,8 +230,8 @@ fn middle(
                 .flex_grow(1.0)
                 .justify_content(Some(JustifyContent::FlexEnd))
         }),
-        container(
-            stack((
+        Container::new(
+            Stack::new((
                 svg(move || config.get().ui_svg(LapceIcons::SEARCH)).style(
                     move |s| {
                         let config = config.get();
@@ -240,7 +240,7 @@ fn middle(
                             .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
                     },
                 ),
-                label(move || {
+                Label::new({
                     if let Some(s) = local_workspace.display() {
                         s
                     } else {
@@ -274,7 +274,7 @@ fn middle(
                 .border_radius(6.0)
                 .background(config.color(LapceColor::EDITOR_BACKGROUND))
         }),
-        stack((
+        Stack::new((
             clickable_icon(
                 || LapceIcons::START,
                 move || {
@@ -286,7 +286,7 @@ fn middle(
                 config,
             )
             .style(move |s| s.margin_horiz(6.0)),
-            drag_window_area(empty())
+            drag_window_area(Empty::new())
                 .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
         ))
         .style(move |s| {
@@ -313,7 +313,7 @@ fn right(
     window_maximized: RwSignal<bool>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    let latest_version = create_memo(move |_| {
+    let latest_version = Memo::new(move |_| {
         let latest_release = latest_release.get();
         let latest_version =
             latest_release.as_ref().as_ref().map(|r| r.version.clone());
@@ -328,10 +328,10 @@ fn right(
 
     let has_update = move || latest_version.with(|v| v.is_some());
 
-    stack((
-        drag_window_area(empty())
+    Stack::new((
+        drag_window_area(Empty::new())
             .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
-        stack((
+        Stack::new((
             not_clickable_icon(
                 || LapceIcons::SETTINGS,
                 || false,
@@ -340,48 +340,58 @@ fn right(
                 config,
             )
             .popout_menu(move || {
-                Menu::new("")
-                    .entry(MenuItem::new("Command Palette").action(move || {
+                Menu::new()
+                    .item("Command Palette", |i| i.action(move || {
                         workbench_command.send(LapceWorkbenchCommand::PaletteCommand)
                     }))
                     .separator()
-                    .entry(MenuItem::new("Open Settings").action(move || {
+                    .item("Open Settings", |i| i.action(move || {
                         workbench_command.send(LapceWorkbenchCommand::OpenSettings)
                     }))
-                    .entry(MenuItem::new("Open Keyboard Shortcuts").action(
+                    .item("Open Keyboard Shortcuts", |i| i.action(
                         move || {
                             workbench_command
                                 .send(LapceWorkbenchCommand::OpenKeyboardShortcuts)
                         },
                     ))
-                    .entry(MenuItem::new("Open Theme Color Settings").action(
+                    .item("Open Theme Color Settings", |i| i.action(
                         move || {
                             workbench_command
                                 .send(LapceWorkbenchCommand::OpenThemeColorSettings)
                         },
                     ))
                     .separator()
-                    .entry(if let Some(v) = latest_version.get_untracked() {
-                        if update_in_progress.get_untracked() {
-                            MenuItem::new(format!("Update in progress ({v})"))
-                                .enabled(false)
+                    .item(
+                        if let Some(v) = latest_version.get_untracked() {
+                            if update_in_progress.get_untracked() {
+                                format!("Update in progress ({v})")
+                            } else {
+                                format!("Restart to update ({v})")
+                            }
                         } else {
-                            MenuItem::new(format!("Restart to update ({v})")).action(
-                                move || {
-                                    workbench_command
-                                        .send(LapceWorkbenchCommand::RestartToUpdate)
-                                },
-                            )
+                            "No update available".to_string()
+                        },
+                        |i| {
+                            if latest_version.get_untracked().is_some() {
+                                if update_in_progress.get_untracked() {
+                                    i.enabled(false)
+                                } else {
+                                    i.action(move || {
+                                        workbench_command
+                                            .send(LapceWorkbenchCommand::RestartToUpdate)
+                                    })
+                                }
+                            } else {
+                                i.enabled(false)
+                            }
                         }
-                    } else {
-                        MenuItem::new("No update available").enabled(false)
-                    })
+                    )
                     .separator()
-                    .entry(MenuItem::new("About UMIDE").action(move || {
+                    .item("About UMIDE", |i| i.action(move || {
                         workbench_command.send(LapceWorkbenchCommand::ShowAbout)
                     }))
             }),
-            container(label(|| "1".to_string()).style(move |s| {
+            Container::new(Label::new("1".to_string()).style(move |s| {
                 let config = config.get();
                 s.font_size(10.0)
                     .color(config.color(LapceColor::EDITOR_BACKGROUND))
@@ -429,7 +439,7 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
     let title_height = window_tab_data.title_height;
     let update_in_progress = window_tab_data.update_in_progress;
     let config = window_tab_data.common.config;
-    stack((
+    Stack::new((
         left(
             workspace.clone(),
             lapce_command,
@@ -479,7 +489,7 @@ pub fn window_controls_view(
     window_maximized: RwSignal<bool>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    stack((
+    Stack::new((
         clickable_icon(
             || LapceIcons::WINDOW_MINIMIZE,
             || {

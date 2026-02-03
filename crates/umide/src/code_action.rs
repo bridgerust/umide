@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
 use floem::{
-    keyboard::Modifiers,
+    prelude::Modifiers,
     peniko::kurbo::Rect,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate},
 };
-use lapce_core::{command::FocusCommand, mode::Mode, movement::Movement};
-use lapce_rpc::plugin::PluginId;
+use umide_core::{command::FocusCommand, mode::Mode, movement::Movement};
+use umide_rpc::plugin::PluginId;
 use lsp_types::CodeActionOrCommand;
 
 use crate::{

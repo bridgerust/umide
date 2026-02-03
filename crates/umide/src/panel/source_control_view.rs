@@ -4,19 +4,17 @@ use floem::{
     View,
     action::show_context_menu,
     event::{Event, EventListener},
-    menu::{Menu, MenuItem},
+    menu::Menu,
     peniko::kurbo::Rect,
-    prelude::SignalTrack,
-    reactive::{SignalGet, SignalUpdate, SignalWith, create_memo, create_rw_signal},
+    prelude::{PointerButtonEvent, PointerEvent, SignalTrack},
+    reactive::{Memo, RwSignal, SignalGet, SignalUpdate, SignalWith},
     style::{CursorStyle, Style},
     views::{
-        Decorators, container, dyn_stack,
-        editor::view::{LineRegion, cursor_caret},
-        label, scroll, stack, svg, text,
+        Container, Decorators, Label, Scroll, Stack, dyn_stack, editor::view::{LineRegion, cursor_caret}, svg
     },
 };
-use lapce_core::buffer::rope_text::RopeText;
-use lapce_rpc::source_control::FileDiff;
+use umide_core::buffer::rope_text::RopeText;
+use umide_rpc::source_control::FileDiff;
 
 use super::{
     data::PanelSection, kind::PanelKind, position::PanelPosition,
@@ -43,7 +41,7 @@ pub fn source_control_panel(
     let cursor = editor.cursor();
     let viewport = editor.viewport();
     let window_origin = editor.window_origin();
-    let editor = create_rw_signal(editor);
+    let editor = RwSignal::new(editor);
     let is_active = move |tracked| {
         let focus = if tracked {
             focus.get()
@@ -52,23 +50,23 @@ pub fn source_control_panel(
         };
         focus == Focus::Panel(PanelKind::SourceControl)
     };
-    let is_empty = create_memo(move |_| {
+    let is_empty = Memo::new(move |_| {
         let doc = doc.get();
         doc.buffer.with(|b| b.len() == 0)
     });
-    let debug_breakline = create_memo(move |_| None);
+    let debug_breakline = Memo::new(move |_| None);
 
-    stack((
-        stack((
-            container({
-                scroll({
-                    let view = stack((
+    Stack::new((
+        Stack::new((
+            Container::new({
+                Scroll::new({
+                    let view = Stack::new((
                         editor_view(
                             editor.get_untracked(),
                             debug_breakline,
                             is_active,
                         ),
-                        label(|| "Commit Message".to_string()).style(move |s| {
+                        Label::new("Commit Message".to_string()).style(move |s| {
                             let config = config.get();
                             s.absolute()
                                 .items_center()
@@ -88,14 +86,14 @@ pub fn source_control_panel(
                     let id = view.id();
                     view.on_event_cont(EventListener::PointerDown, move |event| {
                         let event = event.clone().offset((10.0, 6.0));
-                        if let Event::PointerDown(pointer_event) = event {
+                        if let Event::Pointer(PointerEvent::Down(pointer_event)) = event {
                             id.request_active();
                             editor.get_untracked().pointer_down(&pointer_event);
                         }
                     })
                     .on_event_stop(EventListener::PointerMove, move |event| {
                         let event = event.clone().offset((10.0, 6.0));
-                        if let Event::PointerMove(pointer_event) = event {
+                        if let Event::Pointer(pointer_event) = event {
                             editor.get_untracked().pointer_move(&pointer_event);
                         }
                     })
@@ -103,8 +101,8 @@ pub fn source_control_panel(
                         EventListener::PointerUp,
                         move |event| {
                             let event = event.clone().offset((10.0, 6.0));
-                            if let Event::PointerUp(pointer_event) = event {
-                                editor.get_untracked().pointer_up(&pointer_event);
+                            if let Event::Pointer(PointerEvent::Up(PointerButtonEvent { state, .. })) = event {
+                                editor.get_untracked().pointer_up(&state);
                             }
                         },
                     )
@@ -125,7 +123,7 @@ pub fn source_control_panel(
                         &e_data.editor,
                         offset,
                         !cursor.is_insert(),
-                        cursor.affinity,
+                        cursor.affinity(),
                     );
                     let config = config.get_untracked();
                     let line_height = config.editor.line_height();
@@ -151,7 +149,7 @@ pub fn source_control_panel(
             }),
             {
                 let source_control = source_control.clone();
-                label(|| "Commit".to_string())
+                Label::new("Commit".to_string())
                     .on_click_stop(move |_| {
                         source_control.commit();
                     })
@@ -181,7 +179,7 @@ pub fn source_control_panel(
         ))
         .style(|s| s.flex_col().width_pct(100.0).padding(10.0)),
         foldable_panel_section(
-            text("Changes"),
+            Label::new("Changes"),
             file_diffs_view(source_control),
             window_tab_data.panel.section_open(PanelSection::Changes),
             config,
@@ -201,8 +199,8 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
     let file_diffs = source_control.file_diffs;
     let config = source_control.common.config;
     let workspace = source_control.common.workspace.clone();
-    let panel_rect = create_rw_signal(Rect::ZERO);
-    let panel_width = create_memo(move |_| panel_rect.get().width());
+    let panel_rect = RwSignal::new(Rect::ZERO);
+    let panel_width = RwSignal::new(move |_| panel_rect.get().width());
     let lapce_command = source_control.common.lapce_command;
     let internal_command = source_control.common.internal_command;
 
@@ -230,7 +228,7 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
             .unwrap_or("")
             .to_string();
         let style_path = path.clone();
-        stack((
+        Stack::new((
             checkbox(move || checked, config).on_click_stop(move |_| {
                 file_diffs.update(|diffs| {
                     if let Some((_, checked)) = diffs.get_mut(&full_path) {
@@ -247,24 +245,25 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
                     .margin(6.0)
                     .apply_opt(color, Style::color)
             }),
-            label(move || file_name.clone()).style(move |s| {
+            Label::new(file_name.clone()).style(move |s| {
                 let config = config.get();
                 let size = config.ui.icon_size() as f32;
-                let max_width = panel_width.get() as f32
-                    - 10.0
+                let max_width = panel_width.get()
+                (   - 10.0
                     - size
                     - 6.0
                     - size
                     - 6.0
                     - 10.0
                     - size
-                    - 6.0;
+                    - 6.0
+                );
                 s.text_ellipsis()
                     .margin_right(6.0)
                     .max_width(max_width)
                     .selectable(false)
             }),
-            label(move || folder.clone()).style(move |s| {
+            Label::new(folder.clone()).style(move |s| {
                 s.text_ellipsis()
                     .flex_grow(1.0)
                     .flex_basis(0.0)
@@ -272,7 +271,7 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
                     .min_width(0.0)
                     .selectable(false)
             }),
-            container({
+            Container::new({
                 svg(move || {
                     let svg = match &diff {
                         FileDiff::Modified(_) => LapceIcons::SCM_DIFF_MODIFIED,
@@ -322,12 +321,10 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
                 });
             };
 
-            if let Event::PointerDown(pointer_event) = event {
-                if pointer_event.button.is_secondary() {
-                    let menu = Menu::new("")
-                        .entry(MenuItem::new("Discard Changes").action(discard));
-                    show_context_menu(menu, None);
-                }
+            if let Event::Pointer(PointerEvent::Down(_pointer_event)) = event {
+                let menu = Menu::new()
+                    .item("Discard Changes", |i| i.action(discard));
+                show_context_menu(menu, None);
             }
         })
         .style(move |s| {
@@ -344,8 +341,8 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
         })
     };
 
-    container({
-        scroll({
+    Container::new({
+        Scroll::new({
             dyn_stack(
                 move || file_diffs.get(),
                 |(path, (diff, checked))| {

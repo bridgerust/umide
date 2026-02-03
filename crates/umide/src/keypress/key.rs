@@ -1,17 +1,19 @@
-use floem::keyboard::{Key, KeyLocation, NamedKey, PhysicalKey};
+use floem::{
+    prelude::{Code, Key, NamedKey},
+    ui_events::pointer::PointerButton,
+};
 
 use super::keymap::KeyMapKey;
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyInput {
+    Pointer(PointerButton),
     Keyboard {
-        physical: PhysicalKey,
+        physical: Code,
         logical: Key,
-        location: KeyLocation,
         key_without_modifiers: Key,
         repeat: bool,
     },
-    Pointer(floem::pointer::PointerButton),
 }
 
 impl KeyInput {
@@ -38,35 +40,25 @@ impl KeyInput {
             KeyInput::Keyboard {
                 physical,
                 key_without_modifiers,
-                logical,
-                location,
                 ..
             } => {
-                #[allow(clippy::single_match)]
-                match location {
-                    KeyLocation::Numpad => {
-                        return Some(KeyMapKey::Logical(logical.to_owned()));
-                    }
-                    _ => {}
-                }
-
+                // Location check removed as KeyLocation is unavailable
+                // Assumed Numpad handling logic if specific behavior needed logic here would check logical key
                 match key_without_modifiers {
                     Key::Named(_) => {
                         KeyMapKey::Logical(key_without_modifiers.to_owned())
                     }
                     Key::Character(c) => {
                         if c == " " {
-                            KeyMapKey::Logical(Key::Named(NamedKey::Space))
+                            KeyMapKey::Logical(Key::Character(" ".to_string()))
                         } else if c.len() == 1 && c.is_ascii() {
                             KeyMapKey::Logical(Key::Character(
-                                c.to_lowercase().into(),
+                                c.to_lowercase(),
                             ))
                         } else {
                             KeyMapKey::Physical(*physical)
                         }
                     }
-                    Key::Unidentified(_) => KeyMapKey::Physical(*physical),
-                    Key::Dead(_) => KeyMapKey::Physical(*physical),
                 }
             }
         })

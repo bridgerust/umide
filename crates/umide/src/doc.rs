@@ -13,16 +13,9 @@ use std::{
 };
 
 use floem::{
-    ViewId,
-    action::exec_after,
-    ext_event::create_ext_action,
-    keyboard::Modifiers,
-    peniko::Color,
-    reactive::{
-        ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, batch,
-    },
-    text::{Attrs, AttrsList, FamilyOwned, TextLayout},
-    views::editor::{
+    ViewId, action::exec_after, ext_event::create_ext_action, peniko::Color, prelude::Modifiers, reactive::{
+        Effect, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
+    }, text::{Attrs, AttrsList, FamilyOwned, TextLayout}, views::editor::{
         CursorInfo, Editor, EditorStyle,
         actions::CommonAction,
         command::{Command, CommandExecuted},
@@ -31,10 +24,10 @@ use floem::{
         phantom_text::{PhantomText, PhantomTextKind, PhantomTextLine},
         text::{Document, DocumentPhantom, PreeditData, Styling, SystemClipboard},
         view::{ScreenLines, ScreenLinesBase},
-    },
+    }
 };
 use itertools::Itertools;
-use lapce_core::{
+use umide_core::{
     buffer::{
         Buffer, InvalLines,
         diff::{DiffLines, rope_diff},
@@ -55,7 +48,7 @@ use lapce_core::{
     syntax::{BracketParser, Syntax, edit::SyntaxEdit},
     word::{CharClassification, WordCursor, get_char_property},
 };
-use lapce_rpc::{
+use umide_rpc::{
     buffer::BufferId,
     plugin::PluginId,
     proxy::ProxyResponse,
@@ -415,7 +408,7 @@ impl Doc {
     }
 
     pub fn set_syntax(&self, syntax: Syntax) {
-        batch(|| {
+        Effect::batch(|| {
             self.syntax.set(syntax);
             if self.semantic_styles.with_untracked(|s| s.is_none()) {
                 self.clear_style_cache();
@@ -440,7 +433,7 @@ impl Doc {
 
     //// Initialize the content with some text, this marks the document as loaded.
     pub fn init_content(&self, content: Rope) {
-        batch(|| {
+        Effect::batch(|| {
             self.syntax.with_untracked(|syntax| {
                 self.buffer.update(|buffer| {
                     buffer.init_content(content);
@@ -597,7 +590,7 @@ impl Doc {
 
     pub fn apply_deltas(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) {
         let rev = self.rev() - deltas.len() as u64;
-        batch(|| {
+        Effect::batch(|| {
             for (i, (_, delta, inval)) in deltas.iter().enumerate() {
                 self.update_styles(delta);
                 self.update_inlay_hints(delta);
@@ -644,7 +637,7 @@ impl Doc {
     }
 
     fn on_update(&self, edits: Option<SmallVec<[SyntaxEdit; 3]>>) {
-        batch(|| {
+        Effect::batch(|| {
             self.trigger_syntax_change(edits);
             self.trigger_head_change();
             self.check_auto_save();
@@ -685,9 +678,10 @@ impl Doc {
             edits
                 .iter()
                 .map(|edit| {
-                    let selection = lapce_core::selection::Selection::region(
+                    let selection = umide_core::selection::Selection::region(
                         buffer.offset_of_position(&edit.range.start),
                         buffer.offset_of_position(&edit.range.end),
+                        CursorAffinity::Forward
                     );
                     (selection, edit.new_text.as_str())
                 })
@@ -751,7 +745,7 @@ impl Doc {
     /// Update the styles after an edit, so the highlights are at the correct positions.
     /// This does not do a reparse of the document itself.
     fn update_styles(&self, delta: &RopeDelta) {
-        batch(|| {
+        Effect::batch(|| {
             self.semantic_styles.update(|styles| {
                 if let Some(styles) = styles.as_mut() {
                     styles.apply_shape(delta);
@@ -1428,7 +1422,7 @@ impl Doc {
         col: usize,
     ) {
         // TODO: more granular invalidation
-        batch(|| {
+        Effect::batch(|| {
             self.inline_completion.set(Some(inline_completion));
             self.inline_completion_pos.set((line, col));
             self.clear_text_cache();

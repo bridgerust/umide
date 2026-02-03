@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use lapce_rpc::dap_types::{ConfigSource, RunDebugConfig};
+use umide_rpc::dap_types::{ConfigSource, RunDebugConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

@@ -11,7 +11,7 @@ use floem::{
     reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::VirtualVector,
 };
-use lapce_rpc::{
+use umide_rpc::{
     dap_types::{
         self, DapId, RunDebugConfig, SourceBreakpoint, StackFrame, Stopped,
         ThreadId, Variable,
@@ -515,7 +515,7 @@ impl DapVariable {
 
 #[cfg(test)]
 mod tests {
-    use lapce_rpc::dap_types::{Scope, Variable};
+    use umide_rpc::dap_types::{Scope, Variable};
 
     use super::{DapVariable, ScopeOrVar};
 

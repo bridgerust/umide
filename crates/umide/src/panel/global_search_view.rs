@@ -1,11 +1,12 @@
-use std::{path::PathBuf, rc::Rc, sync::Arc};
+use std::{path::PathBuf, rc::Rc, sync::Arc, ops::Range};
+use umide_rpc::proxy::SearchMatch;
 
 use floem::{
     View,
     event::EventListener,
     reactive::{ReadSignal, SignalGet, SignalUpdate},
     style::{CursorStyle, Style},
-    views::{Decorators, container, label, scroll, stack, svg, virtual_stack},
+    views::{Container, Decorators, Scroll, Stack, Label, svg, virtual_stack, VirtualVector},
 };
 use lapce_xi_rope::find::CaseMatching;
 
@@ -23,6 +24,18 @@ use crate::{
     workspace::LapceWorkspace,
 };
 
+struct SearchMatchList(im::Vector<SearchMatch>);
+
+impl VirtualVector<SearchMatch> for SearchMatchList {
+    fn total_len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn slice(&mut self, range: Range<usize>) -> impl Iterator<Item = SearchMatch> {
+        self.0.iter().skip(range.start).take(range.end - range.start).cloned()
+    }
+}
+
 pub fn global_search_panel(
     window_tab_data: Rc<WindowTabData>,
     _position: PanelPosition,
@@ -39,9 +52,9 @@ pub fn global_search_panel(
     let focus = global_search.common.focus;
     let is_focused = move || focus.get() == Focus::Panel(PanelKind::Search);
 
-    stack((
-        container(
-            stack((
+    Stack::new((
+        Container::new(
+            Stack::new((
                 TextInputBuilder::new()
                     .is_focused(is_focused)
                     .build_editor(editor.clone())
@@ -114,8 +127,8 @@ fn search_result(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let ui_line_height = global_search_data.common.ui_line_height;
-    container({
-        scroll({
+    Container::new({
+        Scroll::new({
             virtual_stack(
                 move || global_search_data.clone(),
                 move |(path, _)| path.to_owned(),
@@ -145,8 +158,8 @@ fn search_result(
 
                     let expanded = match_data.expanded;
 
-                    stack((
-                        stack((
+                    Stack::new((
+                        Stack::new((
                             svg(move || {
                                 config.get().ui_svg(if expanded.get() {
                                     LapceIcons::ITEM_OPENED
@@ -176,13 +189,13 @@ fn search_result(
                                         .apply_opt(color, Style::color)
                                 },
                             ),
-                            stack((
-                                label(move || file_name.clone()).style(|s| {
+                            Stack::new((
+                                Label::new(file_name.clone()).style(|s| {
                                     s.margin_right(6.0)
                                         .max_width_pct(100.0)
                                         .text_ellipsis()
                                 }),
-                                label(move || folder.clone()).style(move |s| {
+                                Label::new(folder.clone()).style(move |s| {
                                     s.color(
                                         config.get().color(LapceColor::EDITOR_DIM),
                                     )
@@ -210,9 +223,9 @@ fn search_result(
                         virtual_stack(
                             move || {
                                 if expanded.get() {
-                                    match_data.matches.get()
+                                    SearchMatchList(match_data.matches.get())
                                 } else {
-                                    im::Vector::new()
+                                    SearchMatchList(im::Vector::new())
                                 }
                             },
                             |m| (m.line, m.start, m.end),

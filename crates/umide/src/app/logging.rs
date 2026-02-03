@@ -1,4 +1,4 @@
-use lapce_core::directory::Directory;
+use umide_core::directory::Directory;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{filter::Targets, reload::Handle};
@@ -46,8 +46,8 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
     // Filters
     let log_file_filter_targets = filter::Targets::new()
         .with_target("lapce_app", LevelFilter::DEBUG)
-        .with_target("lapce_proxy", LevelFilter::DEBUG)
-        .with_target("lapce_core", LevelFilter::DEBUG)
+        .with_target("umide_proxy", LevelFilter::DEBUG)
+        .with_target("umide_core", LevelFilter::DEBUG)
         .with_target("umide_emulator", LevelFilter::TRACE) // Added emulator trace
         .with_default(LevelFilter::from_level(TraceLevel::INFO));
     
@@ -65,14 +65,11 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
         .with_writer(debug_writer)
         .with_filter(filter::Targets::new().with_default(LevelFilter::DEBUG));
 
-    let rolling_layer = if let Some(writer) = log_file_writer {
-        Some(tracing_subscriber::fmt::subscriber()
-            .with_ansi(false)
-            .with_writer(writer)
-            .with_filter(log_file_filter))
-    } else {
-        None
-    };
+    let rolling_layer = log_file_writer.map(|writer|
+        tracing_subscriber::fmt::subscriber()
+        .with_ansi(false)
+        .with_writer(writer)
+        .with_filter(log_file_filter));
 
     let console_layer = fmt::Subscriber::default()
         .with_line_number(true)

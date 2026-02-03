@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use indexmap::IndexMap;
-use lapce_core::mode::Modes;
+use umide_core::mode::Modes;
 use tracing::{debug, error};
 
 use super::keymap::{KeyMap, KeyMapPress};
@@ -18,11 +18,11 @@ impl KeyMapLoader {
         }
     }
 
-    pub fn load_from_str<'a>(
-        &'a mut self,
+    pub fn load_from_str(
+        &mut self,
         s: &str,
         modal: bool,
-    ) -> Result<&'a mut Self> {
+    ) -> Result<&mut Self> {
         let toml_keymaps: toml_edit::DocumentMut = s.parse()?;
         let toml_keymaps = toml_keymaps
             .get("keymaps")
@@ -137,10 +137,9 @@ fn get_modes(toml_keymap: &toml_edit::Table) -> Modes {
 
 #[cfg(test)]
 mod tests {
-    use floem::keyboard::Key;
-
     use super::*;
     use crate::keypress::keymap::KeyMapKey;
+    use floem::prelude::Key;
 
     #[test]
     fn test_keymap() {
@@ -174,7 +173,7 @@ when = "n"
 key = "shift+i"
 command = "insert_first_non_blank"
 when = "n"
-        
+
 [[keymaps]]
 key = "MouseForward"
 command = "jump_location_forward"
@@ -182,7 +181,7 @@ command = "jump_location_forward"
 [[keymaps]]
 key = "MouseBackward"
 command = "jump_location_backward"
-        
+
 [[keymaps]]
 key = "Ctrl+MouseMiddle"
 command = "goto_definition"

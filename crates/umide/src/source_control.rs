@@ -1,12 +1,12 @@
 use std::{path::PathBuf, rc::Rc};
 
 use floem::{
-    keyboard::Modifiers,
+    prelude::Modifiers,
     reactive::{RwSignal, Scope, SignalWith},
 };
 use indexmap::IndexMap;
-use lapce_core::mode::Mode;
-use lapce_rpc::source_control::FileDiff;
+use umide_core::mode::Mode;
+use umide_rpc::source_control::FileDiff;
 
 use crate::{
     command::{CommandExecuted, CommandKind},

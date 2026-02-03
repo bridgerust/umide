@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
-use lapce_core::{directory::Directory, meta};
+use umide_core::{directory::Directory, meta};
 use serde::Deserialize;
 
 #[derive(Clone, Deserialize, Debug)]
@@ -30,7 +30,7 @@ pub fn get_latest_release() -> Result<ReleaseInfo> {
         _ => "https://api.github.com/repos/lapce/lapce/releases/latest",
     };
 
-    let resp = lapce_proxy::get_url(url, Some("Lapce"))?;
+    let resp = umide_proxy::get_url(url, Some("Lapce"))?;
     if !resp.status().is_success() {
         return Err(anyhow!("get release info failed {}", resp.text()?));
     }
@@ -72,7 +72,7 @@ pub fn download_release(release: &ReleaseInfo) -> Result<PathBuf> {
 
     for asset in &release.assets {
         if asset.name == name {
-            let mut resp = lapce_proxy::get_url(&asset.browser_download_url, None)?;
+            let mut resp = umide_proxy::get_url(&asset.browser_download_url, None)?;
             if !resp.status().is_success() {
                 return Err(anyhow!("download file error {}", resp.text()?));
             }

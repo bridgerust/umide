@@ -12,29 +12,18 @@ use std::{
 
 use alacritty_terminal::vte::ansi::Handler;
 use floem::{
-    ViewId,
-    action::{TimerToken, open_file, remove_overlay},
-    ext_event::{create_ext_action, create_signal_from_channel},
-    file::FileDialogOptions,
-    keyboard::Modifiers,
-    kurbo::Size,
-    peniko::kurbo::{Point, Rect, Vec2},
-    prelude::SignalTrack,
-    reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        WriteSignal, use_context,
-    },
-    text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout},
-    views::editor::core::buffer::rope_text::RopeText,
+    ViewId, action::{TimerToken, open_file, remove_overlay}, ext_event::create_ext_action, file::FileDialogOptions, kurbo::Size, peniko::kurbo::{Point, Rect, Vec2}, prelude::{Modifiers, SignalTrack}, reactive::{
+        Context, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, WriteSignal
+    }, receiver_signal::ChannelSignal, text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout}, views::editor::core::buffer::rope_text::RopeText
 };
 use im::HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use lapce_core::{
+use umide_core::{
     command::FocusCommand, cursor::CursorAffinity, directory::Directory, meta,
     mode::Mode, register::Register,
 };
-use lapce_rpc::{
+use umide_rpc::{
     RpcError,
     core::CoreNotification,
     dap_types::{ConfigSource, RunDebugConfig},
@@ -287,7 +276,7 @@ impl WindowTabData {
         window_common: Rc<WindowCommonData>,
     ) -> Self {
         let cx = cx.create_child();
-        let db: Arc<LapceDb> = use_context().unwrap();
+        let db: Arc<LapceDb> = Context::get().unwrap();
 
         let disabled_volts = db.get_disabled_volts().unwrap_or_default();
         let workspace_disabled_volts = db
@@ -456,7 +445,7 @@ impl WindowTabData {
                 let mut panel_order = db
                     .get_panel_orders()
                     .unwrap_or_else(|_| default_panel_order());
-                if !super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_some() {
+                if super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_none() {
                     let panels = panel_order.entry(PanelPosition::RightTop).or_default();
                     panels.push_back(PanelKind::Emulator);
                 }
@@ -480,7 +469,7 @@ impl WindowTabData {
                 let mut panel_order = db
                     .get_panel_orders()
                     .unwrap_or_else(|_| default_panel_order());
-                if !super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_some() {
+                if super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_none() {
                     let panels = panel_order.entry(PanelPosition::RightTop).or_default();
                     panels.push_back(PanelKind::Emulator);
                 }
@@ -551,7 +540,7 @@ impl WindowTabData {
         );
 
         {
-            let notification = create_signal_from_channel(term_notification_rx);
+            let notification = ChannelSignal::new(term_notification_rx);
             let terminal = terminal.clone();
             cx.create_effect(move |_| {
                 notification.with(|notification| {
@@ -647,7 +636,7 @@ impl WindowTabData {
             let window_tab_data = window_tab_data.clone();
             let notification = window_tab_data.proxy.notification;
             cx.create_effect(move |_| {
-                notification.with(|rpc| {
+                notification.with(|rpc: &Option<CoreNotification>| {
                     if let Some(rpc) = rpc.as_ref() {
                         window_tab_data.handle_core_notification(rpc);
                     }
@@ -659,7 +648,7 @@ impl WindowTabData {
     }
 
     pub fn reload_config(&self) {
-        let db: Arc<LapceDb> = use_context().unwrap();
+        let db: Arc<LapceDb> = Context::get().unwrap();
 
         let disabled_volts = db.get_disabled_volts().unwrap_or_default();
         let workspace_disabled_volts = db
@@ -696,7 +685,7 @@ impl WindowTabData {
             if config.core.auto_reload_plugin {
                 let mut plugin_metas: HashMap<
                     String,
-                    lapce_rpc::plugin::VoltMetadata,
+                    umide_rpc::plugin::VoltMetadata,
                 > = self
                     .plugin
                     .installed
@@ -2305,7 +2294,7 @@ impl WindowTabData {
                 message,
                 target,
             } => {
-                use lapce_rpc::core::LogLevel;
+                use umide_rpc::core::LogLevel;
                 use tracing_log::log::{Level, log};
 
                 let target = target.clone().unwrap_or(String::from("unknown"));

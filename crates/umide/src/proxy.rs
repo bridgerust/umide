@@ -2,12 +2,12 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     process::Command,
-    sync::{Arc, mpsc::Sender},
+    sync::{Arc, mpsc::{RecvError, Sender}},
 };
 
-use floem::{ext_event::create_signal_from_channel, reactive::ReadSignal};
-use lapce_proxy::dispatch::Dispatcher;
-use lapce_rpc::{
+use floem::{receiver_signal::ChannelSignal};
+use umide_proxy::dispatch::Dispatcher;
+use umide_rpc::{
     core::{CoreHandler, CoreNotification, CoreRpcHandler},
     plugin::VoltID,
     proxy::{ProxyRpcHandler, ProxyStatus},
@@ -35,7 +35,7 @@ pub struct Proxy {
 pub struct ProxyData {
     pub proxy_rpc: ProxyRpcHandler,
     pub core_rpc: CoreRpcHandler,
-    pub notification: ReadSignal<Option<CoreNotification>>,
+    pub notification: ChannelSignal<Option<CoreNotification>, RecvError>,
 }
 
 impl ProxyData {
@@ -127,7 +127,7 @@ pub fn new_proxy(
             .unwrap()
     };
 
-    let notification = create_signal_from_channel(rx);
+    let notification = ChannelSignal::new(rx);
 
     ProxyData {
         proxy_rpc,
@@ -137,7 +137,7 @@ pub fn new_proxy(
 }
 
 impl CoreHandler for Proxy {
-    fn handle_notification(&mut self, rpc: lapce_rpc::core::CoreNotification) {
+    fn handle_notification(&mut self, rpc: umide_rpc::core::CoreNotification) {
         if let CoreNotification::UpdateTerminal { term_id, content } = &rpc {
             if let Err(err) = self
                 .term_tx
@@ -154,8 +154,8 @@ impl CoreHandler for Proxy {
 
     fn handle_request(
         &mut self,
-        _id: lapce_rpc::RequestId,
-        _rpc: lapce_rpc::core::CoreRequest,
+        _id: umide_rpc::RequestId,
+        _rpc: umide_rpc::core::CoreRequest,
     ) {
     }
 }

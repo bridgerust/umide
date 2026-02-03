@@ -6,10 +6,13 @@ fn main() {
         
         cc::Build::new()
             .cpp(true)
-            .file("cpp/macos_surface.mm")
+            .file("cpp/macos_surface.mm") // Keep old one for now if needed, or remove if replacing
+            .file("cpp/src/emulator_api.cpp")
+            .file("cpp/src/macos/macos_emulator.mm")
             .flag("-std=c++17")
             .flag("-fobjc-arc")
             .include("cpp/include")
+            .include("cpp") // Add root cpp dir to include path for "src/emulator.h" resolution
             // Link against required macOS frameworks
             .compile("umide_native_cpp");
         

@@ -5,16 +5,16 @@ use floem::{
     event::EventListener,
     peniko::kurbo::{Point, Rect, Size},
     reactive::{
-        RwSignal, SignalGet, SignalUpdate, SignalWith, create_memo, create_rw_signal,
+        RwSignal, SignalGet, SignalUpdate, SignalWith, Memo,
     },
     style::CursorStyle,
     views::{
-        Decorators, VirtualVector, container, dyn_container, img, label,
-        scroll::scroll, stack, svg, virtual_stack,
+        Decorators, VirtualVector, Container, dyn_container, img, Label,
+        Scroll, Stack, svg, virtual_stack,
     },
 };
 use indexmap::IndexMap;
-use lapce_rpc::{
+use umide_rpc::{
     core::CoreRpcHandler,
     plugin::{VoltID, VoltInfo},
 };
@@ -101,7 +101,7 @@ fn installed_view(plugin: PluginData) -> impl View {
         let volt_id = meta.id();
         let local_volt_id = volt_id.clone();
         let icon = volt.icon;
-        stack((
+        Stack::new((
             dyn_container(
                 move || icon.get(),
                 move |icon| match icon {
@@ -123,21 +123,21 @@ fn installed_view(plugin: PluginData) -> impl View {
                     .margin_right(10.0)
                     .padding(5)
             }),
-            stack((
-                label(move || meta.display_name.clone()).style(|s| {
+            Stack::new((
+                Label::derived(move || meta.display_name.clone()).style(|s| {
                     s.font_bold()
                         .text_ellipsis()
                         .min_width(0.0)
                         .selectable(false)
                 }),
-                label(move || meta.description.clone())
+                Label::derived(move || meta.description.clone())
                     .style(|s| s.text_ellipsis().min_width(0.0).selectable(false)),
-                stack((
-                    stack((
-                        label(move || meta.author.clone()).style(|s| {
+                Stack::new((
+                    Stack::new((
+                        Label::derived(move || meta.author.clone()).style(|s| {
                             s.text_ellipsis().max_width_pct(100.0).selectable(false)
                         }),
-                        label(move || {
+                        Label::derived(move || {
                             if disabled.with(|d| d.contains(&volt_id))
                                 || workspace_disabled.with(|d| d.contains(&volt_id))
                             {
@@ -192,8 +192,8 @@ fn installed_view(plugin: PluginData) -> impl View {
         })
     };
 
-    container(
-        scroll(
+    Container::new(
+        Scroll::new(
             virtual_stack(
                 move || IndexMapItems(volts.get()),
                 move |(_, id, _)| id.clone(),
@@ -223,10 +223,10 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
     let install_button =
         move |id: VoltID, info: RwSignal<VoltInfo>, installing: RwSignal<bool>| {
             let plugin = local_plugin.clone();
-            let installed = create_memo(move |_| {
+            let installed = Memo::new(move |_| {
                 installed.with(|installed| installed.contains_key(&id))
             });
-            label(move || {
+            Label::derived(move || {
                 if installed.get() {
                     "Installed".to_string()
                 } else if installing.get() {
@@ -235,7 +235,6 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
                     "Install".to_string()
                 }
             })
-            .disabled(move || installed.get() || installing.get())
             .on_click_stop(move |_| {
                 plugin.install_volt(info.get_untracked());
             })
@@ -263,6 +262,11 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
                         )
                     })
                     .disabled(|s| s.background(config.color(LapceColor::EDITOR_DIM)))
+                    .set_disabled({
+                        let a: bool = installed.get();
+                        let b: bool= installing.get();
+                        a || b
+                    })
             })
         };
 
@@ -270,7 +274,7 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
         let info = volt.info.get_untracked();
         let icon = volt.icon;
         let volt_id = info.id();
-        stack((
+        Stack::new((
             dyn_container(
                 move || icon.get(),
                 move |icon| match icon {
@@ -292,17 +296,17 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
                     .margin_right(10.0)
                     .padding(5)
             }),
-            stack((
-                label(move || info.display_name.clone()).style(|s| {
+            Stack::new((
+                Label::derived(move || info.display_name.clone()).style(|s| {
                     s.font_bold()
                         .text_ellipsis()
                         .min_width(0.0)
                         .selectable(false)
                 }),
-                label(move || info.description.clone())
+                Label::derived(move || info.description.clone())
                     .style(|s| s.text_ellipsis().min_width(0.0).selectable(false)),
-                stack((
-                    label(move || info.author.clone()).style(|s| {
+                Stack::new((
+                    Label::derived(move || info.author.clone()).style(|s| {
                         s.text_ellipsis()
                             .min_width(0.0)
                             .flex_grow(1.0)
@@ -333,16 +337,16 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
         })
     };
 
-    let content_rect = create_rw_signal(Rect::ZERO);
+    let content_rect = RwSignal::new(Rect::ZERO);
 
     let editor = plugin.available.query_editor.clone();
     let focus = plugin.common.focus;
     let is_focused = move || focus.get() == Focus::Panel(PanelKind::Plugin);
-    let cursor_x = create_rw_signal(0.0);
+    let cursor_x = RwSignal::new(0.0);
 
-    stack((
-        container({
-            scroll(
+    Stack::new((
+        Container::new({
+            Scroll::new(
                 TextInputBuilder::new()
                     .is_focused(is_focused)
                     .build_editor(editor.clone())
@@ -375,8 +379,8 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
             })
         })
         .style(|s| s.padding(10.0).width_pct(100.0)),
-        container({
-            scroll({
+        Container::new({
+            Scroll::new({
                 virtual_stack(
                     move || IndexMapItems(volts.get()),
                     move |(_, id, _)| id.clone(),

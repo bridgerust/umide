@@ -3,7 +3,7 @@ use std::{rc::Rc, sync::Arc};
 use floem::{
     kurbo::Size,
     reactive::{
-        Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, use_context,
+        Context, Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -46,18 +46,9 @@ pub fn default_panel_order() -> PanelOrder {
         PanelPosition::RightTop,
         im::vector![PanelKind::DocumentSymbol, PanelKind::Emulator],
     );
-    order.insert(
-        PanelPosition::RightBottom,
-        im::vector![PanelKind::Video],
-    );
-    order.insert(
-        PanelPosition::LeftBottom,
-        im::vector![PanelKind::Terminal],
-    );
-    order.insert(
-        PanelPosition::BottomRight,
-        im::vector![],
-    );
+    order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
+    order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
+    order.insert(PanelPosition::BottomRight, im::vector![]);
 
     order
 }
@@ -103,7 +94,8 @@ pub struct PanelData {
     pub available_size: Memo<Size>,
     pub sections: RwSignal<im::HashMap<PanelSection, RwSignal<bool>>>,
     pub common: Rc<CommonData>,
-    pub emulator_frame: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>,
+    pub android_frame: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>,
+    pub ios_frame: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -130,7 +122,8 @@ impl PanelData {
                 .map(|(key, value)| (key, cx.create_rw_signal(value)))
                 .collect(),
         );
-        let emulator_frame = cx.create_rw_signal(None);
+        let android_frame = cx.create_rw_signal(None);
+        let ios_frame = cx.create_rw_signal(None);
 
         Self {
             panels,
@@ -139,7 +132,8 @@ impl PanelData {
             available_size,
             sections,
             common,
-            emulator_frame,
+            android_frame,
+            ios_frame,
         }
     }
 
@@ -247,7 +241,7 @@ impl PanelData {
         }
     }
 
-    /// Get the active panel kind at that position, if any.  
+    /// Get the active panel kind at that position, if any.
     /// `tracked` decides whether it should track the signal or not.
     pub fn active_panel_at_position(
         &self,
@@ -395,7 +389,7 @@ impl PanelData {
             style.shown = true;
         });
 
-        let db: Arc<LapceDb> = use_context().unwrap();
+        let db: Arc<LapceDb> = Context::get().unwrap();
         db.save_panel_orders(self.panels.get_untracked());
     }
 

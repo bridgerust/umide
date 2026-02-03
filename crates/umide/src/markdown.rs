@@ -1,7 +1,7 @@
 use floem::text::{
     Attrs, AttrsList, FamilyOwned, LineHeightValue, Style, TextLayout, Weight,
 };
-use lapce_core::{language::LapceLanguage, syntax::Syntax};
+use umide_core::{language::LapceLanguage, syntax::Syntax};
 use lapce_xi_rope::Rope;
 use lsp_types::MarkedString;
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};

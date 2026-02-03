@@ -2,19 +2,19 @@ use std::{rc::Rc, sync::atomic};
 
 use floem::{
     View,
-    event::{Event, EventListener},
+    event::{EventListener},
     ext_event::create_ext_action,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     style::CursorStyle,
     views::{
-        Decorators, clip, dyn_stack, editor::id::EditorId, empty, label, stack, svg,
+        Clip, Decorators, Empty, Label, Stack, dyn_stack, editor::id::EditorId, svg,
     },
 };
-use lapce_core::buffer::{
+use umide_core::buffer::{
     diff::{DiffExpand, DiffLines, expand_diff_lines, rope_diff},
     rope_text::RopeText,
 };
-use lapce_rpc::{buffer::BufferId, proxy::ProxyResponse};
+use umide_rpc::{buffer::BufferId, proxy::ProxyResponse};
 use lapce_xi_rope::Rope;
 use serde::{Deserialize, Serialize};
 
@@ -359,22 +359,22 @@ pub fn diff_show_more_section_view(
     };
 
     let view_fn = move |section: DiffShowMoreSection| {
-        stack((
+        Stack::new((
             wave_box().style(move |s| {
                 s.absolute()
                     .size_pct(100.0, 100.0)
                     .color(config.get().color(LapceColor::PANEL_BACKGROUND))
             }),
-            label(move || format!("{} Hidden Lines", section.lines)),
-            label(|| "|".to_string()).style(|s| s.margin_left(10.0)),
-            stack((
+            Label::new(format!("{} Hidden Lines", section.lines)),
+            Label::new("|".to_string()).style(|s| s.margin_left(10.0)),
+            Stack::new((
                 svg(move || config.get().ui_svg(LapceIcons::FOLD)).style(move |s| {
                     let config = config.get();
                     let size = config.ui.icon_size() as f32;
                     s.size(size, size)
                         .color(config.color(LapceColor::EDITOR_FOREGROUND))
                 }),
-                label(|| "Expand All".to_string()).style(|s| s.margin_left(6.0)),
+                Label::new("Expand All".to_string()).style(|s| s.margin_left(6.0)),
             ))
             .on_event_stop(EventListener::PointerDown, move |_| {})
             .on_click_stop(move |_event| {
@@ -405,8 +405,8 @@ pub fn diff_show_more_section_view(
                     .items_center()
                     .hover(|s| s.cursor(CursorStyle::Pointer))
             }),
-            label(|| "|".to_string()).style(|s| s.margin_left(10.0)),
-            stack((
+            Label::new("|".to_string()).style(|s| s.margin_left(10.0)),
+            Stack::new((
                 svg(move || config.get().ui_svg(LapceIcons::FOLD_UP)).style(
                     move |s| {
                         let config = config.get();
@@ -415,7 +415,7 @@ pub fn diff_show_more_section_view(
                             .color(config.color(LapceColor::EDITOR_FOREGROUND))
                     },
                 ),
-                label(|| "Expand Up".to_string()).style(|s| s.margin_left(6.0)),
+                Label::new("Expand Up".to_string()).style(|s| s.margin_left(6.0)),
             ))
             .on_event_stop(EventListener::PointerDown, move |_| {})
             .on_click_stop(move |_event| {
@@ -446,8 +446,8 @@ pub fn diff_show_more_section_view(
                     .items_center()
                     .hover(|s| s.cursor(CursorStyle::Pointer))
             }),
-            label(|| "|".to_string()).style(|s| s.margin_left(10.0)),
-            stack((
+            Label::new("|".to_string()).style(|s| s.margin_left(10.0)),
+            Stack::new((
                 svg(move || config.get().ui_svg(LapceIcons::FOLD_DOWN)).style(
                     move |s| {
                         let config = config.get();
@@ -456,7 +456,7 @@ pub fn diff_show_more_section_view(
                             .color(config.color(LapceColor::EDITOR_FOREGROUND))
                     },
                 ),
-                label(|| "Expand Down".to_string()).style(|s| s.margin_left(6.0)),
+                Label::new("Expand Down".to_string()).style(|s| s.margin_left(6.0)),
             ))
             .on_event_stop(EventListener::PointerDown, move |_| {})
             .on_click_stop(move |_event| {
@@ -489,8 +489,8 @@ pub fn diff_show_more_section_view(
             }),
         ))
         .on_event_cont(EventListener::PointerWheel, move |event| {
-            if let Event::PointerWheel(event) = event {
-                right_scroll_delta.set(event.delta);
+            if let Some(delta) = event.pixel_scroll_delta_vec2() {
+                right_scroll_delta.set(delta);
             }
         })
         .style(move |s| {
@@ -532,11 +532,11 @@ pub fn diff_show_more_section_view(
         })
     };
 
-    stack((
-        empty().style(move |s| {
+    Stack::new((
+        Empty::new().style(move |s| {
             s.height(config.get().editor.line_height() as f32 + 1.0)
         }),
-        clip(
+        Clip::new(
             dyn_stack(each_fn, key_fn, view_fn)
                 .style(|s| s.flex_col().size_pct(100.0, 100.0)),
         )

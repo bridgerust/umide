@@ -5,13 +5,13 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use lapce_core::directory::Directory;
+use umide_core::directory::Directory;
 
 use crate::{tracing::*, update::ReleaseInfo};
 
 fn get_github_api(url: &str) -> Result<String> {
-    let user_agent = format!("Lapce/{}", lapce_core::meta::VERSION);
-    let resp = lapce_proxy::get_url(url, Some(user_agent.as_str()))?;
+    let user_agent = format!("Lapce/{}", umide_core::meta::VERSION);
+    let resp = umide_proxy::get_url(url, Some(user_agent.as_str()))?;
     if !resp.status().is_success() {
         return Err(anyhow!("get release info failed {}", resp.text()?));
     }
@@ -24,7 +24,7 @@ pub fn find_grammar_release() -> Result<ReleaseInfo> {
         "https://api.github.com/repos/lapce/tree-sitter-grammars/releases?per_page=100",
     ).context("Failed to retrieve releases for tree-sitter-grammars")?)?;
 
-    use lapce_core::meta::{RELEASE, ReleaseType, VERSION};
+    use umide_core::meta::{RELEASE, ReleaseType, VERSION};
 
     let releases = releases
         .into_iter()
@@ -110,7 +110,7 @@ fn download_release(
 
     for asset in &release.assets {
         if asset.name.starts_with(file_name) {
-            let mut resp = lapce_proxy::get_url(&asset.browser_download_url, None)?;
+            let mut resp = umide_proxy::get_url(&asset.browser_download_url, None)?;
             if !resp.status().is_success() {
                 return Err(anyhow!("download file error {}", resp.text()?));
             }

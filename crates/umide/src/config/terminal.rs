@@ -76,7 +76,7 @@ impl TerminalConfig {
 
     pub fn get_default_profile(
         &self,
-    ) -> Option<lapce_rpc::terminal::TerminalProfile> {
+    ) -> Option<umide_rpc::terminal::TerminalProfile> {
         let profile = self.profiles.get(
             self.default_profile
                 .get(std::env::consts::OS)
@@ -90,7 +90,7 @@ impl TerminalConfig {
 
         let profile = profile.clone();
 
-        Some(lapce_rpc::terminal::TerminalProfile {
+        Some(umide_rpc::terminal::TerminalProfile {
             name: std::env::consts::OS.to_string(),
             command: profile.command,
             arguments: profile.arguments,

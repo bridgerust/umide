@@ -6,11 +6,11 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use flate2::read::GzDecoder;
-use lapce_core::{
+use umide_core::{
     directory::Directory,
     meta::{self, ReleaseType},
 };
-use lapce_rpc::{
+use umide_rpc::{
     RpcMessage,
     core::CoreRpcHandler,
     proxy::{ProxyRpc, ProxyRpcHandler},
@@ -350,7 +350,7 @@ fn download_remote(
                 "https://github.com/lapce/lapce/releases/download/{proxy_version}/{proxy_filename}.gz"
             );
             debug!("proxy download URI: {url}");
-            let mut resp = lapce_proxy::get_url(url, None).expect("request failed");
+            let mut resp = umide_proxy::get_url(url, None).expect("request failed");
             if resp.status().is_success() {
                 let mut out = std::fs::File::create(&local_proxy_file)
                     .expect("failed to create file");

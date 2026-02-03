@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use floem::peniko::kurbo::Vec2;
-use lapce_core::{buffer::rope_text::RopeText, rope_text_pos::RopeTextPosition};
+use umide_core::{buffer::rope_text::RopeText, rope_text_pos::RopeTextPosition};
 use lsp_types::Position;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -9,10 +9,10 @@ pub struct EditorLocation {
     pub path: PathBuf,
     pub position: Option<EditorPosition>,
     pub scroll_offset: Option<Vec2>,
-    // This will ignore unconfirmed editors, and always create new editors
+    // This will ignore unconfirmed the editors and always create new editors
     // if there's no match path on the active editor tab
     pub ignore_unconfirmed: bool,
-    // This will stop finding matching path on different editor tabs
+    // This will stop finding the matching path on different editor tabs
     pub same_editor_tab: bool,
 }
 

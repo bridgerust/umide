@@ -1,22 +1,15 @@
 use std::{path::Path, rc::Rc, sync::Arc};
 
 use floem::{
-    View,
-    event::{Event, EventListener},
-    kurbo::Rect,
-    peniko::Color,
-    reactive::{
-        ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_rw_signal,
-    },
-    style::{AlignItems, CursorStyle, Position, Style},
-    text::Style as FontStyle,
-    views::{
-        Container, Decorators, container, dyn_stack, label, scroll, stack, svg,
-        virtual_stack,
-    },
+    View, event::{Event, EventListener}, kurbo::Rect, peniko::Color, prelude::PointerEvent, reactive::{
+        ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith,
+    }, style::{AlignItems, CursorStyle, Position, Style}, text::Style as FontStyle, views::{
+        Container, Decorators, Label, Scroll, Stack, dyn_stack, svg, virtual_stack
+    }
 };
-use lapce_core::selection::Selection;
-use lapce_rpc::{
+use umide_core::selection::Selection;
+use umide_core::cursor::CursorAffinity;
+use umide_rpc::{
     file::{FileNodeViewData, FileNodeViewKind, Naming},
     source_control::FileDiffKind,
 };
@@ -71,14 +64,14 @@ pub fn file_explorer_panel(
         .add_height_style(
             "Open Editors",
             150.0,
-            container(open_editors_view(window_tab_data.clone()))
+            Container::new(open_editors_view(window_tab_data.clone()))
                 .style(|s| s.size_full()),
             window_tab_data.panel.section_open(PanelSection::OpenEditor),
             move |s| s.apply_if(!config.get().ui.open_editors_visible, |s| s.hide()),
         )
         .add(
             "File Explorer",
-            container(file_explorer_view(data, source_control))
+            Container::new(file_explorer_view(data, source_control))
                 .style(|s| s.size_full()),
             window_tab_data
                 .panel
@@ -117,7 +110,7 @@ fn initialize_naming_editor(
     doc.reload(text, true);
     data.naming_editor_data
         .cursor()
-        .update(|cursor| cursor.set_insert(Selection::region(0, selection_end)));
+        .update(|cursor| cursor.set_insert(Selection::region(0, selection_end, CursorAffinity::Forward)));
 
     data.naming
         .update(|naming| naming.set_editor_needs_reset(false));
@@ -167,12 +160,12 @@ fn file_node_text_view(
         FileNodeViewKind::Path(path) => {
             if node.is_root {
                 let file = path.clone();
-                container((
-                    label(move || {
+                Container::new((
+                    Label::new(
                         file.file_name()
                             .map(|f| f.to_string_lossy().to_string())
                             .unwrap_or_default()
-                    })
+                    )
                     .style(move |s| {
                         s.height(ui_line_height.get())
                             .color(file_node_text_color(
@@ -183,7 +176,7 @@ fn file_node_text_view(
                             .padding_right(5.0)
                             .selectable(false)
                     }),
-                    label(move || path.to_string_lossy().to_string()).style(
+                    Label::new(path.to_string_lossy().to_string()).style(
                         move |s| {
                             s.height(ui_line_height.get())
                                 .color(
@@ -196,12 +189,10 @@ fn file_node_text_view(
                     ),
                 ))
             } else {
-                container(
-                    label(move || {
-                        path.file_name()
+                Container::new(
+                    Label::new(path.file_name()
                             .map(|f| f.to_string_lossy().to_string())
-                            .unwrap_or_default()
-                    })
+                            .unwrap_or_default())
                     .style(move |s| {
                         s.height(ui_line_height.get())
                             .color(file_node_text_color(
@@ -272,10 +263,10 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
     text_input_id.request_focus();
 
     if let Some(err) = err {
-        container(
-            stack((
+        Container::new(
+            Stack::new((
                 text_input_view,
-                label(move || err.clone()).style(move |s| {
+                Label::new(err.clone()).style(move |s| {
                     let config = config.get();
 
                     let editor_background_color =
@@ -299,7 +290,7 @@ fn file_node_input_view(data: FileExplorerData, err: Option<String>) -> Containe
             .style(|s| s.flex_grow(1.0)),
         )
     } else {
-        container(text_input_view)
+        Container::new(text_input_view)
     }
     .style(move |s| s.width_full())
 }
@@ -315,9 +306,9 @@ fn file_explorer_view(
     let scroll_to_line = data.scroll_to_line;
     let select = data.select;
     let secondary_click_data = data.clone();
-    let scroll_rect = create_rw_signal(Rect::ZERO);
+    let scroll_rect = RwSignal::new(Rect::ZERO);
 
-    scroll(
+    Scroll::new(
         virtual_stack(
             move || FileNodeVirtualList::new(root.get(), data.naming.get()),
             move |node| (node.kind.clone(), node.is_dir, node.open, node.level),
@@ -327,12 +318,12 @@ fn file_explorer_view(
                 let click_data = data.clone();
                 let double_click_data = data.clone();
                 let secondary_click_data = data.clone();
-                let aux_click_data = data.clone();
+                   let aux_click_data = data.clone();
                 let kind = node.kind.clone();
                 let open = node.open;
                 let is_dir = node.is_dir;
 
-                let view = stack((
+                let view = Stack::new((
                     svg(move || {
                         let config = config.get();
                         let svg_str = match open {
@@ -451,8 +442,8 @@ fn file_explorer_view(
                     .on_event_stop(
                         EventListener::PointerDown,
                         move |event| {
-                            if let Event::PointerDown(pointer_event) = event {
-                                if pointer_event.button.is_auxiliary() {
+                            if let Event::Pointer(PointerEvent::Down(pointer_event)) = event {
+                                if pointer_event.button.is_some() {
                                     aux_click_data.middle_click(&aux_click_path);
                                 }
                             }
@@ -510,9 +501,9 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
             editor_tab.with_untracked(|editor_tab| editor_tab.editor_tab_id);
         let child_for_close = child.clone();
         let info = child.view_info(editors, diff_editors, plugin, config);
-        let hovered = create_rw_signal(false);
+        let hovered = RwSignal::new(false);
 
-        stack((
+        Stack::new((
             clickable_icon(
                 move || {
                     if hovered.get() || info.with(|info| info.is_pristine) {
@@ -542,7 +533,7 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
             })
             .on_event_stop(EventListener::PointerDown, |_| {})
             .style(|s| s.margin_left(10.0)),
-            container(svg(move || info.with(|info| info.icon.clone())).style(
+            Container::new(svg(move || info.with(|info| info.icon.clone())).style(
                 move |s| {
                     let size = config.get().ui.icon_size() as f32;
                     s.size(size, size)
@@ -550,7 +541,7 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                 },
             ))
             .style(|s| s.padding_horiz(6.0)),
-            label(move || info.with(|info| info.name.clone())).style(move |s| {
+            Label::derived(move || info.with(|info| info.name.clone())).style(move |s| {
                 s.apply_if(
                     !info
                         .with(|info| info.confirmed)
@@ -587,14 +578,14 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
         })
     };
 
-    scroll(
+    Scroll::new(
         dyn_stack(
             move || editor_tabs.get().into_iter().enumerate(),
             move |(index, (editor_tab_id, _))| (*index, *editor_tab_id),
             move |(index, (_, editor_tab))| {
                 let plugin = plugin.clone();
-                stack((
-                    label(move || format!("Group {}", index + 1))
+                Stack::new((
+                    Label::new(format!("Group {}", index + 1))
                         .style(|s| s.margin_left(10.0)),
                     dyn_stack(
                         move || editor_tab.get().children,

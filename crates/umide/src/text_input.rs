@@ -1,32 +1,22 @@
 use std::{rc::Rc, sync::Arc};
 
 use floem::{
-    Renderer, View, ViewId,
-    action::{set_ime_allowed, set_ime_cursor_area},
-    context::EventCx,
-    event::{Event, EventListener, EventPropagation},
-    kurbo::Stroke,
-    peniko::{
+    Renderer, View, ViewId, action::{set_ime_allowed, set_ime_cursor_area}, context::EventCx, event::{Event, EventListener, EventPropagation}, kurbo::Stroke, peniko::{
         Color,
         kurbo::{Line, Point, Rect, Size, Vec2},
-    },
-    prop_extractor,
-    reactive::{
+    }, prop_extractor, reactive::{
         Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        create_effect, create_memo, create_rw_signal,
-    },
-    style::{
-        CursorStyle, FontFamily, FontSize, FontStyle, FontWeight, LineHeight,
-        PaddingLeft, Style, TextColor,
-    },
-    taffy::prelude::NodeId,
-    text::{Attrs, AttrsList, FamilyOwned, TextLayout},
-    unit::PxPct,
-    views::Decorators,
+        Effect
+    }, style::{
+        CursorStyle, FontFamily, FontSize, FontStyle, FontWeight, LineHeight, Style, TextColor
+    }, taffy::prelude::NodeId, text::{Attrs, AttrsList, FamilyOwned, TextLayout}, ui_events::{
+        keyboard::KeyState,
+        pointer::{PointerButton, PointerEvent},
+    }, unit::PxPct, views::Decorators
 };
-use lapce_core::{
+use umide_core::{
     buffer::rope_text::RopeText,
-    cursor::{Cursor, CursorMode},
+    cursor::{Cursor, CursorAffinity, CursorMode},
     selection::Selection,
 };
 use lapce_xi_rope::Rope;
@@ -72,14 +62,14 @@ impl TextInputBuilder {
             is_focused: None,
             key_focus: None,
             value: None,
-            keyboard_focus: create_rw_signal(false),
+            keyboard_focus: RwSignal::new(false),
         }
     }
 
     pub fn is_focused(mut self, is_focused: impl Fn() -> bool + 'static) -> Self {
         let keyboard_focus = self.keyboard_focus;
         self.is_focused =
-            Some(create_memo(move |_| is_focused() || keyboard_focus.get()));
+            Some(Memo::new(move |_| is_focused() || keyboard_focus.get()));
         self
     }
 
@@ -116,7 +106,7 @@ impl TextInputBuilder {
         let is_focused = if let Some(is_focused) = self.is_focused {
             is_focused
         } else {
-            create_memo(move |_| keyboard_focus.get())
+            Memo::new(move |_| keyboard_focus.get())
         };
 
         if let Some(value) = self.value {
@@ -144,14 +134,14 @@ fn text_input_full<T: KeyPressFocus + 'static>(
     let cursor = e_data.cursor();
     let config = e_data.common.config;
     let keypress = e_data.common.keypress;
-    let window_origin = create_rw_signal(Point::ZERO);
-    let cursor_line = create_rw_signal(Line::new(Point::ZERO, Point::ZERO));
+    let window_origin = RwSignal::new(Point::ZERO);
+    let cursor_line = RwSignal::new(Line::new(Point::ZERO, Point::ZERO));
     let local_editor = e_data.clone();
     let editor = local_editor.editor.clone();
 
     {
         let doc = doc.get();
-        create_effect(move |_| {
+        Effect::new(move |_| {
             let offset = cursor.with(|c| c.offset());
             let (content, offset, preedit_range) = {
                 let content = doc.buffer.with(|b| b.to_string());
@@ -180,14 +170,14 @@ fn text_input_full<T: KeyPressFocus + 'static>(
     }
 
     {
-        create_effect(move |_| {
+        Effect::new(move |_| {
             let focus = is_focused.get();
             id.update_state(TextInputState::Focus(focus));
         });
 
         let editor = editor.clone();
         let ime_allowed = editor.ime_allowed;
-        create_effect(move |_| {
+        Effect::new(move |_| {
             let focus = is_focused.get();
             if focus {
                 if !ime_allowed.get_untracked() {
@@ -221,7 +211,7 @@ fn text_input_full<T: KeyPressFocus + 'static>(
         content: "".to_string(),
         focus: false,
         text_node: None,
-        text_layout: create_rw_signal(None),
+        text_layout: RwSignal::new(None),
         text_rect: Rect::ZERO,
         text_viewport: Rect::ZERO,
         cursor_line,
@@ -253,20 +243,19 @@ fn text_input_full<T: KeyPressFocus + 'static>(
         }
     })
     .on_event(EventListener::KeyDown, move |event| {
-        if let Event::KeyDown(key_event) = event {
-            let keypress = keypress.get_untracked();
-            let key_focus = key_focus
-                .as_ref()
-                .map(|k| k as &dyn KeyPressFocus)
-                .unwrap_or(&e_data);
-            if keypress.key_down(key_event, key_focus).handled {
-                EventPropagation::Stop
-            } else {
-                EventPropagation::Continue
+        if let Event::Key(key_event) = event {
+            if key_event.state == KeyState::Down {
+                let keypress = keypress.get_untracked();
+                let key_focus = key_focus
+                    .as_ref()
+                    .map(|k| k as &dyn KeyPressFocus)
+                    .unwrap_or(&e_data);
+                if keypress.key_down(key_event, key_focus).handled {
+                    return EventPropagation::Stop;
+                }
             }
-        } else {
-            EventPropagation::Continue
         }
+        EventPropagation::Continue
     })
     .on_event(EventListener::ImePreedit, move |event| {
         if !is_focused.get_untracked() {
@@ -335,7 +324,7 @@ pub struct TextInput {
 impl TextInput {
     pub fn placeholder(self, placeholder: impl Fn() -> String + 'static) -> Self {
         let id = self.id;
-        create_effect(move |_| {
+        Effect::new(move |_| {
             let placeholder = placeholder();
             id.update_state(TextInputState::Placeholder(placeholder));
         });
@@ -417,7 +406,7 @@ impl TextInput {
         self.text_layout.with_untracked(|text_layout| {
             if let Some(text_layout) = text_layout.as_ref() {
                 let padding_left =
-                    match self.id.get_combined_style().get(PaddingLeft) {
+                    match self.id.get_combined_style().builtin().padding_left() {
                         PxPct::Px(v) => v,
                         PxPct::Pct(pct) => {
                             let layout = self.id.get_layout().unwrap_or_default();
@@ -659,43 +648,46 @@ impl View for TextInput {
         let text_offset = self.text_viewport.origin();
         let event = event.clone().offset((-text_offset.x, -text_offset.y));
         match event {
-            Event::PointerDown(pointer) => {
-                let offset = self.hit_index(cx, pointer.pos);
+            Event::Pointer(PointerEvent::Down(pointer)) => {
+                let pos = pointer.state.logical_point();
+                let offset = self.hit_index(cx, pos);
                 self.cursor().update(|cursor| {
-                    cursor.set_insert(Selection::caret(offset));
+                    cursor.set_insert(Selection::caret(offset, CursorAffinity::Forward));
                 });
-                if pointer.button.is_primary() && pointer.count == 2 {
-                    let offset = self.hit_index(cx, pointer.pos);
+                if pointer.button == Some(PointerButton::Primary) && pointer.state.count == 2 {
+                    let offset = self.hit_index(cx, pos);
                     let (start, end) = self
                         .doc()
                         .buffer
                         .with_untracked(|buffer| buffer.select_word(offset));
                     self.cursor().update(|cursor| {
-                        cursor.set_insert(Selection::region(start, end));
+                        cursor.set_insert(Selection::region(start, end, CursorAffinity::Forward));
                     });
-                } else if pointer.button.is_primary() && pointer.count == 3 {
+                } else if pointer.button == Some(PointerButton::Primary) && pointer.state.count == 3 {
                     self.cursor().update(|cursor| {
-                        cursor.set_insert(Selection::region(0, self.content.len()));
+                        cursor.set_insert(Selection::region(0, self.content.len(), CursorAffinity::Forward));
                     });
                 }
                 cx.update_active(self.id);
             }
-            Event::PointerMove(pointer) => {
+            Event::Pointer(PointerEvent::Move(pointer)) => {
                 if cx.is_active(self.id) {
-                    let offset = self.hit_index(cx, pointer.pos);
+                    let pos = pointer.current.logical_point();
+                    let offset = self.hit_index(cx, pos);
                     self.cursor().update(|cursor| {
-                        cursor.set_offset(offset, true, false);
+                        cursor.set_offset(offset, CursorAffinity::Forward, true, false);
                     });
                 }
             }
-            Event::PointerWheel(pointer_event) => {
-                let delta = pointer_event.delta;
-                let delta = if delta.x == 0.0 && delta.y != 0.0 {
-                    Vec2::new(delta.y, delta.x)
-                } else {
-                    delta
-                };
-                self.clamp_text_viewport(self.text_viewport + delta);
+            Event::Pointer(PointerEvent::Scroll(_)) => {
+                if let Some(delta) = event.pixel_scroll_delta_vec2() {
+                    let delta = if delta.x == 0.0 && delta.y != 0.0 {
+                        Vec2::new(delta.y, delta.x)
+                    } else {
+                        delta
+                    };
+                    self.clamp_text_viewport(self.text_viewport + delta);
+                }
                 return EventPropagation::Continue;
             }
             _ => {}

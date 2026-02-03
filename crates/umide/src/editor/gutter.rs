@@ -6,7 +6,7 @@ use floem::{
     text::{Attrs, AttrsList, FamilyOwned, TextLayout},
 };
 use im::HashMap;
-use lapce_core::{buffer::rope_text::RopeText, mode::Mode};
+use umide_core::{buffer::rope_text::RopeText, mode::Mode};
 use serde::{Deserialize, Serialize};
 
 use super::{EditorData, view::changes_colors_screen};
@@ -113,6 +113,10 @@ impl View for EditorGutterView {
         self.id
     }
 
+    fn debug_name(&self) -> std::borrow::Cow<'static, str> {
+        "Editor Gutter".into()
+    }
+
     fn compute_layout(
         &mut self,
         _cx: &mut floem::context::ComputeLayoutCx,
@@ -204,10 +208,6 @@ impl View for EditorGutterView {
 
         self.paint_head_changes(cx, &self.editor, viewport, kind_is_normal, &config);
         self.paint_sticky_headers(cx, kind_is_normal, &config);
-    }
-
-    fn debug_name(&self) -> std::borrow::Cow<'static, str> {
-        "Editor Gutter".into()
     }
 }
 

@@ -4,8 +4,8 @@
 
 use floem::{
     prelude::*,
-    reactive::{create_rw_signal, create_effect},
-    views::{container, label, stack, Decorators},
+    reactive::{RwSignal, Effect},
+    views::{Container, Label, Stack, Decorators},
     peniko::Color,
 };
 
@@ -14,21 +14,21 @@ use umide_native::{MacOSSurface, SurfaceFormat};
 
 /// Native emulator view that renders directly from a shared GPU surface
 /// 
-/// Currently falls back to a placeholder on all platforms while
+/// This currently falls back to a placeholder on all platforms while
 /// the wgpu texture import is being implemented.
 pub fn emulator_native_view(
     device_name: impl Fn() -> String + 'static,
     is_running: impl SignalGet<bool> + Copy + 'static,
 ) -> impl View {
-    let status = create_rw_signal("Initializing native surface...".to_string());
+    let status = RwSignal::new("Initializing native surface...".to_string());
     
     #[cfg(target_os = "macos")]
     {
         // Suppress unused variable warnings during development
         let _ = (MacOSSurface::new, SurfaceFormat::Bgra8);
         
-        // Create effect to initialize native surface when device starts
-        create_effect(move |_| {
+        // Create effect to initialize native surface when the device starts
+        Effect::new(move |_| {
             if is_running.get() {
                 status.set("Native GPU surface active".to_string());
                 
@@ -50,10 +50,10 @@ pub fn emulator_native_view(
         status.set("Native GPU not available on this platform".to_string());
     }
     
-    stack((
+    Stack::new((
         // Main surface area (will be replaced by actual GPU texture)
-        container(
-            label(move || status.get())
+        Container::new(
+            Label::derived(move ||status.get())
                 .style(|s| s.color(Color::from_rgb8(180, 180, 180)))
         )
         .style(|s| {
@@ -65,8 +65,8 @@ pub fn emulator_native_view(
         }),
         
         // Device name overlay
-        container(
-            label(move || device_name())
+        Container::new(
+            Label::derived(device_name)
                 .style(|s| s.color(Color::from_rgb8(120, 120, 120)).font_size(10.0))
         )
         .style(|s| {

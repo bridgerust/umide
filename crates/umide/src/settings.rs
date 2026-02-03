@@ -4,24 +4,24 @@ use floem::{
     IntoView, View,
     action::{TimerToken, add_overlay, exec_after, remove_overlay},
     event::EventListener,
-    keyboard::Modifiers,
+    prelude::Modifiers,
     peniko::kurbo::{Point, Rect, Size},
     reactive::{
         Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        create_effect, create_memo, create_rw_signal,
+        Effect,
     },
     style::CursorStyle,
     text::{Attrs, AttrsList, FamilyOwned, TextLayout},
     views::{
-        Decorators, VirtualVector, container, dyn_stack, empty, label,
-        scroll::{PropagatePointerWheel, scroll},
-        stack, svg, text, virtual_stack,
+        Container, Decorators, VirtualVector, dyn_stack, Empty, Label,
+        scroll::{PropagatePointerWheel, Scroll},
+        Stack, svg, virtual_stack,
     },
 };
 use indexmap::IndexMap;
 use inflector::Inflector;
-use lapce_core::{buffer::rope_text::RopeText, mode::Mode};
-use lapce_rpc::plugin::VoltID;
+use umide_core::{buffer::rope_text::RopeText, mode::Mode};
+use umide_rpc::plugin::VoltID;
 use lapce_xi_rope::Rope;
 use serde::Serialize;
 use serde_json::Value;
@@ -93,7 +93,7 @@ struct SettingsData {
 }
 
 impl KeyPressFocus for SettingsData {
-    fn get_mode(&self) -> lapce_core::mode::Mode {
+    fn get_mode(&self) -> umide_core::mode::Mode {
         Mode::Insert
     }
 
@@ -340,7 +340,7 @@ pub fn settings_view(
     let items = settings_data.items;
     let kinds = settings_data.kinds;
     let filtered_items_signal = settings_data.filtered_items;
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let doc = doc.get();
         let pattern = doc.buffer.with(|b| b.to_string().to_lowercase());
         let plugin_items = settings_data.plugin_items.get();
@@ -365,12 +365,12 @@ pub fn settings_view(
         filtered_items_signal.set(filtered_items);
     });
 
-    let ensure_visible = create_rw_signal(Rect::ZERO);
-    let settings_content_size = create_rw_signal(Size::ZERO);
-    let scroll_pos = create_rw_signal(Point::ZERO);
+    let ensure_visible = RwSignal::new(Rect::ZERO);
+    let settings_content_size = RwSignal::new(Size::ZERO);
+    let scroll_pos = RwSignal::new(Point::ZERO);
 
     let current_kind = {
-        create_memo(move |_| {
+        Memo::new(move |_| {
             let scroll_pos = scroll_pos.get();
             let scroll_y = scroll_pos.y + 30.0;
 
@@ -396,8 +396,8 @@ pub fn settings_view(
                               pos: Box<dyn Fn() -> Option<RwSignal<Point>>>,
                               margin: f32| {
         let kind = k.clone();
-        container(
-            label(move || k.clone())
+        Container::new(
+            Label::new(k.clone())
                 .style(move |s| s.text_ellipsis().padding_left(margin)),
         )
         .on_click_stop(move |_| {
@@ -431,14 +431,14 @@ pub fn settings_view(
     };
 
     let switcher = || {
-        stack((
+        Stack::new((
             dyn_stack(
                 move || kinds.get().clone(),
                 |(k, _)| k.clone(),
                 move |(k, pos)| switcher_item(k, Box::new(move || Some(pos)), 0.0),
             )
             .style(|s| s.flex_col().width_pct(100.0)),
-            stack((
+            Stack::new((
                 switcher_item(
                     "Plugin Settings".to_string(),
                     Box::new(move || {
@@ -470,10 +470,10 @@ pub fn settings_view(
         })
     };
 
-    stack((
-        container({
-            scroll({
-                container(switcher())
+    Stack::new((
+        Container::new({
+            Scroll::new({
+                Container::new(switcher())
                     .style(|s| s.padding_vert(20.0).width_pct(100.0))
             })
             .style(|s| s.absolute().size_pct(100.0, 100.0))
@@ -484,12 +484,12 @@ pub fn settings_view(
                 .border_right(1.0)
                 .border_color(config.get().color(LapceColor::LAPCE_BORDER))
         }),
-        stack((
-            container({
+        Stack::new((
+            Container::new({
                 TextInputBuilder::new()
                     .build_editor(search_editor)
                     .placeholder(|| "Search Settings".to_string())
-                    .keyboard_navigable()
+                    .style(|s| s.focusable(true))
                     .style(move |s| {
                         s.width_pct(100.0)
                             .border_radius(6.0)
@@ -501,8 +501,8 @@ pub fn settings_view(
                     .request_focus(|| {})
             })
             .style(|s| s.padding_horiz(50.0).padding_vert(20.0)),
-            container({
-                scroll({
+            Container::new({
+                Scroll::new({
                     dyn_stack(
                         move || filtered_items_signal.get(),
                         |item| {
@@ -557,7 +557,7 @@ fn settings_item_view(
         None
     };
 
-    let timer = create_rw_signal(TimerToken::INVALID);
+    let timer = RwSignal::new(TimerToken::INVALID);
 
     let editor_value = match &item.value {
         SettingsValue::Float(n) => Some(n.to_string()),
@@ -582,7 +582,7 @@ fn settings_item_view(
                 let kind = item.kind.clone();
                 let field = item.field.clone();
                 let item_value = item.value.clone();
-                create_effect(move |last| {
+                Effect::new(move |last| {
                     let doc = doc.get_untracked();
                     let rev = doc.buffer.with(|b| b.rev());
                     if last.is_none() {
@@ -639,7 +639,7 @@ fn settings_item_view(
                 });
 
                 text_input_view
-                    .keyboard_navigable()
+                    .style(|s| s.focusable(true))
                     .style(move |s| {
                         s.width(300.0).border(1.0).border_radius(6.0).border_color(
                             config.get().color(LapceColor::LAPCE_BORDER),
@@ -647,14 +647,14 @@ fn settings_item_view(
                     })
                     .into_any()
             } else if let SettingsValue::Dropdown(dropdown) = &item.value {
-                let expanded = create_rw_signal(false);
+                let expanded = RwSignal::new(false);
                 let current_value = dropdown
                     .items
                     .get(dropdown.active_index)
                     .or_else(|| dropdown.items.last())
                     .map(|s| s.to_string())
                     .unwrap_or_default();
-                let current_value = create_rw_signal(current_value);
+                let current_value = RwSignal::new(current_value);
 
                 dropdown_view(
                     &item,
@@ -666,7 +666,7 @@ fn settings_item_view(
                 )
                 .into_any()
             } else if item.header {
-                label(move || item.kind.clone())
+                Label::new(item.kind.clone())
                     .style(move |s| {
                         let config = config.get();
                         s.line_height(2.0)
@@ -678,13 +678,13 @@ fn settings_item_view(
                     })
                     .into_any()
             } else {
-                empty().into_any()
+                Empty::new().into_any()
             }
         }
     };
 
-    stack((
-        label(move || item.name.clone()).style(move |s| {
+    Stack::new((
+        Label::new(item.name.clone()).style(move |s| {
             s.font_bold()
                 .text_ellipsis()
                 .min_width(0.0)
@@ -692,8 +692,8 @@ fn settings_item_view(
                 .line_height(1.8)
                 .font_size(config.get().ui.font_size() as f32 + 1.0)
         }),
-        stack((
-            label(move || item.description.clone()).style(move |s| {
+        Stack::new((
+            Label::new(item.description.clone()).style(move |s| {
                 s.min_width(0.0)
                     .max_width_pct(100.0)
                     .line_height(1.8)
@@ -703,11 +703,11 @@ fn settings_item_view(
                     .apply_if(item.header, |s| s.hide())
             }),
             if let Some(is_ticked) = is_ticked {
-                let checked = create_rw_signal(is_ticked);
+                let checked = RwSignal::new(is_ticked);
 
                 let kind = item.kind.clone();
                 let field = item.field.clone();
-                create_effect(move |last| {
+                Effect::new(move |last| {
                     let checked = checked.get();
                     if last.is_none() {
                         return;
@@ -720,10 +720,10 @@ fn settings_item_view(
                     }
                 });
 
-                container(
-                    stack((
+                Container::new(
+                    Stack::new((
                         checkbox(move || checked.get(), config),
-                        label(|| " ".to_string()).style(|s| s.line_height(1.8)),
+                        Label::new(" ".to_string()).style(|s| s.line_height(1.8)),
                     ))
                     .style(|s| s.items_center()),
                 )
@@ -739,7 +739,7 @@ fn settings_item_view(
                         .items_start()
                 })
             } else {
-                container(empty()).style(|s| s.hide())
+                Container::new(Empty::new()).style(|s| s.hide())
             },
         )),
         view().style(move |s| s.apply_if(!item.header, |s| s.margin_top(6.0))),
@@ -823,8 +823,8 @@ fn color_section_list(
     let config = common.config;
 
     let kind = kind.to_string();
-    stack((
-        text(header).style(|s| {
+    Stack::new((
+        Label::new(header).style(|s| {
             s.margin_top(10)
                 .margin_horiz(20)
                 .font_bold()
@@ -844,7 +844,7 @@ fn color_section_list(
                     let kind = kind.clone();
                     let key = key.clone();
                     let doc = text_input_view.doc_signal();
-                    create_effect(move |_| {
+                    Effect::new(move |_| {
                         let doc = doc.get_untracked();
                         let config = config.get();
                         let current = doc.buffer.with_untracked(|b| b.to_string());
@@ -865,10 +865,10 @@ fn color_section_list(
                 }
 
                 {
-                    let timer = create_rw_signal(TimerToken::INVALID);
+                    let timer = RwSignal::new(TimerToken::INVALID);
                     let kind = kind.clone();
                     let field = key.clone();
-                    create_effect(move |last| {
+                    Effect::new(move |last| {
                         let doc = doc.get_untracked();
 
                         let rev = doc.buffer.with(|b| b.rev());
@@ -937,11 +937,11 @@ fn color_section_list(
 
                 let local_kind = kind.clone();
                 let local_key = key.clone();
-                stack((
-                    text(&key).style(move |s| {
+                Stack::new((
+                    Label::new(&key).style(move |s| {
                         s.width(max_width.get()).margin_left(20).margin_right(10)
                     }),
-                    text_input_view.keyboard_navigable().style(move |s| {
+                    text_input_view.style(|s| s.focusable(true)).style(move |s| {
                         s.width(150.0)
                             .margin_vert(6)
                             .border(1)
@@ -950,7 +950,7 @@ fn color_section_list(
                                 config.get().color(LapceColor::LAPCE_BORDER),
                             )
                     }),
-                    empty().style(move |s| {
+                    Empty::new().style(move |s| {
                         let size = text_height.get() + 12.0;
                         let config = config.get();
                         let color = match local_kind.as_str() {
@@ -973,7 +973,7 @@ fn color_section_list(
                         let key = key.clone();
                         let local_key = key.clone();
                         let local_kind = kind.clone();
-                        text("Reset")
+                        Label::new("Reset")
                             .on_click_stop(move |_| {
                                 LapceConfig::reset_setting(
                                     &format!("color-theme.{local_kind}"),
@@ -1035,7 +1035,7 @@ pub fn theme_color_settings_view(
 ) -> impl View {
     let config = common.config;
 
-    let text_height = create_memo(move |_| {
+    let text_height = Memo::new(move |_| {
         let mut text_layout = TextLayout::new();
         let config = config.get();
         let family: Vec<FamilyOwned> =
@@ -1048,7 +1048,7 @@ pub fn theme_color_settings_view(
         text_layout.size().height
     });
 
-    let max_width = create_memo(move |_| {
+    let max_width = Memo::new(move |_| {
         let mut text_layout = TextLayout::new();
         let config = config.get();
         let family: Vec<FamilyOwned> =
@@ -1080,13 +1080,13 @@ pub fn theme_color_settings_view(
     let search_editor = editors.make_local(cx, common.clone());
     let buffer = search_editor.doc_signal().get_untracked().buffer;
 
-    scroll(
-        stack((
-            container({
+    Scroll::new(
+        Stack::new((
+            Container::new({
                 TextInputBuilder::new()
                     .build_editor(search_editor)
                     .placeholder(|| "Search Settings".to_string())
-                    .keyboard_navigable()
+                    .style(|s| s.focusable(true))
                     .style(move |s| {
                         s.width_pct(100.0)
                             .border_radius(6.0)
@@ -1186,21 +1186,21 @@ fn dropdown_view(
     window_size: RwSignal<Size>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View + use<> {
-    let window_origin = create_rw_signal(Point::ZERO);
-    let size = create_rw_signal(Size::ZERO);
-    let overlay_id = create_rw_signal(None);
-    let dropdown_input_focus = create_rw_signal(false);
-    let dropdown_scroll_focus = create_rw_signal(true);
+    let window_origin = RwSignal::new(Point::ZERO);
+    let size = RwSignal::new(Size::ZERO);
+    let overlay_id = RwSignal::new(None);
+    let dropdown_input_focus = RwSignal::new(false);
+    let dropdown_scroll_focus = RwSignal::new(true);
 
     {
         let item = item.to_owned();
         let dropdown = dropdown.to_owned();
-        create_effect(move |_| {
+        Effect::new(move |_| {
             if expanded.get() {
                 let item = item.clone();
                 let dropdown = dropdown.clone();
-                let id = add_overlay(Point::ZERO, move |_| {
-                    dropdown_scroll(
+                let id = add_overlay(
+                    dropdown_scroll_view(
                         &item.clone(),
                         current_value,
                         &dropdown.clone(),
@@ -1212,7 +1212,7 @@ fn dropdown_view(
                         window_size,
                         config,
                     )
-                });
+                );
                 overlay_id.set(Some(id));
             } else if let Some(id) = overlay_id.get_untracked() {
                 remove_overlay(id);
@@ -1221,14 +1221,14 @@ fn dropdown_view(
         });
     }
 
-    stack((
-        label(move || current_value.get()).style(move |s| {
+    Stack::new((
+        Label::new(current_value.get()).style(move |s| {
             s.text_ellipsis()
                 .width_pct(100.0)
                 .padding_horiz(10.0)
                 .selectable(false)
         }),
-        container(
+        Container::new(
             svg(move || {
                 if expanded.get() {
                     config.get().ui_svg(LapceIcons::CLOSE)
@@ -1268,7 +1268,7 @@ fn dropdown_view(
             .width(250.0)
             .line_height(1.8)
     })
-    .keyboard_navigable()
+    .style(|s| s.focusable(true))
     .on_event_stop(EventListener::FocusGained, move |_| {
         dropdown_input_focus.set(true);
     })
@@ -1286,7 +1286,7 @@ fn dropdown_view(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn dropdown_scroll(
+fn dropdown_scroll_view(
     item: &SettingsItem,
     current_value: RwSignal<String>,
     dropdown: &DropdownInfo,
@@ -1306,7 +1306,7 @@ fn dropdown_scroll(
         let kind = kind.clone();
         let field = field.clone();
         let local_item_string = item_string.clone();
-        label(move || local_item_string.clone())
+        Label::new(local_item_string.clone())
             .on_click_stop(move |_| {
                 current_value.set(item_string.clone());
                 if let Ok(value) = serde::Serialize::serialize(
@@ -1328,9 +1328,9 @@ fn dropdown_scroll(
 
     let items = dropdown.items.clone();
 
-    let scroll_size = create_rw_signal(Size::ZERO);
+    let scroll_size = RwSignal::new(Size::ZERO);
 
-    scroll({
+    Scroll::new({
         dyn_stack(move || items.clone(), |item| item.to_string(), view_fn)
             .style(|s| s.flex_col().width_pct(100.0).cursor(CursorStyle::Pointer))
     })
@@ -1339,7 +1339,7 @@ fn dropdown_scroll(
             .max_height(200.0)
             .set(PropagatePointerWheel, false)
     })
-    .keyboard_navigable()
+    .style(|s| s.focusable(true))
     .request_focus(|| {})
     .on_event_stop(EventListener::FocusGained, move |_| {
         dropdown_scroll_focus.set(true);

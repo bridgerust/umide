@@ -4,17 +4,14 @@ use floem::{
     View,
     event::EventListener,
     peniko::Color,
-    reactive::{
-        ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith, create_rw_signal,
-    },
-    style::CursorStyle,
+    reactive::{ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith},
+    style::{CursorStyle, Style},
     text::Style as FontStyle,
     views::{
-        Decorators, container, dyn_stack, label, scroll, stack, svg, text,
-        virtual_stack,
+        Container, Decorators, Label, Scroll, Stack, dyn_stack, svg, virtual_stack,
     },
 };
-use lapce_rpc::{
+use umide_rpc::{
     dap_types::{DapId, ThreadId},
     terminal::TermId,
 };
@@ -83,7 +80,7 @@ fn debug_process_icons(
         stopped.map(|stopped| stopped.get()).unwrap_or(false)
     };
     match mode {
-        RunDebugMode::Run => container(stack((
+        RunDebugMode::Run => Container::new(Stack::new((
             {
                 let terminal = terminal.clone();
                 clickable_icon(
@@ -127,7 +124,7 @@ fn debug_process_icons(
                 .style(|s| s.margin_right(4.0))
             },
         ))),
-        RunDebugMode::Debug => container(stack((
+        RunDebugMode::Debug => Container::new(Stack::new((
             {
                 let terminal = terminal.clone();
                 clickable_icon(
@@ -248,7 +245,7 @@ fn debug_processes(
     terminal: TerminalPanelData,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    scroll({
+    Scroll::new({
         let terminal = terminal.clone();
         let local_terminal = terminal.clone();
         dyn_stack(
@@ -259,8 +256,8 @@ fn debug_processes(
                 let is_active =
                     move || terminal.debug.active_term.get() == Some(term_id);
                 let local_terminal = terminal.clone();
-                let is_hovered = create_rw_signal(false);
-                stack((
+                let is_hovered = RwSignal::new(false);
+                Stack::new((
                     {
                         let svg_str = match (&p.mode, p.stopped) {
                             (RunDebugMode::Run, false) => LapceIcons::START,
@@ -279,7 +276,7 @@ fn debug_processes(
                                 .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
                         })
                     },
-                    label(move || p.config.name.clone()).style(|s| {
+                    Label::new(p.config.name.clone()).style(|s| {
                         s.flex_grow(1.0)
                             .flex_basis(0.0)
                             .min_width(0.0)
@@ -335,8 +332,8 @@ fn variables_view(window_tab_data: Rc<WindowTabData>) -> impl View {
     let local_terminal = window_tab_data.terminal.clone();
     let ui_line_height = window_tab_data.common.ui_line_height;
     let config = window_tab_data.common.config;
-    container(
-        scroll(
+    Container::new(
+        Scroll::new(
             virtual_stack(
                 move || {
                     let dap = terminal.get_active_dap(true);
@@ -373,7 +370,7 @@ fn variables_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                     let name = node.item.name();
                     let ty = node.item.ty();
                     let type_exists = ty.map(|ty| !ty.is_empty()).unwrap_or(false);
-                    stack((
+                    Stack::new((
                         svg(move || {
                             let config = config.get();
                             let svg_str = match node.expanded {
@@ -393,18 +390,21 @@ fn variables_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                             };
                             s.size(size, size).margin_left(10.0).color(color)
                         }),
-                        text(name),
-                        text(": ").style(move |s| {
+                        Label::new(name),
+                        Label::new(": ").style(move |s| {
                             s.apply_if(!type_exists || reference == 0, |s| s.hide())
                         }),
-                        text(node.item.ty().unwrap_or("")).style(move |s| {
+                        Label::new(node.item.ty().unwrap_or("")).style(move |s| {
                             s.color(config.get().style_color("type").unwrap())
                                 .apply_if(!type_exists || reference == 0, |s| {
                                     s.hide()
                                 })
                         }),
-                        text(format!(" = {}", node.item.value().unwrap_or("")))
-                            .style(move |s| s.apply_if(reference > 0, |s| s.hide())),
+                        Label::new(format!(
+                            " = {}",
+                            node.item.value().unwrap_or("")
+                        ))
+                        .style(move |s| s.apply_if(reference > 0, |s| s.hide())),
                     ))
                     .on_click_stop(move |_| {
                         if reference > 0 {
@@ -460,8 +460,8 @@ fn debug_stack_frames(
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
     let expanded = stack_trace.expanded;
-    stack((
-        container(label(move || thread_id.to_string()))
+    Stack::new((
+        Container::new(Label::new(thread_id.to_string()))
             .on_click_stop(move |_| {
                 expanded.update(|expanded| {
                     *expanded = !*expanded;
@@ -500,8 +500,8 @@ fn debug_stack_frames(
                 let has_source = !source_path.is_empty();
                 let source_path = format!("{source_path}:{}", frame.line);
 
-                container(stack((
-                    label(move || frame.name.clone()).style(move |s| {
+                Container::new(Stack::new((
+                    Label::new(frame.name.clone()).style(move |s| {
                         s.hover(|s| {
                             s.background(
                                 config
@@ -510,7 +510,7 @@ fn debug_stack_frames(
                             )
                         })
                     }),
-                    label(move || source_path.clone()).style(move |s| {
+                    Label::new(source_path.clone()).style(move |s| {
                         s.margin_left(10.0)
                             .color(config.get().color(LapceColor::EDITOR_DIM))
                             .font_style(FontStyle::Italic)
@@ -566,8 +566,8 @@ fn debug_stack_traces(
     internal_command: Listener<InternalCommand>,
     config: ReadSignal<Arc<LapceConfig>>,
 ) -> impl View {
-    container(
-        scroll({
+    Container::new(
+        Scroll::new({
             let local_terminal = terminal.clone();
             dyn_stack(
                 move || {
@@ -626,10 +626,10 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
     let breakpoints = window_tab_data.terminal.debug.breakpoints;
     let config = window_tab_data.common.config;
     let workspace = window_tab_data.common.workspace.clone();
-    let available_width = create_rw_signal(0.0);
+    let available_width = RwSignal::new(0.0);
     let internal_command = window_tab_data.common.internal_command;
-    container(
-        scroll(
+    Container::new(
+        Scroll::new(
             dyn_stack(
                 move || {
                     breakpoints
@@ -662,7 +662,7 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                         path.parent().and_then(|s| s.to_str()).unwrap_or("");
                     let folder_empty = folder.is_empty();
 
-                    stack((
+                    Stack::new((
                         clickable_icon(
                             move || LapceIcons::CLOSE,
                             move || {
@@ -681,7 +681,7 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                         )
                         .on_event_stop(EventListener::PointerDown, |_| {}),
                         checkbox(move || breakpoint.active, config)
-                            .style(|s| {
+                            .style(|s: Style| {
                                 s.margin_right(6.0).cursor(CursorStyle::Pointer)
                             })
                             .on_click_stop(move |_| {
@@ -697,8 +697,8 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                                     }
                                 });
                             }),
-                        text(format!("{file_name}:{}", breakpoint.line + 1)).style(
-                            move |s| {
+                        Label::new(format!("{file_name}:{}", breakpoint.line + 1))
+                            .style(move |s| {
                                 let size = config.get().ui.icon_size() as f32;
                                 s.text_ellipsis().max_width(
                                     available_width.get() as f32
@@ -708,9 +708,8 @@ fn breakpoints_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                                         - size
                                         - 8.0,
                                 )
-                            },
-                        ),
-                        text(folder).style(move |s| {
+                            }),
+                        Label::new(folder).style(move |s| {
                             s.text_ellipsis()
                                 .flex_grow(1.0)
                                 .flex_basis(0.0)

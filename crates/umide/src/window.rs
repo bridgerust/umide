@@ -5,8 +5,7 @@ use floem::{
     action::TimerToken,
     peniko::kurbo::{Point, Size},
     reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        use_context,
+        Context, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
     },
     window::WindowId,
 };
@@ -202,7 +201,7 @@ impl WindowData {
     pub fn run_window_command(&self, cmd: WindowCommand) {
         match cmd {
             WindowCommand::SetWorkspace { workspace } => {
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> = Context::get().unwrap();
                 if let Err(err) = db.update_recent_workspace(&workspace) {
                     tracing::error!("{:?}", err);
                 }
@@ -239,7 +238,7 @@ impl WindowData {
                 })
             }
             WindowCommand::NewWorkspaceTab { workspace, end } => {
-                let db: Arc<LapceDb> = use_context().unwrap();
+                let db: Arc<LapceDb> = Context::get().unwrap();
                 if let Err(err) = db.update_recent_workspace(&workspace) {
                     tracing::error!("{:?}", err);
                 }
@@ -282,7 +281,7 @@ impl WindowData {
                     if index < window_tabs.len() {
                         let (_, old_window_tab) = window_tabs.remove(index);
                         old_window_tab.proxy.shutdown();
-                        let db: Arc<LapceDb> = use_context().unwrap();
+                        let db: Arc<LapceDb> = Context::get().unwrap();
                         if let Err(err) = db.save_window_tab(old_window_tab) {
                             tracing::error!("{:?}", err);
                         }

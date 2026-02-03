@@ -2,15 +2,15 @@ use std::{path::PathBuf, rc::Rc};
 
 pub use floem::views::editor::command::CommandExecuted;
 use floem::{
-    ViewId, keyboard::Modifiers, peniko::kurbo::Vec2,
+    ViewId, prelude::Modifiers, peniko::kurbo::Vec2,
     views::editor::command::Command,
 };
 use indexmap::IndexMap;
-use lapce_core::command::{
+use umide_core::command::{
     EditCommand, FocusCommand, MotionModeCommand, MoveCommand,
     MultiSelectionCommand, ScrollCommand,
 };
-use lapce_rpc::{
+use umide_rpc::{
     dap_types::{DapId, RunDebugConfig},
     plugin::{PluginId, VoltID},
     proxy::ProxyStatus,

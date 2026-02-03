@@ -10,12 +10,11 @@ use floem::{
         kurbo::{Point, Rect},
     },
     reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        create_memo, create_rw_signal,
+        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
     },
     views::editor::id::EditorId,
 };
-use lapce_rpc::plugin::VoltID;
+use umide_rpc::plugin::VoltID;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -206,7 +205,7 @@ impl EditorTabChild {
         config: ReadSignal<Arc<LapceConfig>>,
     ) -> Memo<EditorTabChildViewInfo> {
         match self.clone() {
-            EditorTabChild::Editor(editor_id) => create_memo(move |_| {
+            EditorTabChild::Editor(editor_id) => Memo::new(move |_| {
                 let config = config.get();
                 let editor_data = editors.editor(editor_id);
                 let path = if let Some(editor_data) = editor_data {
@@ -247,7 +246,7 @@ impl EditorTabChild {
                         config.ui_svg(LapceIcons::FILE),
                         Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
                         "local".to_string(),
-                        create_rw_signal(true),
+                        RwSignal::new(true),
                         true,
                     ),
                 };
@@ -260,7 +259,7 @@ impl EditorTabChild {
                     is_pristine,
                 }
             }),
-            EditorTabChild::DiffEditor(diff_editor_id) => create_memo(move |_| {
+            EditorTabChild::DiffEditor(diff_editor_id) => Memo::new(move |_| {
                 let config = config.get();
                 let diff_editor_data = diff_editors
                     .with(|diff_editors| diff_editors.get(&diff_editor_id).cloned());
@@ -341,7 +340,7 @@ impl EditorTabChild {
                     is_pristine,
                 }
             }),
-            EditorTabChild::Settings(_) => create_memo(move |_| {
+            EditorTabChild::Settings(_) => Memo::new(move |_| {
                 let config = config.get();
                 EditorTabChildViewInfo {
                     icon: config.ui_svg(LapceIcons::SETTINGS),
@@ -352,7 +351,7 @@ impl EditorTabChild {
                     is_pristine: true,
                 }
             }),
-            EditorTabChild::ThemeColorSettings(_) => create_memo(move |_| {
+            EditorTabChild::ThemeColorSettings(_) => Memo::new(move |_| {
                 let config = config.get();
                 EditorTabChildViewInfo {
                     icon: config.ui_svg(LapceIcons::SYMBOL_COLOR),
@@ -363,7 +362,7 @@ impl EditorTabChild {
                     is_pristine: true,
                 }
             }),
-            EditorTabChild::Keymap(_) => create_memo(move |_| {
+            EditorTabChild::Keymap(_) => Memo::new(move |_| {
                 let config = config.get();
                 EditorTabChildViewInfo {
                     icon: config.ui_svg(LapceIcons::KEYBOARD),
@@ -374,7 +373,7 @@ impl EditorTabChild {
                     is_pristine: true,
                 }
             }),
-            EditorTabChild::Volt(_, id) => create_memo(move |_| {
+            EditorTabChild::Volt(_, id) => Memo::new(move |_| {
                 let config = config.get();
                 let display_name = plugin
                     .installed

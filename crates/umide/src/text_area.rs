@@ -2,12 +2,12 @@ use floem::{
     View,
     peniko::kurbo::Rect,
     reactive::{
-        SignalGet, SignalUpdate, SignalWith, create_effect, create_rw_signal,
+        SignalGet, SignalUpdate, SignalWith, Effect, RwSignal,
     },
     text::{Attrs, AttrsList, LineHeightValue, TextLayout},
-    views::{Decorators, container, label, rich_text, scroll, stack},
+    views::{Decorators, Container, Label, rich_text, Scroll, Stack},
 };
-use lapce_core::buffer::rope_text::RopeText;
+use umide_core::buffer::rope_text::RopeText;
 
 use crate::{config::color::LapceColor, editor::EditorData};
 
@@ -18,11 +18,11 @@ pub fn text_area(
     let config = editor.common.config;
     let doc = editor.doc_signal();
     let cursor = editor.cursor();
-    let text_area_rect = create_rw_signal(Rect::ZERO);
-    let text_layout = create_rw_signal(TextLayout::new());
+    let text_area_rect = RwSignal::new(Rect::ZERO);
+    let text_layout = RwSignal::new(TextLayout::new());
     let line_height = 1.2;
 
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let config = config.get();
         let font_size = config.ui.font_size();
         let font_family = config.ui.font_family();
@@ -40,7 +40,7 @@ pub fn text_area(
         });
     });
 
-    create_effect(move |last_rev| {
+    Effect::new(move |last_rev| {
         let rev = doc.with(|doc| doc.rev());
         if last_rev == Some(rev) {
             return rev;
@@ -65,7 +65,7 @@ pub fn text_area(
         rev
     });
 
-    create_effect(move |last_width| {
+    Effect::new(move |last_width| {
         let width = text_area_rect.get().width();
         if last_width == Some(width) {
             return width;
@@ -88,15 +88,15 @@ pub fn text_area(
         })
     };
 
-    container(
-        scroll(
-            stack((
+    Container::new(
+        Scroll::new(
+            Stack::new((
                 rich_text(move || text_layout.get())
                     .on_resize(move |rect| {
                         text_area_rect.set(rect);
                     })
                     .style(|s| s.width_pct(100.0)),
-                label(|| " ".to_string()).style(move |s| {
+                Label::new(" ".to_string()).style(move |s| {
                     let cursor_pos = cursor_pos();
                     s.absolute()
                         .line_height(line_height)

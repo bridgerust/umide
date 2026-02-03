@@ -4,8 +4,8 @@ use floem::{
     ext_event::create_ext_action,
     reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
 };
-use lapce_core::mode::Mode;
-use lapce_rpc::{
+use umide_core::mode::Mode;
+use umide_rpc::{
     dap_types::{
         self, DapId, RunDebugConfig, StackFrame, Stopped, ThreadId, Variable,
     },

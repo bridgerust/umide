@@ -1,13 +1,11 @@
 use std::{borrow::Cow, ops::Range, path::PathBuf, str::FromStr};
 
-use floem::reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, batch};
-use lapce_core::{
+use floem::reactive::{Effect, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
+use umide_core::{
     buffer::{
         Buffer,
         rope_text::{RopeText, RopeTextRef},
-    },
-    rope_text_pos::RopeTextPosition,
-    selection::Selection,
+    }, cursor::CursorAffinity, rope_text_pos::RopeTextPosition, selection::Selection
 };
 use lsp_types::InsertTextFormat;
 
@@ -53,9 +51,9 @@ impl InlineCompletionItem {
             .unwrap_or(InsertTextFormat::PLAIN_TEXT);
 
         let selection = if let Some(range) = &self.range {
-            Selection::region(range.start, range.end)
+            Selection::region(range.start, range.end, CursorAffinity::Forward)
         } else {
-            Selection::caret(start_offset)
+            Selection::caret(start_offset, CursorAffinity::Forward)
         };
 
         match text_format {
@@ -150,7 +148,7 @@ impl InlineCompletionData {
         start_offset: usize,
         path: PathBuf,
     ) {
-        batch(|| {
+        Effect::batch(|| {
             self.items = items;
             self.active.set(0);
             self.status = InlineCompletionStatus::Active;

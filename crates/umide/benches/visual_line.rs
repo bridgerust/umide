@@ -13,7 +13,7 @@ use floem::{
         },
     },
 };
-use lapce_core::{
+use umide_core::{
     buffer::rope_text::{RopeText, RopeTextRef},
     cursor::CursorAffinity,
 };

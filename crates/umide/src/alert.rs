@@ -9,7 +9,7 @@ use floem::{
     event::EventListener,
     reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate},
     style::CursorStyle,
-    views::{Decorators, container, dyn_stack, label, stack, svg},
+    views::{Container, Decorators, dyn_stack, Stack, svg, Label},
 };
 
 use crate::{
@@ -60,22 +60,22 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
     let buttons = alert_data.buttons;
     let button_id = AtomicU64::new(0);
 
-    container({
-        container({
-            stack((
+    Container::new({
+        Container::new({
+            Stack::new((
                 svg(move || config.get().ui_svg(LapceIcons::WARNING)).style(
                     move |s| {
                         s.size(50.0, 50.0)
                             .color(config.get().color(LapceColor::LAPCE_WARN))
                     },
                 ),
-                label(move || title.get()).style(move |s| {
+                Label::derived(move || title.get()).style(move |s| {
                     s.margin_top(20.0)
                         .width_pct(100.0)
                         .font_bold()
                         .font_size((config.get().ui.font_size() + 1) as f32)
                 }),
-                label(move || msg.get())
+                Label::derived(move || msg.get())
                     .style(move |s| s.width_pct(100.0).margin_top(10.0)),
                 dyn_stack(
                     move || buttons.get(),
@@ -83,7 +83,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                         button_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                     },
                     move |button| {
-                        label(move || button.text.clone())
+                        Label::derived(move || button.text.clone())
                             .on_click_stop(move |_| {
                                 (button.action)();
                             })
@@ -115,7 +115,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                     },
                 )
                 .style(|s| s.flex_col().width_pct(100.0).margin_top(10.0)),
-                label(|| "Cancel".to_string())
+                Label::new("Cancel")
                     .on_click_stop(move |_| {
                         active.set(false);
                     })

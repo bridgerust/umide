@@ -13,21 +13,18 @@ use std::{
 
 use anyhow::Result;
 use floem::{
-    ext_event::{create_ext_action, create_signal_from_channel},
-    keyboard::Modifiers,
+    ext_event::create_ext_action,
+    prelude::Modifiers,
     reactive::{
-        ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        use_context,
-    },
+        Context, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
+    }, receiver_signal::ChannelSignal,
 };
 use im::Vector;
 use itertools::Itertools;
-use lapce_core::{
-    buffer::rope_text::RopeText, command::FocusCommand, language::LapceLanguage,
-    line_ending::LineEnding, mode::Mode, movement::Movement, selection::Selection,
-    syntax::Syntax,
+use umide_core::{
+    buffer::rope_text::RopeText, command::FocusCommand, cursor::CursorAffinity, language::LapceLanguage, line_ending::LineEnding, mode::Mode, movement::Movement, selection::Selection, syntax::Syntax
 };
-use lapce_rpc::proxy::ProxyResponse;
+use umide_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
 use lsp_types::{DocumentSymbol, DocumentSymbolResponse};
 use nucleo::Utf32Str;
@@ -190,7 +187,7 @@ impl PaletteData {
         let (filtered_items, set_filtered_items) =
             cx.create_signal(im::Vector::new());
         {
-            let resp = create_signal_from_channel(resp_rx);
+            let resp = ChannelSignal::new(resp_rx);
             let run_id = run_id.read_only();
             let input = input.read_only();
             cx.create_effect(move |_| {
@@ -338,7 +335,7 @@ impl PaletteData {
         self.input_editor.doc().reload(Rope::from(symbol), true);
         self.input_editor
             .cursor()
-            .update(|cursor| cursor.set_insert(Selection::caret(symbol.len())));
+            .update(|cursor| cursor.set_insert(Selection::caret(symbol.len(), CursorAffinity::Forward)));
     }
 
     /// Get the placeholder text to use in the palette input field.
@@ -600,7 +597,7 @@ impl PaletteData {
 
     /// Initialize the palette with all the available workspaces, local and remote.
     fn get_workspaces(&self) {
-        let db: Arc<LapceDb> = use_context().unwrap();
+        let db: Arc<LapceDb> = Context::get().unwrap();
         let workspaces = db.recent_workspaces().unwrap_or_default();
 
         let items = workspaces
@@ -799,7 +796,7 @@ impl PaletteData {
     }
 
     fn get_ssh_hosts(&self) {
-        let db: Arc<LapceDb> = use_context().unwrap();
+        let db: Arc<LapceDb> = Context::get().unwrap();
         let workspaces = db.recent_workspaces().unwrap_or_default();
         let mut hosts = HashSet::new();
         for workspace in workspaces.iter() {
@@ -1093,7 +1090,7 @@ impl PaletteData {
             items.push_back(PaletteItem {
                 content: PaletteItemContent::TerminalProfile {
                     name: name.to_owned(),
-                    profile: lapce_rpc::terminal::TerminalProfile {
+                    profile: umide_rpc::terminal::TerminalProfile {
                         name: name.to_owned(),
                         command: profile.command,
                         arguments: profile.arguments,
@@ -1491,7 +1488,7 @@ impl PaletteData {
         self.input_editor.doc().reload(Rope::from(""), true);
         self.input_editor
             .cursor()
-            .update(|cursor| cursor.set_insert(Selection::caret(0)));
+            .update(|cursor| cursor.set_insert(Selection::caret(0, CursorAffinity::Forward)));
     }
 
     /// Move to the next entry in the palette list, wrapping around if needed.
@@ -1658,7 +1655,7 @@ impl PaletteData {
 }
 
 impl KeyPressFocus for PaletteData {
-    fn get_mode(&self) -> lapce_core::mode::Mode {
+    fn get_mode(&self) -> umide_core::mode::Mode {
         Mode::Insert
     }
 

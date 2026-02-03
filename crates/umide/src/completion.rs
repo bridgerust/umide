@@ -5,10 +5,10 @@ use floem::{
     reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::editor::{id::EditorId, text::Document},
 };
-use lapce_core::{
+use umide_core::{
     buffer::rope_text::RopeText, movement::Movement, rope_text_pos::RopeTextPosition,
 };
-use lapce_rpc::{plugin::PluginId, proxy::ProxyRpcHandler};
+use umide_rpc::{plugin::PluginId, proxy::ProxyRpcHandler};
 use lsp_types::{
     CompletionItem, CompletionResponse, CompletionTextEdit, InsertTextFormat,
     Position,

@@ -1,8 +1,9 @@
-use std::{rc::Rc, sync::Arc, process::Command};
-use tracing::{info, error};
+use std::{rc::Rc, sync::Arc};
 use floem::{
-    View, prelude::{SignalGet, SignalUpdate, SignalWith}, reactive::{create_rw_signal, create_effect}, 
-    views::{Decorators, label, scroll, stack, dyn_stack, container, h_stack}, 
+    View, ViewId, prelude::{SignalGet, SignalUpdate}, reactive::{RwSignal, Effect},
+    views::{Decorators, Label, Scroll, Stack, dyn_stack, Container},
+    context::{PaintCx, UpdateCx, ComputeLayoutCx},
+    peniko::kurbo::Rect,
 };
 
 use crate::{
@@ -11,353 +12,129 @@ use crate::{
     window_tab::WindowTabData,
     config::{icon::LapceIcons, color::LapceColor},
 };
-use umide_emulator::{list_all_devices, launch_device, stop_device, DeviceInfo, DevicePlatform, DeviceState};
+use umide_emulator::{
+    list_all_devices, launch_device, stop_device, DeviceInfo, DevicePlatform, DeviceState,
+    native_view::NativeEmulatorView,  
+};
+use umide_native::emulator::EmulatorPlatform;
 
-/// Capture a single frame from an iOS Simulator using simctl
-fn capture_ios_simulator_frame(device_udid: &str) -> Result<umide_emulator::decoder::DecodedFrame, String> {
-    // Run: xcrun simctl io <udid> screenshot --type=png -
-    // This outputs PNG to stdout
-    let output = Command::new("xcrun")
-        .args(["simctl", "io", device_udid, "screenshot", "--type=png", "-"])
-        .output()
-        .map_err(|e| format!("Failed to run simctl: {}", e))?;
-    
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("simctl screenshot failed: {}", stderr));
-    }
-    
-    let png_data = output.stdout;
-    if png_data.is_empty() {
-        return Err("Empty screenshot data".to_string());
-    }
-    
-    // Decode PNG to RGBA
-    let img = image::load_from_memory_with_format(&png_data, image::ImageFormat::Png)
-        .map_err(|e| format!("Failed to decode PNG: {}", e))?
-        .to_rgba8();
-    
-    let width = img.width();
-    let height = img.height();
-    let rgba_data = img.into_raw();
-    
-    Ok(umide_emulator::decoder::DecodedFrame {
-        width,
-        height,
-        frame: umide_emulator::decoder::GpuFrame::Software(Arc::new(rgba_data), width * 4, height),
-    })
+struct NativeEmulatorWidget {
+    id: ViewId,
+    native_view: Option<NativeEmulatorView>,
+    running_device: RwSignal<Option<DeviceInfo>>,
+    #[allow(dead_code)]
+    current_device_id: RwSignal<String>,
 }
 
-/// Find the ADB serial for a running Android emulator by AVD name
-fn find_android_emulator_serial(avd_name: &str) -> Option<String> {
-    let output = Command::new("adb")
-        .args(["devices", "-l"])
-        .output()
-        .ok()?;
-    
-    if !output.status.success() {
-        return None;
+impl NativeEmulatorWidget {
+    pub fn new(running_device: RwSignal<Option<DeviceInfo>>, current_device_id: RwSignal<String>) -> Self {
+        Self {
+            id: ViewId::new(),
+            native_view: None,
+            running_device,
+            current_device_id,
+        }
     }
-    
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    
-    // Look for emulator lines and try to match by AVD name
-    // Format: "emulator-5554 device product:sdk_gphone64_arm64 model:sdk_gphone64_arm64 ..."
-    for line in stdout.lines() {
-        if line.starts_with("emulator-") && line.contains("device") {
-            // If the line contains the AVD name, use this serial
-            if line.to_lowercase().contains(&avd_name.to_lowercase()) {
-                if let Some(serial) = line.split_whitespace().next() {
-                    return Some(serial.to_string());
+}
+
+impl View for NativeEmulatorWidget {
+    fn id(&self) -> ViewId {
+        self.id
+    }
+
+    fn debug_name(&self) -> std::borrow::Cow<'static, str> {
+        "NativeEmulatorWidget".into()
+    }
+
+    fn update(&mut self, _cx: &mut UpdateCx, _state: Box<dyn std::any::Any>) {
+        // Handle updates if needed
+    }
+
+    fn compute_layout(&mut self, _cx: &mut ComputeLayoutCx) -> Option<Rect> {
+        // Get layout after it's been computed
+        if let Some(layout) = self.id.get_layout() {
+            let width = layout.size.width as u32;
+            let height = layout.size.height as u32;
+            
+            if let Some(view) = &self.native_view {
+                view.resize(width, height);
+            } else {
+                // Initialize the native view if we have a window handle
+                use floem::window::WindowIdExt;
+                
+                if let Some(window_id) = self.id.window_id() {
+                    if let Some(handle) = window_id.raw_window_handle() {
+                        // Determine the platform from the running device signal
+                        if let Some(device) = self.running_device.get_untracked() {
+                            let platform = match device.platform {
+                                umide_emulator::common::DevicePlatform::Android => EmulatorPlatform::Android,
+                                umide_emulator::common::DevicePlatform::Ios => EmulatorPlatform::Ios,
+                            };
+                            
+                            match NativeEmulatorView::new(handle, width, height, platform) {
+                                Ok(view) => {
+                                    tracing::info!("Successfully created native emulator view for device: {}", device.name);
+                                    
+                                    // Attach device if ID is available
+                                    if !device.id.is_empty() {
+                                        view.attach_device(&device.id);
+                                    }
+                                    
+                                    self.native_view = Some(view);
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to create native emulator view: {}", e);
+                                }
+                            }
+                        } else {
+                            // Should not happen if view is visible only when running, but handle gracefully
+                            tracing::warn!("NativeEmulatorWidget layout called but no device is running");
+                        }
+                    }
                 }
             }
         }
+        None
     }
-    
-    // Fallback: return the first emulator found
-    for line in stdout.lines() {
-        if line.starts_with("emulator-") && line.contains("device") {
-            if let Some(serial) = line.split_whitespace().next() {
-                info!("Using first available emulator: {}", serial);
-                return Some(serial.to_string());
-            }
-        }
+
+    fn paint(&mut self, _cx: &mut PaintCx) {
+        // Native view handles painting on its own layer/surface
     }
-    
-    None
 }
 
-/// Capture a single frame from an Android emulator using ADB screencap
-fn capture_android_emulator_frame(serial: Option<&str>) -> Result<umide_emulator::decoder::DecodedFrame, String> {
-    // Run: adb [-s serial] exec-out screencap -p
-    // This outputs PNG to stdout
-    let mut cmd = Command::new("adb");
-    
-    if let Some(s) = serial {
-        cmd.args(["-s", s]);
-    }
-    
-    cmd.args(["exec-out", "screencap", "-p"]);
-    
-    let output = cmd.output()
-        .map_err(|e| format!("Failed to run adb: {}", e))?;
-    
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("adb screencap failed: {}", stderr));
-    }
-    
-    let png_data = output.stdout;
-    if png_data.is_empty() {
-        return Err("Empty screenshot data from adb".to_string());
-    }
-    
-    // Decode PNG to RGBA
-    let img = image::load_from_memory_with_format(&png_data, image::ImageFormat::Png)
-        .map_err(|e| format!("Failed to decode Android PNG: {}", e))?
-        .to_rgba8();
-    
-    let width = img.width();
-    let height = img.height();
-    let rgba_data = img.into_raw();
-    
-    Ok(umide_emulator::decoder::DecodedFrame {
-        width,
-        height,
-        frame: umide_emulator::decoder::GpuFrame::Software(Arc::new(rgba_data), width * 4, height),
-    })
-}
-
-/// Send a touch/tap to an iOS Simulator at device coordinates
-/// Uses AppleScript to click in the Simulator window
-fn send_ios_touch(_device_udid: &str, x: i32, y: i32) {
-    // iOS Simulator doesn't have a direct touch injection API via simctl
-    // We use AppleScript to activate Simulator and perform a click
-    // Note: This requires Simulator window to be visible for the click
-    
-    // First, get the window position and send a click there
-    // The script activates Simulator and clicks at the relative position
-    let script = format!(
-        r#"tell application "Simulator"
-            activate
-            delay 0.1
-        end tell
-        tell application "System Events"
-            tell process "Simulator"
-                set simWindow to front window
-                set {{winX, winY}} to position of simWindow
-                -- Click at device coordinates relative to window (with toolbar offset)
-                click at {{winX + {} + 10, winY + {} + 50}}
-            end tell
-        end tell"#,
-        x, y
-    );
-    
-    let _ = Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .spawn();
-}
-
-/// Send a tap to an Android emulator at device coordinates
-fn send_android_touch(serial: Option<&str>, x: i32, y: i32) {
-    let mut cmd = Command::new("adb");
-    
-    if let Some(s) = serial {
-        cmd.args(["-s", s]);
-    }
-    
-    cmd.args(["shell", "input", "tap", &x.to_string(), &y.to_string()]);
-    let _ = cmd.spawn();
-}
-
-pub fn emulator_panel(
-    window_tab_data: Rc<WindowTabData>,
-    position: PanelPosition,
+/// Create a single platform panel (Android or iOS)
+fn platform_panel(
+    platform: DevicePlatform,
+    devices: RwSignal<Vec<DeviceInfo>>,
+    running_device: RwSignal<Option<DeviceInfo>>,
+    frame_signal: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>, // Kept for API compat, likely unused
+    current_device_id: RwSignal<String>,
+    config: floem::reactive::ReadSignal<Arc<crate::config::LapceConfig>>,
 ) -> impl View {
-    let config = window_tab_data.common.config;
-    let devices = create_rw_signal(Vec::<DeviceInfo>::new());
-    let active_platform = create_rw_signal(DevicePlatform::Android);
-    let running_device = create_rw_signal(None::<DeviceInfo>);
-
-    // Effect to fetch devices
-    create_effect(move |_| {
-        let dev_list = list_all_devices();
-        // Update running_device if any device is Running
-        if let Some(running) = dev_list.iter().find(|d| d.state == DeviceState::Running) {
-            running_device.set(Some(running.clone()));
-        }
-        devices.set(dev_list);
-    });
-
-    let emulator_frame = window_tab_data.panel.emulator_frame;
-    {
-        create_effect(move |_| {
-            if let Some(device) = running_device.get() {
-                let (tx, rx) = std::sync::mpsc::channel::<umide_emulator::decoder::DecodedFrame>();
-                let frame_signal = floem::ext_event::create_signal_from_channel(rx);
-                
-                create_effect(move |_| {
-                    frame_signal.with(|frame: &Option<umide_emulator::decoder::DecodedFrame>| {
-                        if let Some(frame) = frame {
-                            emulator_frame.set(Some(Arc::new(frame.clone())));
-                        }
-                    });
-                });
-
-                // Clone device info for thread
-                let device_id = device.id.clone();
-                let device_platform = device.platform.clone();
-                let device_name = device.name.clone();
-
-                std::thread::spawn(move || {
-                    // For iOS Simulator, use simctl screenshot capture (reliable)
-                    if device_platform == DevicePlatform::Ios {
-                        info!("Starting iOS Simulator capture for: {}", device_name);
-                        
-                        // Wait a moment for simulator to be ready
-                        std::thread::sleep(std::time::Duration::from_millis(500));
-                        
-                        loop {
-                            match capture_ios_simulator_frame(&device_id) {
-                                Ok(frame) => {
-                                    if tx.send(frame).is_err() {
-                                        info!("Frame channel closed, stopping iOS capture");
-                                        break;
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Failed to capture iOS frame: {}", e);
-                                    std::thread::sleep(std::time::Duration::from_millis(200));
-                                    continue;
-                                }
-                            }
-                            // ~20 FPS target
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-                        }
-                        return;
-                    }
-
-                    // For Android, use ADB screencap (reliable)
-                    if device_platform == DevicePlatform::Android {
-                        info!("Starting Android emulator capture for: {}", device_name);
-                        
-                        // Wait for emulator to boot
-                        std::thread::sleep(std::time::Duration::from_secs(3));
-                        
-                        // Find the emulator serial
-                        let serial = find_android_emulator_serial(&device_id);
-                        info!("Using serial: {:?}", serial);
-                        
-                        loop {
-                            match capture_android_emulator_frame(serial.as_deref()) {
-                                Ok(frame) => {
-                                    if tx.send(frame).is_err() {
-                                        info!("Frame channel closed, stopping Android capture");
-                                        break;
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Failed to capture Android frame: {}", e);
-                                    std::thread::sleep(std::time::Duration::from_millis(200));
-                                    continue;
-                                }
-                            }
-                            // ~15 FPS target
-                            std::thread::sleep(std::time::Duration::from_millis(66));
-                        }
-                        return;
-                    }
-
-                    // For other platforms or test mode, check for test file
-                    let test_file = "/tmp/test.h264";
-                    if std::path::Path::new(test_file).exists() {
-                        info!("Found test file: {}", test_file);
-                        if let Ok(mut source) = umide_emulator::video::h264_source::H264FileSource::new(test_file) {
-                            #[cfg(target_os = "macos")]
-                            {
-                                use umide_emulator::decoder::VideoDecoder;
-                                
-                                info!("Initializing Hardware Decoder...");
-                                match umide_emulator::video::macos_hardware::VideoToolboxDecoder::new() {
-                                    Ok(mut decoder) => {
-                                        loop {
-                                            if let Some(nalu) = source.next_nalu() {
-                                                if let Ok(decoded_frames) = decoder.decode_frame(nalu) {
-                                                    for frame in decoded_frames {
-                                                        info!("Got Hardware Frame: {}x{}", frame.width, frame.height);
-                                                        if tx.send(frame).is_err() { return; }
-                                                    }
-                                                } else {
-                                                    info!("Decode failed");
-                                                }
-                                                std::thread::sleep(std::time::Duration::from_millis(16));
-                                            } else {
-                                                info!("EOF, restarting loop");
-                                                source = umide_emulator::video::h264_source::H264FileSource::new(test_file).unwrap();
-                                            }   
-                                        }
-                                    }
-                                    Err(e) => error!("Failed to create decoder: {:?}", e),
-                                }
-                            }
-                            #[cfg(not(target_os = "macos"))]
-                            {
-                                info!("H264 verification only supported on macOS for now");
-                            }
-                        }
-                    }
-
-                    // FALLBACK: Noise loop
-                    info!("Running Noise Loop (No test file found at {})", test_file);
-                    let mut i: u8 = 0;
-                    loop {
-                        let mut data = vec![0u8; 200 * 400 * 4];
-                        for y in 0..400 {
-                            for x in 0..200 {
-                                let idx = (y * 200 + x) * 4;
-                                data[idx] = 0;
-                                data[idx + 1] = 0;
-                                data[idx + 2] = (x as u8).wrapping_add(i);
-                                data[idx + 3] = 255;
-                            }
-                        }
-                        let frame = umide_emulator::decoder::DecodedFrame {
-                            width: 200,
-                            height: 400,
-                            frame: umide_emulator::decoder::GpuFrame::Software(Arc::new(data), 200 * 4, 400),
-                        };
-                        if tx.send(frame).is_err() { break; }
-                        i = i.wrapping_add(5);
-                        std::thread::sleep(std::time::Duration::from_millis(100));
-                    }
-                });
-            } else {
-                emulator_frame.set(None);
-            }
-        });
-    }
-
+    let platform_name = match &platform {
+        DevicePlatform::Android => "Android",
+        DevicePlatform::Ios => "iOS",
+    };
+    
+    // Device item renderer
     let device_item = {
-        let running_device = running_device.clone();
         move |device: DeviceInfo| {
             let device_cloned_start = device.clone();
             let device_cloned_stop = device.clone();
-            let device_cloned_running = device.clone();
-            let name = device.name.clone();
             let is_running = device.state == DeviceState::Running;
             let is_starting = device.state == DeviceState::Starting;
             let is_disconnected = device.state == DeviceState::Disconnected;
-
-            stack((
-                label(move || name.clone())
-                    .style(|s| s.flex_grow(1.0).padding_horiz(5.0)),
+            
+            Stack::new((
+                Label::new(device.name.clone())
+                    .style(|s| s.flex_grow(1.0).padding_horiz(6.0)),
                 clickable_icon(
-                    || LapceIcons::START,
+                    || LapceIcons::DEBUG_CONTINUE,
                     move || {
                         let _ = launch_device(&device_cloned_start);
-                        // For testing: simulate transitioning to running
-                        running_device.set(Some(device_cloned_running.clone()));
+                        let mut d = device_cloned_start.clone();
+                        d.state = DeviceState::Running;
+                        running_device.set(Some(d));
                     },
                     || false,
                     move || !is_disconnected,
@@ -369,20 +146,17 @@ pub fn emulator_panel(
                     move || {
                         let _ = stop_device(&device_cloned_stop);
                         running_device.set(None);
+                        frame_signal.set(None);
+                        current_device_id.set(String::new());
                     },
                     || false,
                     move || !is_running,
                     || "Stop",
                     config,
                 ),
-                label(move || {
-                    if is_starting {
-                        "Starting..."
-                    } else {
-                        ""
-                    }
-                })
-                .style(|s| s.padding_horiz(5.0).font_size(10.0)),
+                Label::new({
+                    if is_starting { "Starting..." } else { "" }
+                }).style(|s| s.padding_horiz(5.0).font_size(10.0)),
             ))
             .style(|s| {
                 s.width_full()
@@ -393,110 +167,152 @@ pub fn emulator_panel(
             })
         }
     };
-
-    let tab_button = move |platform: DevicePlatform, label_str: &'static str| {
-        let platform_cloned = platform.clone();
-        let is_active = move || active_platform.get() == platform_cloned;
-        container(
-            label(move || label_str)
+    
+    Stack::new((
+        // Header
+        Container::new(
+            Label::new(platform_name.to_string())
                 .style(move |s| {
-                    s.padding_vert(6.0)
-                        .flex_grow(1.0)
-                        .items_center()
-                        .justify_center()
+                    s.font_size(12.0)
+                        .font_bold()
+                        .padding(6.0)
                 })
         )
-        .on_click_stop(move |_| {
-            active_platform.set(platform.clone());
-        })
         .style(move |s| {
             let config = config.get();
-            s.flex_grow(1.0)
-                .items_center()
-                .justify_center()
-                .cursor(floem::style::CursorStyle::Pointer)
-                .apply_if(is_active(), |s| {
-                    s.border_bottom(2.0)
-                        .border_color(config.color(LapceColor::LAPCE_TAB_ACTIVE_UNDERLINE))
-                })
-                .hover(|s| {
-                    s.background(config.color(LapceColor::PANEL_HOVERED_BACKGROUND))
-                })
-        })
-    };
+            s.width_full()
+                .border_bottom(1.0)
+                .border_color(config.color(LapceColor::LAPCE_BORDER))
+        }),
+        
+        // Content: Device list
+        Stack::new((
+            Scroll::new(
+                dyn_stack(
+                    move || {
+                        // Only show list if no device running (or can show generic list)
+                        // Simplified: Show list always, but maybe disable items? 
+                        // logic from before: hide if running.
+                        if running_device.get().is_some() {
+                             return Vec::new();
+                        }
+                        let platform_filter = platform.clone();
+                        devices.get().into_iter()
+                            .filter(|d| d.platform == platform_filter)
+                            .collect::<Vec<_>>()
+                    },
+                    |d| format!("{}-{}", d.id, d.state as u32),
+                    device_item
+                ).style(|s| s.flex_col().width_full())
+            )
+            .style(move |s| {
+                s.flex_grow(1.0)
+                    .width_full()
+                    .apply_if(running_device.get().is_some(), |s| s.hide())
+            }),
+
+            // Native Emulator View
+            Stack::new((
+                NativeEmulatorWidget::new(running_device, current_device_id),
+                clickable_icon(
+                    || LapceIcons::CLOSE,
+                    move || {
+                        running_device.set(None);
+                        frame_signal.set(None);
+                        current_device_id.set(String::new());
+                    },
+                    || false,
+                    || false,
+                    || "Back to list",
+                    config,
+                ).style(|s| s.absolute().margin_left(5.0).margin_top(5.0))
+            ))
+            .style(move |s| {
+                  s.flex_col()
+                    .width_full()
+                    .flex_grow(1.0)
+                    .min_height(300.0)
+                    .apply_if(running_device.get().is_none(), |s| s.hide())
+            })
+        ))
+        .style(|s| s.flex_col().flex_grow(1.0).width_full()),
+    ))
+    .style(move |s| {
+        let config = config.get();
+        s.flex_col()
+            .flex_grow(1.0)
+            .min_width(180.0)
+            .border(1.0)
+            .border_color(config.color(LapceColor::LAPCE_BORDER))
+    })
+}
+
+pub fn emulator_panel(
+    window_tab_data: Rc<WindowTabData>,
+    position: PanelPosition,
+) -> impl View {
+    let config = window_tab_data.common.config;
+    let devices = RwSignal::new(Vec::<DeviceInfo>::new());
+    
+    // Separate running device signals for each platform
+    let running_android = RwSignal::new(None::<DeviceInfo>);
+    let running_ios = RwSignal::new(None::<DeviceInfo>);
+    
+    // Track current device IDs for capture management
+    let current_android_id = RwSignal::new(String::new());
+    let current_ios_id = RwSignal::new(String::new());
+    
+    // Get platform-specific frame signals
+    let android_frame = window_tab_data.panel.android_frame;
+    let ios_frame = window_tab_data.panel.ios_frame;
+
+    // Effect to fetch devices
+    Effect::new(move |_| {
+        let dev_list = list_all_devices();
+        
+        // Update running devices if any are Running
+        for device in &dev_list {
+            if device.state == DeviceState::Running {
+                match device.platform {
+                    DevicePlatform::Android => {
+                        if running_android.get().is_none() {
+                            running_android.set(Some(device.clone()));
+                        }
+                    }
+                    DevicePlatform::Ios => {
+                        if running_ios.get().is_none() {
+                            running_ios.set(Some(device.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        
+        devices.set(dev_list);
+    });
 
     PanelBuilder::new(config, position)
         .add(
             "Emulators",
-            stack((
-                h_stack((
-                    tab_button(DevicePlatform::Android, "Android"),
-                    tab_button(DevicePlatform::Ios, "iOS"),
-                ))
-                .style(move |s| {
-                    s.width_full()
-                        .border_bottom(1.0)
-                        .border_color(config.get().color(LapceColor::LAPCE_BORDER))
-                        .apply_if(running_device.get().is_some(), |s| s.hide())
-                }),
-                scroll(
-                    stack((
-                        dyn_stack(
-                            move || {
-                                if running_device.get().is_some() {
-                                    return Vec::new();
-                                }
-                                let platform = active_platform.get();
-                                devices.get().into_iter().filter(|d| d.platform == platform).collect::<Vec<_>>()
-                            },
-                            |d| format!("{}-{}", d.id, d.state as u32),
-                            move |d| device_item(d)
-                        ).style(|s| s.flex_col().width_full()),
-                        stack((
-                            {
-                                let running_device = running_device.clone();
-                                crate::panel::emulator_host_view::emulator_host_view(window_tab_data.panel.emulator_frame, move |x, y| {
-                                    if let Some(device) = running_device.get_untracked() {
-                                        let x_int = x as i32;
-                                        let y_int = y as i32;
-                                        info!("Touch at device coords ({}, {}) on {}", x_int, y_int, device.name);
-                                        
-                                        match device.platform {
-                                            DevicePlatform::Ios => {
-                                                send_ios_touch(&device.id, x_int, y_int);
-                                            }
-                                            DevicePlatform::Android => {
-                                                // Use first available emulator
-                                                let serial = find_android_emulator_serial(&device.id);
-                                                send_android_touch(serial.as_deref(), x_int, y_int);
-                                            }
-                                        }
-                                    }
-                                })
-                            },
-                            clickable_icon(
-                                || LapceIcons::CLOSE,
-                                move || {
-                                    running_device.set(None);
-                                },
-                                || false,
-                                || false,
-                                || "Back to list",
-                                config,
-                            ).style(|s| s.absolute().margin_left(200.0).margin_top(10.0))
-                        ))
-                        .style(move |s| {
-                            s.flex_col()
-                                .width_full()
-                                .height(500.0)
-                                .apply_if(running_device.get().is_none(), |s| s.hide())
-                        })
-                    ))
-                    .style(|s| s.flex_col().width_full().padding(10.0))
-                )
-                .style(|s| s.flex_grow(1.0).width_full()),
+            Stack::horizontal((
+                platform_panel(
+                    DevicePlatform::Android,
+                    devices,
+                    running_android,
+                    android_frame,
+                    current_android_id,
+                    config,
+                ),
+                platform_panel(
+                    DevicePlatform::Ios,
+                    devices,
+                    running_ios,
+                    ios_frame,
+                    current_ios_id,
+                    config,
+                ),
             ))
-            .style(|s| s.flex_col().size_full()),
+            .style(|s| s.flex_row().size_full().gap(5.0).padding(5.0)),
             window_tab_data.panel.section_open(crate::panel::data::PanelSection::Process),
         )
         .build()

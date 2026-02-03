@@ -9,17 +9,17 @@ use alacritty_terminal::{
 };
 use anyhow::anyhow;
 use floem::{
-    keyboard::{Key, KeyEvent, Modifiers, NamedKey},
+    prelude::{Key, KeyboardEvent, Modifiers, NamedKey},
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::editor::text::SystemClipboard,
 };
-use lapce_core::{
+use umide_core::{
     command::{EditCommand, FocusCommand, ScrollCommand},
     mode::{Mode, VisualMode},
     movement::{LinePosition, Movement},
     register::Clipboard,
 };
-use lapce_rpc::{
+use umide_rpc::{
     dap_types::RunDebugConfig,
     terminal::{TermId, TerminalProfile},
 };
@@ -428,18 +428,14 @@ impl TerminalData {
         raw
     }
 
-    pub fn send_keypress(&self, key: &KeyEvent) -> bool {
+    pub fn send_keypress(&self, key: &KeyboardEvent) -> bool {
         if let Some(command) = Self::resolve_key_event(key) {
             self.receive_char(command);
             true
         } else if key.modifiers == Modifiers::ALT
-            && matches!(&key.key.logical_key, Key::Character(_))
+            && matches!(&key.key, Key::Character(_))
         {
-            if let Key::Character(c) = &key.key.logical_key {
-                // In terminal emulators, when the Alt key is combined with another character
-                // (such as Alt+a), a leading ESC (Escape, ASCII code 0x1B) character is usually
-                // sent followed by a sequence of that character. For example,
-                // Alt+a sends \x1Ba.
+            if let Key::Character(c) = &key.key {
                 self.receive_char("\x1b");
                 self.receive_char(c.as_str());
             }
@@ -449,7 +445,7 @@ impl TerminalData {
         }
     }
 
-    pub fn resolve_key_event(key: &KeyEvent) -> Option<&str> {
+    pub fn resolve_key_event(key: &KeyboardEvent) -> Option<&str> {
         let key = key.clone();
 
         // Generates a `Modifiers` value to check against.
@@ -535,7 +531,7 @@ impl TerminalData {
             };
         }
 
-        match key.key.logical_key {
+        match key.key {
             Key::Character(ref c) => {
                 if key.modifiers == Modifiers::CONTROL {
                     // Convert the character into its index (into a control character).
@@ -582,7 +578,7 @@ impl TerminalData {
                 }
             }
             Key::Named(NamedKey::Backspace) => {
-                Some(if key.modifiers.control() {
+                Some(if key.modifiers.ctrl() {
                     "\x08" // backspace
                 } else if key.modifiers.alt() {
                     "\x1b\x7f"

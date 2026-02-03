@@ -3,9 +3,9 @@ use std::{ops::AddAssign, rc::Rc};
 use floem::{
     IntoView, View, ViewId,
     reactive::{RwSignal, SignalGet, SignalUpdate, SignalWith},
-    style::CursorStyle,
+    style::{CursorStyle, Style},
     views::{
-        Decorators, VirtualVector, container, empty, label, scroll, stack, svg,
+        Container, Decorators, Empty, Label, Scroll, Stack, VirtualVector, svg,
         virtual_stack,
     },
 };
@@ -130,7 +130,7 @@ pub fn show_hierarchy_panel(
     let config = call_hierarchy_data.common.config;
     let ui_line_height = call_hierarchy_data.common.ui_line_height;
     let scroll_to_line = call_hierarchy_data.scroll_to_line;
-    scroll(
+    Scroll::new(
         virtual_stack(
             move || VirtualList::new(call_hierarchy_data.root.get()),
             move |(_, _, item)| item.get_untracked().view_id,
@@ -138,8 +138,8 @@ pub fn show_hierarchy_panel(
                 let data = rw_data.get_untracked();
                 let open = data.open;
                 let kind = data.item.kind;
-                stack((
-                    container(
+                Stack::new((
+                    Container::new(
                         svg(move || {
                             let config = config.get();
                             let svg_str = match open.get() {
@@ -188,13 +188,13 @@ pub fn show_hierarchy_panel(
                         }),
                     data.item.name.clone().into_view(),
                     if data.item.detail.is_some() {
-                        label(move || {
+                        Label::new({
                             data.item.detail.clone().unwrap_or_default().replace('\n', "↵")
                         }).style(move |s| s.margin_left(6.0)
                                                 .color(config.get().color(LapceColor::EDITOR_DIM))
                         ).into_any()
                     } else {
-                        empty().into_any()
+                        Empty::new().into_any()
                     },
                 ))
                 .style(move |s| {
@@ -239,7 +239,7 @@ pub fn show_hierarchy_panel(
         ).item_size_fixed(move || ui_line_height.get())
         .style(|s| s.flex_col().absolute().min_width_full()),
     )
-    .style(|s| s.absolute().size_full())
+    .style(|s: Style| s.absolute().size_full())
     .scroll_to(move || {
         if let Some(line) = scroll_to_line.get() {
             let line_height = ui_line_height.get();

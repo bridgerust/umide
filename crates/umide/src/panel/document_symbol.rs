@@ -15,7 +15,7 @@ use lsp_types::{DocumentSymbol, SymbolKind};
 use super::position::PanelPosition;
 use crate::{
     command::InternalCommand,
-    config::{color::LapceColor, icon::LapceIcons},
+    config::{color::UmideColor, icon::UmideIcons},
     editor::location::EditorLocation,
     window_tab::WindowTabData,
 };
@@ -225,15 +225,15 @@ pub fn symbol_panel(
                         svg(move || {
                             let config = config.get();
                             let svg_str = match open.get() {
-                                true => LapceIcons::ITEM_OPENED,
-                                false => LapceIcons::ITEM_CLOSED,
+                                true => UmideIcons::ITEM_OPENED,
+                                false => UmideIcons::ITEM_CLOSED,
                             };
                             config.ui_svg(svg_str)
                         })
                         .style(move |s| {
                             let config = config.get();
                             let color = if has_child {
-                                config.color(LapceColor::LAPCE_ICON_ACTIVE)
+                                config.color(UmideColor::LAPCE_ICON_ACTIVE)
                             } else {
                                 Color::TRANSPARENT
                             };
@@ -255,7 +255,7 @@ pub fn symbol_panel(
                         let config = config.get();
                         config
                             .symbol_svg(&kind)
-                            .unwrap_or_else(|| config.ui_svg(LapceIcons::FILE))
+                            .unwrap_or_else(|| config.ui_svg(UmideIcons::FILE))
                     }).style(move |s| {
                             let config = config.get();
                             let size = config.ui.icon_size() as f32;
@@ -263,7 +263,7 @@ pub fn symbol_panel(
                                 .size(size, size)
                                 .margin_right(5.0)
                                 .color(config.symbol_color(&kind).unwrap_or_else(|| {
-                                    config.color(LapceColor::LAPCE_ICON_ACTIVE)
+                                    config.color(UmideColor::LAPCE_ICON_ACTIVE)
                                 }))
                         }),
                     Label::new({
@@ -275,7 +275,7 @@ pub fn symbol_panel(
                     Label::new({
                         data.detail.clone().unwrap_or_default()
                     }).style(move |s| s.margin_left(6.0)
-                                              .color(config.get().color(LapceColor::EDITOR_DIM))
+                                              .color(config.get().color(UmideColor::EDITOR_DIM))
                                               .selectable(false)
                                               .apply_if(
                                                 data.item.detail.clone().is_none(),
@@ -291,7 +291,7 @@ pub fn symbol_panel(
                             s.background(
                                 config
                                     .get()
-                                    .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                    .color(UmideColor::PANEL_HOVERED_BACKGROUND),
                             )
                             .cursor(CursorStyle::Pointer)
                         })

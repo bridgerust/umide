@@ -218,9 +218,23 @@ extern "C" fn screen_capture_trampoline(context: *mut c_void, surface: *mut ffi:
     unsafe {
         let data = &*(context as *const ScreenCaptureCallbackData);
         
-        // Create a temporary MacOSSurface wrapper
-        // Note: We don't own this surface, it's managed by the C++ side
-        let surface_ref = &*(surface as *const MacOSSurface);
-        (data.callback)(surface_ref);
+        // Construct a temporary MacOSSurface wrapper from the raw pointer
+        // We need to query width/height if we want them to be valid
+        // For now, we'll assume the callback uses the surface pointer mainly
+        // WARNING: This assumes the surface is valid for the duration of the callback
+        if let Some(ptr) = NonNull::new(surface) {
+            // Use dummy values or fetch from FFI if needed. 
+            // For safety, we should ideally fetch valid dimensions or change the callback signature.
+            // But to fix the immediate segfault risk of invalid casting:
+            
+            // Note: We used ManuallyDrop to ensure we don't destroy the C++ managed surface
+            let surface_wrapper = std::mem::ManuallyDrop::new(MacOSSurface { 
+                ptr, 
+                width: 0, // Placeholder
+                height: 0 // Placeholder
+            });
+            
+            (data.callback)(&surface_wrapper);
+        }
     }
 }

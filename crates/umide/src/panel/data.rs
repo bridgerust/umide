@@ -14,7 +14,7 @@ use super::{
     style::PanelStyle,
 };
 use crate::{
-    db::LapceDb,
+    db::UmideDb,
     window_tab::{CommonData, Focus},
 };
 
@@ -389,7 +389,7 @@ impl PanelData {
             style.shown = true;
         });
 
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         db.save_panel_orders(self.panels.get_untracked());
     }
 

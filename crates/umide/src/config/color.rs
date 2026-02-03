@@ -19,9 +19,9 @@ pub enum LoadThemeError {
     Read(std::io::Error),
 }
 
-pub struct LapceColor {}
+pub struct UmideColor {}
 
-impl LapceColor {
+impl UmideColor {
     pub const LAPCE_WARN: &'static str = "lapce.warn";
     pub const LAPCE_ERROR: &'static str = "lapce.error";
     pub const LAPCE_DROPDOWN_SHADOW: &'static str = "lapce.dropdown_shadow";

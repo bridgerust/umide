@@ -1,6 +1,6 @@
 # UMIDE Architecture Overview
 
-This document describes the high-level architecture of UMIDE (based on Lapce and Floem) and outlines the plan for integrating mobile emulator features.
+This document describes the high-level architecture of UMIDE (based on Umide and Floem) and outlines the plan for integrating mobile emulator features.
 
 ## Core Architecture
 

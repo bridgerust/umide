@@ -97,7 +97,7 @@ mod test {
 
         fn run_command(
             &self,
-            _command: &crate::command::LapceCommand,
+            _command: &crate::command::UmideCommand,
             _count: Option<usize>,
             _mods: Modifiers,
         ) -> crate::command::CommandExecuted {

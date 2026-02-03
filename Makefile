@@ -1,4 +1,4 @@
-# This Makefile is intended *only* for building macOS binaries of Lapce.
+# This Makefile is intended *only* for building macOS binaries of Umide.
 # It uses macOS-specific tools like `lipo`, `codesign`, and `hdiutil`,
 # and requires that a valid Apple Developer signing identity is installed
 # and available in the system Keychain under the fingerprint set in 
@@ -14,7 +14,7 @@ ASSETS_DIR = extra
 RELEASE_DIR = target/release-lto
 
 APP_NAME = UMIDE.app
-APP_TEMPLATE = $(ASSETS_DIR)/macos/Lapce.app
+APP_TEMPLATE = $(ASSETS_DIR)/macos/Umide.app
 APP_DIR = $(RELEASE_DIR)/macos
 APP_BINARY = $(RELEASE_DIR)/$(TARGET)
 APP_BINARY_DIR = $(APP_DIR)/$(APP_NAME)/Contents/MacOS
@@ -47,8 +47,8 @@ $(TARGET)-universal:
 	@lipo target/{x86_64,aarch64}-apple-darwin/release-lto/$(TARGET) -create -output $(APP_BINARY)
 	/usr/bin/codesign -vvv --deep --entitlements $(ASSETS_DIR)/entitlements.plist --strict --options=runtime --force -s $(CODESIGN_IDENTITY) $(APP_BINARY)
 
-app: $(APP_NAME)-native ## Create a Lapce.app
-app-universal: $(APP_NAME)-universal ## Create a universal Lapce.app
+app: $(APP_NAME)-native ## Create a Umide.app
+app-universal: $(APP_NAME)-universal ## Create a universal Umide.app
 $(APP_NAME)-%: $(TARGET)-%
 	@mkdir -p $(APP_BINARY_DIR)
 	@mkdir -p $(APP_EXTRAS_DIR)
@@ -60,13 +60,13 @@ $(APP_NAME)-%: $(TARGET)-%
 	xattr -c $(APP_DIR)/$(APP_NAME)/Contents/Resources/lapce.icns
 	/usr/bin/codesign -vvv --deep  --entitlements $(ASSETS_DIR)/entitlements.plist --strict --options=runtime --force -s $(CODESIGN_IDENTITY) $(APP_DIR)/$(APP_NAME)
 
-dmg: $(DMG_NAME)-native ## Create a Lapce.dmg
-dmg-universal: $(DMG_NAME)-universal ## Create a universal Lapce.dmg
+dmg: $(DMG_NAME)-native ## Create a Umide.dmg
+dmg-universal: $(DMG_NAME)-universal ## Create a universal Umide.dmg
 $(DMG_NAME)-%: $(APP_NAME)-%
 	@echo "Packing disk image..."
 	@ln -sf /Applications $(DMG_DIR)/Applications
 	@hdiutil create $(DMG_DIR)/$(DMG_NAME) \
-		-volname "Lapce" \
+		-volname "Umide" \
 		-fs HFS+ \
 		-srcfolder $(APP_DIR) \
 		-ov -format UDZO

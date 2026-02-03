@@ -130,7 +130,7 @@ URL:      https://github.com/lapce/lapce
 Packager: Jakub Panek
 
 %description
-Lapce is written in pure Rust with a UI in Floem (which is also written in Rust).
+Umide is written in pure Rust with a UI in Floem (which is also written in Rust).
 It is designed with Rope Science from the Xi-Editor which makes for lightning-fast computation, and leverages OpenGL for rendering.
 
 %build

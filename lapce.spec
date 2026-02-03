@@ -11,7 +11,7 @@ Source:        	{{{ git_dir_pack }}}
 BuildRequires:  cargo libxkbcommon-x11-devel libxcb-devel vulkan-loader-devel wayland-devel openssl-devel pkgconf libxkbcommon-x11-devel
 
 %description
-Lapce is written in pure Rust, with a UI in Floem (also written in Rust).
+Umide is written in pure Rust, with a UI in Floem (also written in Rust).
 It is designed with Rope Science from the Xi-Editor, enabling lightning-fast computation, and leverages wgpu for rendering.
 
 %prep

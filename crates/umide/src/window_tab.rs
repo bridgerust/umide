@@ -45,13 +45,13 @@ use crate::{
     alert::{AlertBoxData, AlertButton},
     code_action::{CodeActionData, CodeActionStatus},
     command::{
-        CommandExecuted, CommandKind, InternalCommand, LapceCommand,
-        LapceWorkbenchCommand, WindowCommand,
+        CommandExecuted, CommandKind, InternalCommand, UmideCommand,
+        UmideWorkbenchCommand, WindowCommand,
     },
     completion::{CompletionData, CompletionStatus},
-    config::LapceConfig,
-    db::LapceDb,
-    debug::{DapData, LapceBreakpoint, RunDebugMode, RunDebugProcess},
+    config::UmideConfig,
+    db::UmideDb,
+    debug::{DapData, UmideBreakpoint, RunDebugMode, RunDebugProcess},
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
     editor_tab::EditorTabChild,
@@ -82,7 +82,7 @@ use crate::{
     },
     tracing::*,
     window::WindowCommonData,
-    workspace::{LapceWorkspace, LapceWorkspaceType, WorkspaceInfo},
+    workspace::{UmideWorkspace, UmideWorkspaceType, WorkspaceInfo},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,7 +117,7 @@ pub struct WorkProgress {
 
 #[derive(Clone)]
 pub struct CommonData {
-    pub workspace: Arc<LapceWorkspace>,
+    pub workspace: Arc<UmideWorkspace>,
     pub scope: Scope,
     pub focus: RwSignal<Focus>,
     pub keypress: RwSignal<KeyPressData>,
@@ -129,18 +129,18 @@ pub struct CommonData {
     pub workbench_size: RwSignal<Size>,
     pub window_origin: RwSignal<Point>,
     pub internal_command: Listener<InternalCommand>,
-    pub lapce_command: Listener<LapceCommand>,
-    pub workbench_command: Listener<LapceWorkbenchCommand>,
+    pub lapce_command: Listener<UmideCommand>,
+    pub workbench_command: Listener<UmideWorkbenchCommand>,
     pub term_tx: Sender<(TermId, TermEvent)>,
     pub term_notification_tx: Sender<TermNotification>,
     pub proxy: ProxyRpcHandler,
     pub view_id: RwSignal<ViewId>,
     pub ui_line_height: Memo<f64>,
     pub dragging: RwSignal<Option<DragContent>>,
-    pub config: ReadSignal<Arc<LapceConfig>>,
+    pub config: ReadSignal<Arc<UmideConfig>>,
     pub proxy_status: RwSignal<Option<ProxyStatus>>,
     pub mouse_hover_timer: RwSignal<TimerToken>,
-    pub breakpoints: RwSignal<BTreeMap<PathBuf, BTreeMap<usize, LapceBreakpoint>>>,
+    pub breakpoints: RwSignal<BTreeMap<PathBuf, BTreeMap<usize, UmideBreakpoint>>>,
     // the current focused view which will receive keyboard events
     pub keyboard_focus: RwSignal<Option<ViewId>>,
     pub window_common: Rc<WindowCommonData>,
@@ -158,7 +158,7 @@ impl std::fmt::Debug for CommonData {
 pub struct WindowTabData {
     pub scope: Scope,
     pub window_tab_id: WindowTabId,
-    pub workspace: Arc<LapceWorkspace>,
+    pub workspace: Arc<UmideWorkspace>,
     pub palette: PaletteData,
     pub main_split: MainSplitData,
     pub file_explorer: FileExplorerData,
@@ -177,7 +177,7 @@ pub struct WindowTabData {
     pub title_height: RwSignal<f64>,
     pub status_height: RwSignal<f64>,
     pub proxy: ProxyData,
-    pub set_config: WriteSignal<Arc<LapceConfig>>,
+    pub set_config: WriteSignal<Arc<UmideConfig>>,
     pub update_in_progress: RwSignal<bool>,
     pub progresses: RwSignal<IndexMap<ProgressToken, WorkProgress>>,
     pub messages: RwSignal<Vec<(String, ShowMessageParams)>>,
@@ -212,7 +212,7 @@ impl KeyPressFocus for WindowTabData {
 
     fn run_command(
         &self,
-        command: &LapceCommand,
+        command: &UmideCommand,
         _count: Option<usize>,
         _mods: Modifiers,
     ) -> CommandExecuted {
@@ -272,11 +272,11 @@ impl WindowTabData {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         cx: Scope,
-        workspace: Arc<LapceWorkspace>,
+        workspace: Arc<UmideWorkspace>,
         window_common: Rc<WindowCommonData>,
     ) -> Self {
         let cx = cx.create_child();
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
 
         let disabled_volts = db.get_disabled_volts().unwrap_or_default();
         let workspace_disabled_volts = db
@@ -295,7 +295,7 @@ impl WindowTabData {
             info
         };
 
-        let config = LapceConfig::load(
+        let config = UmideConfig::load(
             &workspace,
             &all_disabled_volts,
             &window_common.extra_plugin_paths,
@@ -520,7 +520,7 @@ impl WindowTabData {
                             breakpoints
                                 .into_iter()
                                 .map(|b| (b.line, b))
-                                .collect::<BTreeMap<usize, LapceBreakpoint>>(),
+                                .collect::<BTreeMap<usize, UmideBreakpoint>>(),
                         )
                     })
                     .collect(),
@@ -648,7 +648,7 @@ impl WindowTabData {
     }
 
     pub fn reload_config(&self) {
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
 
         let disabled_volts = db.get_disabled_volts().unwrap_or_default();
         let workspace_disabled_volts = db
@@ -657,7 +657,7 @@ impl WindowTabData {
         let mut all_disabled_volts = disabled_volts;
         all_disabled_volts.extend(workspace_disabled_volts);
 
-        let config = LapceConfig::load(
+        let config = UmideConfig::load(
             &self.workspace,
             &all_disabled_volts,
             &self.common.window_common.extra_plugin_paths,
@@ -707,7 +707,7 @@ impl WindowTabData {
         }
     }
 
-    pub fn run_lapce_command(&self, cmd: LapceCommand) {
+    pub fn run_lapce_command(&self, cmd: UmideCommand) {
         match cmd.kind {
             CommandKind::Workbench(command) => {
                 self.run_workbench_command(command, cmd.data);
@@ -733,10 +733,10 @@ impl WindowTabData {
 
     pub fn run_workbench_command(
         &self,
-        cmd: LapceWorkbenchCommand,
+        cmd: UmideWorkbenchCommand,
         data: Option<Value>,
     ) {
-        use LapceWorkbenchCommand::*;
+        use UmideWorkbenchCommand::*;
         match cmd {
             // ==== Modal ====
             EnableModal => {
@@ -760,8 +760,8 @@ impl WindowTabData {
                     };
                     open_file(options, move |file| {
                         if let Some(mut file) = file {
-                            let workspace = LapceWorkspace {
-                                kind: LapceWorkspaceType::Local,
+                            let workspace = UmideWorkspace {
+                                kind: UmideWorkspaceType::Local,
                                 path: Some(if let Some(path) = file.path.pop() {
                                     path
                                 } else {
@@ -782,8 +782,8 @@ impl WindowTabData {
             CloseFolder => {
                 if !self.workspace.kind.is_remote() {
                     let window_command = self.common.window_common.window_command;
-                    let workspace = LapceWorkspace {
-                        kind: LapceWorkspaceType::Local,
+                    let workspace = UmideWorkspace {
+                        kind: UmideWorkspaceType::Local,
                         path: None,
                         last_open: 0,
                     };
@@ -859,7 +859,7 @@ impl WindowTabData {
                 self.main_split.open_settings();
             }
             OpenSettingsFile => {
-                if let Some(path) = LapceConfig::settings_file() {
+                if let Some(path) = UmideConfig::settings_file() {
                     self.main_split.jump_to_location(
                         EditorLocation {
                             path,
@@ -884,7 +884,7 @@ impl WindowTabData {
                 self.main_split.open_keymap();
             }
             OpenKeyboardShortcutsFile => {
-                if let Some(path) = LapceConfig::keymaps_file() {
+                if let Some(path) = UmideConfig::keymaps_file() {
                     self.main_split.jump_to_location(
                         EditorLocation {
                             path,
@@ -969,7 +969,7 @@ impl WindowTabData {
             NewWindowTab => {
                 self.common.window_common.window_command.send(
                     WindowCommand::NewWorkspaceTab {
-                        workspace: LapceWorkspace::default(),
+                        workspace: UmideWorkspace::default(),
                         end: false,
                     },
                 );
@@ -1111,8 +1111,8 @@ impl WindowTabData {
             DisconnectRemote => {
                 self.common.window_common.window_command.send(
                     WindowCommand::SetWorkspace {
-                        workspace: LapceWorkspace {
-                            kind: LapceWorkspaceType::Local,
+                        workspace: UmideWorkspace {
+                            kind: UmideWorkspaceType::Local,
                             path: None,
                             last_open: 0,
                         },
@@ -1190,7 +1190,7 @@ impl WindowTabData {
                 }
                 self.common.window_common.window_scale.set(scale);
 
-                LapceConfig::update_file(
+                UmideConfig::update_file(
                     "ui",
                     "scale",
                     toml_edit::Value::from(scale),
@@ -1205,7 +1205,7 @@ impl WindowTabData {
                 }
                 self.common.window_common.window_scale.set(scale);
 
-                LapceConfig::update_file(
+                UmideConfig::update_file(
                     "ui",
                     "scale",
                     toml_edit::Value::from(scale),
@@ -1214,7 +1214,7 @@ impl WindowTabData {
             ZoomReset => {
                 self.common.window_common.window_scale.set(1.0);
 
-                LapceConfig::update_file(
+                UmideConfig::update_file(
                     "ui",
                     "scale",
                     toml_edit::Value::from(1.0),
@@ -1943,7 +1943,7 @@ impl WindowTabData {
             InternalCommand::SetColorTheme { name, save } => {
                 if save {
                     // The config file is watched
-                    LapceConfig::update_file(
+                    UmideConfig::update_file(
                         "core",
                         "color-theme",
                         toml_edit::Value::from(name),
@@ -1958,7 +1958,7 @@ impl WindowTabData {
             InternalCommand::SetIconTheme { name, save } => {
                 if save {
                     // The config file is watched
-                    LapceConfig::update_file(
+                    UmideConfig::update_file(
                         "core",
                         "icon-theme",
                         toml_edit::Value::from(name),
@@ -1971,7 +1971,7 @@ impl WindowTabData {
                 }
             }
             InternalCommand::SetModal { modal } => {
-                LapceConfig::update_file(
+                UmideConfig::update_file(
                     "core",
                     "modal",
                     toml_edit::Value::from(modal),
@@ -2835,7 +2835,7 @@ impl WindowTabData {
         for folder in folders {
             self.common.window_common.window_command.send(
                 WindowCommand::NewWorkspaceTab {
-                    workspace: LapceWorkspace {
+                    workspace: UmideWorkspace {
                         kind: self.workspace.kind.clone(),
                         path: Some(folder.path.clone()),
                         last_open: 0,

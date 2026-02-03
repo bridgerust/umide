@@ -9,7 +9,7 @@ use umide_core::{
 };
 use lsp_types::InsertTextFormat;
 
-use crate::{config::LapceConfig, doc::Doc, editor::EditorData, snippet::Snippet};
+use crate::{config::UmideConfig, doc::Doc, editor::EditorData, snippet::Snippet};
 
 // TODO: we could integrate completion lens with this, so it is considered at the same time
 
@@ -189,7 +189,7 @@ impl InlineCompletionData {
 
     pub fn update_inline_completion(
         &self,
-        config: &LapceConfig,
+        config: &UmideConfig,
         doc: &Doc,
         cursor_offset: usize,
     ) {

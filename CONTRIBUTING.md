@@ -1,6 +1,6 @@
 # How to contribute
 
-Thank you for your interest in contributing to Lapce! No contribution is too small and we consider _all_ contributions to the project. There are many ways to contribute (a few are listed here) but if you think of something else, join us on [Discord](https://discord.gg/n8tGJ6Rn6D) or let us know via an [issue](https://github.com/bridgerust/umide/issues).
+Thank you for your interest in contributing to Umide! No contribution is too small and we consider _all_ contributions to the project. There are many ways to contribute (a few are listed here) but if you think of something else, join us on [Discord](https://discord.gg/n8tGJ6Rn6D) or let us know via an [issue](https://github.com/bridgerust/umide/issues).
 
 ## Questions
 
@@ -8,16 +8,16 @@ We're always around hanging on our [Discord](https://discord.gg/n8tGJ6Rn6D) serv
 
 ## Feature Requests
 
-A feature request is _editor behaviour that you want to have included in Lapce_. We track feature requests on GitHub via [issues](https://github.com/bridgerust/umide/issues). There are generally few kinds of features:
+A feature request is _editor behaviour that you want to have included in Umide_. We track feature requests on GitHub via [issues](https://github.com/bridgerust/umide/issues). There are generally few kinds of features:
 
 ### Core features
 
-A feature more suited to the core development of Lapce. If this is the case please make a suggestion in an [issue](https://github.com/bridgerust/umide/issues).
+A feature more suited to the core development of Umide. If this is the case please make a suggestion in an [issue](https://github.com/bridgerust/umide/issues).
 
 ### Programming language support (autocompletion/intellisense/formatting)
 
 A feature that relates to specific programming language or development tool that provides intellisense, or various editor commands.
-We do not track plugins development here, each plugin should have own issue tracker with eventual issues linked/referenced to main Lapce issue tracker.
+We do not track plugins development here, each plugin should have own issue tracker with eventual issues linked/referenced to main Umide issue tracker.
 
 ### Syntax highlighting
 
@@ -31,7 +31,7 @@ To reduce the number of duplicate requests, please search through the issues to 
 
 Bugs should also be reported on GitHub via [issues](https://github.com/bridgerust/umide/issues). This allows us to track them and see how prevalent they are.
 
-If you encounter a bug when using Lapce, check the issues to see if anyone else has encountered it. If it already exists, you can use emoji reactions so we can see community interest in specific issues and how important they are.
+If you encounter a bug when using Umide, check the issues to see if anyone else has encountered it. If it already exists, you can use emoji reactions so we can see community interest in specific issues and how important they are.
 
 Please follow the rule of [NoPlusOne](https://github.com/golang/go/wiki/NoPlusOne)
 
@@ -45,4 +45,4 @@ We are currently in the process of improving the documentation for new developer
 
 ## Contact
 
-As always, if you have any questions or are just not sure where to start, post a message into the [Discord](https://discord.gg/n8tGJ6Rn6D) server. We suggest you start here as it is the most popular way for Lapce's contributors and users to communicate.
+As always, if you have any questions or are just not sure where to start, post a message into the [Discord](https://discord.gg/n8tGJ6Rn6D) server. We suggest you start here as it is the most popular way for Umide's contributors and users to communicate.

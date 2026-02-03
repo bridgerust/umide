@@ -10,8 +10,8 @@ use floem::{
 use umide_core::mode::Modes;
 
 use crate::{
-    command::LapceCommand,
-    config::{LapceConfig, color::LapceColor},
+    command::UmideCommand,
+    config::{UmideConfig, color::UmideColor},
     keypress::{
         KeyPressData,
         keymap::{KeyMap, KeyMapPress},
@@ -23,14 +23,14 @@ use crate::{
 
 #[derive(Clone)]
 pub struct KeymapPicker {
-    cmd: RwSignal<Option<LapceCommand>>,
+    cmd: RwSignal<Option<UmideCommand>>,
     keymap: RwSignal<Option<KeyMap>>,
     keys: RwSignal<Vec<(KeyMapPress, bool)>>,
 }
 
-struct KeymapList(im::Vector<(usize, (LapceCommand, Option<KeyMap>))>);
+struct KeymapList(im::Vector<(usize, (UmideCommand, Option<KeyMap>))>);
 
-impl VirtualVector<(usize, (LapceCommand, Option<KeyMap>))> for KeymapList {
+impl VirtualVector<(usize, (UmideCommand, Option<KeyMap>))> for KeymapList {
     fn total_len(&self) -> usize {
         self.0.len()
     }
@@ -38,7 +38,7 @@ impl VirtualVector<(usize, (LapceCommand, Option<KeyMap>))> for KeymapList {
     fn slice(
         &mut self,
         range: Range<usize>,
-    ) -> impl Iterator<Item = (usize, (LapceCommand, Option<KeyMap>))> {
+    ) -> impl Iterator<Item = (usize, (UmideCommand, Option<KeyMap>))> {
         self.0
             .iter()
             .skip(range.start)
@@ -100,7 +100,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     None
                 }
             })
-            .collect::<im::Vector<(LapceCommand, Option<KeyMap>)>>();
+            .collect::<im::Vector<(UmideCommand, Option<KeyMap>)>>();
         items.extend(keypress.commands_without_keymap.iter().filter_map(|cmd| {
             let match_pattern = cmd.kind.str().replace('_', " ").contains(&pattern)
                 || cmd
@@ -116,12 +116,12 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
         let items = items
             .into_iter()
             .enumerate()
-            .collect::<im::Vector<(usize, (LapceCommand, Option<KeyMap>))>>();
+            .collect::<im::Vector<(usize, (UmideCommand, Option<KeyMap>))>>();
         KeymapList(items)
     };
 
     let view_fn =
-        move |(i, (cmd, keymap)): (usize, (LapceCommand, Option<KeyMap>))| {
+        move |(i, (cmd, keymap)): (usize, (UmideCommand, Option<KeyMap>))| {
             let local_keymap = keymap.clone();
             let local_cmd = cmd.clone();
             Stack::new((
@@ -147,7 +147,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                         .flex_basis(0.0)
                         .flex_grow(1.0)
                         .border_right(1.0)
-                        .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                        .border_color(config.get().color(UmideColor::LAPCE_BORDER))
                 }),
                 {
                     let keymap = keymap.clone();
@@ -174,7 +174,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                                     .border(1.0)
                                     .border_radius(3.0)
                                     .border_color(
-                                        config.get().color(LapceColor::LAPCE_BORDER),
+                                        config.get().color(UmideColor::LAPCE_BORDER),
                                     )
                             })
                         },
@@ -186,7 +186,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                             .height_pct(100.0)
                             .border_right(1.0)
                             .border_color(
-                                config.get().color(LapceColor::LAPCE_BORDER),
+                                config.get().color(UmideColor::LAPCE_BORDER),
                             )
                     })
                 },
@@ -223,7 +223,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                                     .border(1.0)
                                     .border_radius(3.0)
                                     .border_color(
-                                        config.get().color(LapceColor::LAPCE_BORDER),
+                                        config.get().color(UmideColor::LAPCE_BORDER),
                                     )
                             })
                         },
@@ -235,7 +235,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                             .height_pct(100.0)
                             .border_right(1.0)
                             .border_color(
-                                config.get().color(LapceColor::LAPCE_BORDER),
+                                config.get().color(UmideColor::LAPCE_BORDER),
                             )
                             .apply_if(!modal.get(), |s| s.hide())
                     })
@@ -286,10 +286,10 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .height(ui_line_height() as f32)
                     .width_pct(100.0)
                     .apply_if(i % 2 > 0, |s| {
-                        s.background(config.color(LapceColor::EDITOR_CURRENT_LINE))
+                        s.background(config.color(UmideColor::EDITOR_CURRENT_LINE))
                     })
                     .border_bottom(1.0)
-                    .border_color(config.color(LapceColor::LAPCE_BORDER))
+                    .border_color(config.color(UmideColor::LAPCE_BORDER))
             })
         };
 
@@ -302,7 +302,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     s.width_pct(100.0)
                         .border_radius(6.0)
                         .border(1.0)
-                        .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                        .border_color(config.get().color(UmideColor::LAPCE_BORDER))
                         .focusable(true)
                 }),
         )
@@ -318,7 +318,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .flex_basis(0.0)
                     .flex_grow(1.0)
                     .border_right(1.0)
-                    .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
             }),
             Label::new("Key Binding").style(move |s| {
                 s.width(200.0)
@@ -326,7 +326,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .padding_horiz(10.0)
                     .height_pct(100.0)
                     .border_right(1.0)
-                    .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
             }),
             Label::new("Modes").style(move |s| {
                 s.width(200.0)
@@ -334,7 +334,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     .padding_horiz(10.0)
                     .height_pct(100.0)
                     .border_right(1.0)
-                    .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
                     .apply_if(!modal.get(), |s| s.hide())
             }),
             Container::new(Label::new("When").style(move |s| {
@@ -355,8 +355,8 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                 .width_pct(100.0)
                 .border_top(1.0)
                 .border_bottom(1.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
-                .background(config.color(LapceColor::EDITOR_CURRENT_LINE))
+                .border_color(config.color(UmideColor::LAPCE_BORDER))
+                .background(config.color(UmideColor::EDITOR_CURRENT_LINE))
         }),
         Container::new(
             Scroll::new(
@@ -364,7 +364,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
                     items,
                     |(i, (cmd, keymap)): &(
                         usize,
-                        (LapceCommand, Option<KeyMap>),
+                        (UmideCommand, Option<KeyMap>),
                     )| { (*i, cmd.kind.str(), keymap.clone()) },
                     view_fn,
                 )
@@ -389,7 +389,7 @@ pub fn keymap_view(editors: Editors, common: Rc<CommonData>) -> impl View {
 fn keyboard_picker_view(
     picker: KeymapPicker,
     ui_line_height: Memo<f64>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let picker_cmd = picker.cmd;
     let view = Container::new(
@@ -427,7 +427,7 @@ fn keyboard_picker_view(
                             .border(1.0)
                             .border_radius(6.0)
                             .border_color(
-                                config.get().color(LapceColor::LAPCE_BORDER),
+                                config.get().color(UmideColor::LAPCE_BORDER),
                             )
                     })
                 },
@@ -441,8 +441,8 @@ fn keyboard_picker_view(
                     .height((ui_line_height.get() as f32) * 1.2)
                     .border(1.0)
                     .border_radius(6.0)
-                    .border_color(config.color(LapceColor::LAPCE_BORDER))
-                    .background(config.color(LapceColor::EDITOR_BACKGROUND))
+                    .border_color(config.color(UmideColor::LAPCE_BORDER))
+                    .background(config.color(UmideColor::EDITOR_BACKGROUND))
             }),
             Stack::new((
                 Label::new("Save")
@@ -453,16 +453,16 @@ fn keyboard_picker_view(
                             .padding_vert(8.0)
                             .border(1.0)
                             .border_radius(6.0)
-                            .border_color(config.color(LapceColor::LAPCE_BORDER))
+                            .border_color(config.color(UmideColor::LAPCE_BORDER))
                             .hover(|s| {
                                 s.cursor(CursorStyle::Pointer).background(
                                     config
-                                        .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                        .color(UmideColor::PANEL_HOVERED_BACKGROUND),
                                 )
                             })
                             .active(|s| {
                                 s.background(config.color(
-                                    LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
+                                    UmideColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
                                 ))
                             })
                     })
@@ -489,16 +489,16 @@ fn keyboard_picker_view(
                             .padding_vert(8.0)
                             .border(1.0)
                             .border_radius(6.0)
-                            .border_color(config.color(LapceColor::LAPCE_BORDER))
+                            .border_color(config.color(UmideColor::LAPCE_BORDER))
                             .hover(|s| {
                                 s.cursor(CursorStyle::Pointer).background(
                                     config
-                                        .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                        .color(UmideColor::PANEL_HOVERED_BACKGROUND),
                                 )
                             })
                             .active(|s| {
                                 s.background(config.color(
-                                    LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
+                                    UmideColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
                                 ))
                             })
                     })
@@ -512,7 +512,7 @@ fn keyboard_picker_view(
                     .justify_center()
                     .width_pct(100.0)
                     .margin_top(20.0)
-                    .border_color(config.color(LapceColor::LAPCE_BORDER))
+                    .border_color(config.color(UmideColor::LAPCE_BORDER))
             }),
         ))
         .on_event_stop(EventListener::PointerDown, |_| {})
@@ -524,8 +524,8 @@ fn keyboard_picker_view(
                 .width(400.0)
                 .border(1.0)
                 .border_radius(6.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
-                .background(config.color(LapceColor::PANEL_BACKGROUND))
+                .border_color(config.color(UmideColor::LAPCE_BORDER))
+                .background(config.color(UmideColor::PANEL_BACKGROUND))
                 
         }),
     )

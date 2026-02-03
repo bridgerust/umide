@@ -10,7 +10,7 @@ use crate::{
     app::clickable_icon,
     panel::{position::PanelPosition, view::PanelBuilder},
     window_tab::WindowTabData,
-    config::{icon::LapceIcons, color::LapceColor},
+    config::{icon::UmideIcons, color::UmideColor},
 };
 use umide_emulator::{
     list_all_devices, launch_device, stop_device, DeviceInfo, DevicePlatform, DeviceState,
@@ -109,7 +109,7 @@ fn platform_panel(
     running_device: RwSignal<Option<DeviceInfo>>,
     frame_signal: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>, // Kept for API compat, likely unused
     current_device_id: RwSignal<String>,
-    config: floem::reactive::ReadSignal<Arc<crate::config::LapceConfig>>,
+    config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
     let platform_name = match &platform {
         DevicePlatform::Android => "Android",
@@ -129,7 +129,7 @@ fn platform_panel(
                 Label::new(device.name.clone())
                     .style(|s| s.flex_grow(1.0).padding_horiz(6.0)),
                 clickable_icon(
-                    || LapceIcons::DEBUG_CONTINUE,
+                    || UmideIcons::DEBUG_CONTINUE,
                     move || {
                         let _ = launch_device(&device_cloned_start);
                         let mut d = device_cloned_start.clone();
@@ -142,7 +142,7 @@ fn platform_panel(
                     config,
                 ),
                 clickable_icon(
-                    || LapceIcons::DEBUG_STOP,
+                    || UmideIcons::DEBUG_STOP,
                     move || {
                         let _ = stop_device(&device_cloned_stop);
                         running_device.set(None);
@@ -182,7 +182,7 @@ fn platform_panel(
             let config = config.get();
             s.width_full()
                 .border_bottom(1.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
+                .border_color(config.color(UmideColor::LAPCE_BORDER))
         }),
         
         // Content: Device list
@@ -215,7 +215,7 @@ fn platform_panel(
             Stack::new((
                 NativeEmulatorWidget::new(running_device, current_device_id),
                 clickable_icon(
-                    || LapceIcons::CLOSE,
+                    || UmideIcons::CLOSE,
                     move || {
                         running_device.set(None);
                         frame_signal.set(None);
@@ -243,7 +243,7 @@ fn platform_panel(
             .flex_grow(1.0)
             .min_width(180.0)
             .border(1.0)
-            .border_color(config.color(LapceColor::LAPCE_BORDER))
+            .border_color(config.color(UmideColor::LAPCE_BORDER))
     })
 }
 

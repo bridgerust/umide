@@ -1,7 +1,7 @@
 #:schema ../extra/schemas/color-theme.json
 
 [color-theme]
-name = "Lapce Dark"
+name = "Umide Dark"
 
 [ui]
 font-family = ""

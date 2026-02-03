@@ -1,7 +1,7 @@
 # Updating versioning for package managers and whatnot
 
 - App metainfo: `extra/linux/dev.lapce.lapce.metainfo.xml`
-- macOS plist (`CFBundleShortVersionString`): `extra/macos/Lapce.app/Contents/Info.plist`
+- macOS plist (`CFBundleShortVersionString`): `extra/macos/Umide.app/Contents/Info.plist`
 - Rust: `Cargo.toml`
 - Obviously changelog: `CHANGELOG.md`
 - RPM spec: `lapce.spec`

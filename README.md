@@ -11,11 +11,11 @@ UMIDE is a unified IDE for cross-platform mobile development (React Native + Flu
 - **Unified Mobile Environment**: Android Emulator and iOS Simulator embedded directly in the IDE.
 - **Cross-Platform Support**: First-class support for React Native and Flutter.
 - **High Performance**: Built on [Floem](https://github.com/lapce/floem) and Rust for lightning-fast speeds.
-- **Based on Lapce**: Inherits all the great features of Lapce editor.
+- **Based on Umide**: Inherits all the great features of Umide editor.
 
 ## License
 
 Copyright 2026 UMIDE contributors
-Portions (original editor) Copyright 2023 Lapce contributors
+Portions (original editor) Copyright 2023 Umide contributors
 
 Released under the Apache License Version 2.

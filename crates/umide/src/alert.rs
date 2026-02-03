@@ -13,7 +13,7 @@ use floem::{
 };
 
 use crate::{
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{UmideConfig, color::UmideColor, icon::UmideIcons},
     window_tab::CommonData,
 };
 
@@ -37,7 +37,7 @@ pub struct AlertBoxData {
     pub title: RwSignal<String>,
     pub msg: RwSignal<String>,
     pub buttons: RwSignal<Vec<AlertButton>>,
-    pub config: ReadSignal<Arc<LapceConfig>>,
+    pub config: ReadSignal<Arc<UmideConfig>>,
 }
 
 impl AlertBoxData {
@@ -63,10 +63,10 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
     Container::new({
         Container::new({
             Stack::new((
-                svg(move || config.get().ui_svg(LapceIcons::WARNING)).style(
+                svg(move || config.get().ui_svg(UmideIcons::WARNING)).style(
                     move |s| {
                         s.size(50.0, 50.0)
-                            .color(config.get().color(LapceColor::LAPCE_WARN))
+                            .color(config.get().color(UmideColor::LAPCE_WARN))
                     },
                 ),
                 Label::derived(move || title.get()).style(move |s| {
@@ -97,18 +97,18 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                                     .border(1.0)
                                     .border_radius(6.0)
                                     .border_color(
-                                        config.color(LapceColor::LAPCE_BORDER),
+                                        config.color(UmideColor::LAPCE_BORDER),
                                     )
                                     .hover(|s| {
                                         s.cursor(CursorStyle::Pointer).background(
                                             config.color(
-                                                LapceColor::PANEL_HOVERED_BACKGROUND,
+                                                UmideColor::PANEL_HOVERED_BACKGROUND,
                                             ),
                                         )
                                     })
                                     .active(|s| {
                                         s.background(config.color(
-                                    LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
+                                    UmideColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
                                 ))
                                     })
                             })
@@ -128,16 +128,16 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                             .line_height(1.5)
                             .border(1.0)
                             .border_radius(6.0)
-                            .border_color(config.color(LapceColor::LAPCE_BORDER))
+                            .border_color(config.color(UmideColor::LAPCE_BORDER))
                             .hover(|s| {
                                 s.cursor(CursorStyle::Pointer).background(
                                     config
-                                        .color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                        .color(UmideColor::PANEL_HOVERED_BACKGROUND),
                                 )
                             })
                             .active(|s| {
                                 s.background(config.color(
-                                    LapceColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
+                                    UmideColor::PANEL_HOVERED_ACTIVE_BACKGROUND,
                                 ))
                             })
                     }),
@@ -151,9 +151,9 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
                 .width(250.0)
                 .border(1.0)
                 .border_radius(6.0)
-                .border_color(config.color(LapceColor::LAPCE_BORDER))
-                .color(config.color(LapceColor::EDITOR_FOREGROUND))
-                .background(config.color(LapceColor::PANEL_BACKGROUND))
+                .border_color(config.color(UmideColor::LAPCE_BORDER))
+                .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                .background(config.color(UmideColor::PANEL_BACKGROUND))
         })
     })
     .on_event_stop(EventListener::PointerDown, move |_| {})
@@ -166,7 +166,7 @@ pub fn alert_box(alert_data: AlertBoxData) -> impl View {
             .background(
                 config
                     .get()
-                    .color(LapceColor::LAPCE_DROPDOWN_SHADOW)
+                    .color(UmideColor::LAPCE_DROPDOWN_SHADOW)
                     .multiply_alpha(0.5),
             )
     })

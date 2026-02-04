@@ -94,39 +94,24 @@ impl View for NativeEmulatorWidget {
     fn compute_layout(&mut self, _cx: &mut ComputeLayoutCx) -> Option<Rect> {
         let is_visible = self.is_visible.get_untracked();
         
-        // If not visible, don't create/update native view
+        // If not visible, cleanup and don't participate in layout
         if !is_visible {
+            if self.native_view.is_some() {
+                self.cleanup();
+            }
             return None;
         }
         
-        // Get layout after it's been computed
-        if let Some(layout) = self.id.get_layout() {
-            let width = layout.size.width as u32;
-            let height = layout.size.height as u32;
-            
-            // Skip if size is zero
-            if width == 0 || height == 0 {
-                return None;
-            }
-            
-            // Check if current device matches what we have initialized
-            let current_device = self.running_device.get_untracked();
-            
-            // If no device running but we have a view, cleanup
-            if current_device.is_none() && self.native_view.is_some() {
-                self.cleanup();
-                return None;
-            }
-            
-            if let Some(_view) = &self.native_view {
-                // Resize/Move handled in paint() where we have absolute coordinates
-            }
-            // Note: Creation moved to paint() to ensure we have layout
-            
-            Some(Rect::new(0.0, 0.0, width as f64, height as f64))
-        } else {
-            None
+        // Check if device is still running
+        let current_device = self.running_device.get_untracked();
+        if current_device.is_none() && self.native_view.is_some() {
+            self.cleanup();
+            return None;
         }
+        
+        // Return None to let flex layout determine our size
+        // The actual size will be read in paint() via get_layout()
+        None
     }
 
     fn paint(&mut self, _cx: &mut floem::context::PaintCx) {

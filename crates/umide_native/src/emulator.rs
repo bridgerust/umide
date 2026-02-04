@@ -31,6 +31,8 @@ pub struct EmulatorInputEvent {
 extern "C" {
     pub fn umide_native_create_emulator(
         parent_window: *mut c_void, 
+        x: i32,
+        y: i32,
         width: u32, 
         height: u32, 
         platform: EmulatorPlatform
@@ -38,7 +40,7 @@ extern "C" {
 
     pub fn umide_native_destroy_emulator(emulator: *mut NativeEmulator);
 
-    pub fn umide_native_resize_emulator(emulator: *mut NativeEmulator, width: u32, height: u32);
+    pub fn umide_native_resize_emulator(emulator: *mut NativeEmulator, x: i32, y: i32, width: u32, height: u32);
 
     pub fn umide_native_send_input(emulator: *mut NativeEmulator, event: *const EmulatorInputEvent);
 

@@ -37,13 +37,13 @@ typedef struct {
 // Create a new emulator view hosted within the given parent window.
 // parent_window: On macOS, this is a void* pointer to an NSView.
 //                On Windows, an HWND. Linux, XID/Wayland surface.
-NativeEmulator* umide_native_create_emulator(void* parent_window, uint32_t width, uint32_t height, EmulatorPlatform platform);
+NativeEmulator* umide_native_create_emulator(void* parent_window, int32_t x, int32_t y, uint32_t width, uint32_t height, EmulatorPlatform platform);
 
 // Destroy the emulator view
 void umide_native_destroy_emulator(NativeEmulator* emulator);
 
-// Resize the emulator view
-void umide_native_resize_emulator(NativeEmulator* emulator, uint32_t width, uint32_t height);
+// Resize and move the emulator view
+void umide_native_resize_emulator(NativeEmulator* emulator, int32_t x, int32_t y, uint32_t width, uint32_t height);
 
 // Send input to the emulator
 void umide_native_send_input(NativeEmulator* emulator, const EmulatorInputEvent* event);

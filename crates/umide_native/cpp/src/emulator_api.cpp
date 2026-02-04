@@ -6,7 +6,7 @@ using namespace umide;
 
 extern "C" {
 
-NativeEmulator* umide_native_create_emulator(void* parent_window, uint32_t width, uint32_t height, EmulatorPlatform platform) {
+NativeEmulator* umide_native_create_emulator(void* parent_window, int32_t x, int32_t y, uint32_t width, uint32_t height, EmulatorPlatform platform) {
     if (!parent_window) {
         std::cerr << "Error: parent_window is null" << std::endl;
         return nullptr;
@@ -18,7 +18,7 @@ NativeEmulator* umide_native_create_emulator(void* parent_window, uint32_t width
         return nullptr;
     }
 
-    if (!emulator->initialize(parent_window, width, height)) {
+    if (!emulator->initialize(parent_window, x, y, width, height)) {
         std::cerr << "Error: Failed to initialize emulator" << std::endl;
         delete emulator;
         return nullptr;
@@ -33,9 +33,9 @@ void umide_native_destroy_emulator(NativeEmulator* emulator) {
     }
 }
 
-void umide_native_resize_emulator(NativeEmulator* emulator, uint32_t width, uint32_t height) {
+void umide_native_resize_emulator(NativeEmulator* emulator, int32_t x, int32_t y, uint32_t width, uint32_t height) {
     if (emulator) {
-        reinterpret_cast<Emulator*>(emulator)->resize(width, height);
+        reinterpret_cast<Emulator*>(emulator)->resize(x, y, width, height);
     }
 }
 

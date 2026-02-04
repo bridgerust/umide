@@ -11,10 +11,10 @@ public:
     virtual ~Emulator() = default;
 
     // Initialize the native surface/window attachment
-    virtual bool initialize(void* parent_window, uint32_t width, uint32_t height) = 0;
+    virtual bool initialize(void* parent_window, int32_t x, int32_t y, uint32_t width, uint32_t height) = 0;
 
-    // Handle resizing
-    virtual void resize(uint32_t width, uint32_t height) = 0;
+    // Handle resizing and moving
+    virtual void resize(int32_t x, int32_t y, uint32_t width, uint32_t height) = 0;
 
     // Attach a specific emulator instance
     virtual void attach_device(const std::string& device_id) = 0;

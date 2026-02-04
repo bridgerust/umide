@@ -16,6 +16,57 @@ impl AndroidEmulator {
         }
     }
 
+    /// Get list of currently running emulator serials from adb devices
+    pub fn get_running_serials() -> Vec<String> {
+        let output = match Command::new("adb")
+            .arg("devices")
+            .output() {
+                Ok(out) => out,
+                Err(_) => return Vec::new(),
+            };
+
+        if !output.status.success() {
+            return Vec::new();
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        stdout
+            .lines()
+            .skip(1) // Skip "List of devices" header
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[0].starts_with("emulator-") && parts[1] == "device" {
+                    Some(parts[0].to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Check if an AVD is currently running
+    pub fn is_running(avd_name: &str) -> bool {
+        let running = Self::get_running_serials();
+        if running.is_empty() {
+            return false;
+        }
+        
+        // Check if any running emulator corresponds to this AVD
+        // We need to query each emulator for its AVD name
+        for serial in &running {
+            if let Ok(output) = Command::new("adb")
+                .args(["-s", serial, "emu", "avd", "name"])
+                .output()
+            {
+                let name = String::from_utf8_lossy(&output.stdout);
+                if name.trim() == avd_name || name.lines().next().map(|l| l.trim()) == Some(avd_name) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
         let output = Command::new("emulator")
             .arg("-list-avds")
@@ -55,54 +106,71 @@ impl AndroidEmulator {
     }
 
     pub fn stop(avd_name: &str) -> Result<()> {
-        // First, try to find the emulator by AVD name in adb devices
-        let output = Command::new("adb")
-            .arg("devices")
-            .arg("-l")
-            .output()?;
-
-        if !output.status.success() {
-            return Err(anyhow!("Failed to list adb devices"));
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        tracing::info!("Attempting to stop Android emulator for AVD: {}", avd_name);
         
-        // Look for emulator serial that matches AVD name
-        for line in stdout.lines() {
-            if line.contains(avd_name) || line.contains(&avd_name.to_lowercase()) {
-                if let Some(serial) = line.split_whitespace().next() {
-                    if serial.starts_with("emulator-") {
-                        let result = Command::new("adb")
-                            .arg("-s")
-                            .arg(serial)
-                            .arg("emu")
-                            .arg("kill")
-                            .output();
-                        
-                        if result.is_ok() {
-                            return Ok(());
+        // Get all running emulator serials
+        let running_serials = Self::get_running_serials();
+        
+        if running_serials.is_empty() {
+            tracing::warn!("No running emulators found");
+            return Err(anyhow!("No running emulators found"));
+        }
+        
+        // Find the emulator that matches this AVD name
+        for serial in &running_serials {
+            // Query the AVD name for this emulator
+            if let Ok(output) = Command::new("adb")
+                .args(["-s", serial, "emu", "avd", "name"])
+                .output()
+            {
+                let name = String::from_utf8_lossy(&output.stdout);
+                let name_trimmed = name.lines().next().map(|l| l.trim()).unwrap_or("");
+                
+                tracing::debug!("Emulator {} has AVD name: '{}'", serial, name_trimmed);
+                
+                if name_trimmed == avd_name {
+                    tracing::info!("Found matching emulator {} for AVD {}, sending kill command", serial, avd_name);
+                    
+                    // Kill this emulator
+                    let result = Command::new("adb")
+                        .args(["-s", serial, "emu", "kill"])
+                        .output();
+                    
+                    match result {
+                        Ok(output) => {
+                            if output.status.success() {
+                                tracing::info!("Successfully killed emulator {}", serial);
+                                return Ok(());
+                            } else {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                tracing::error!("Failed to kill emulator {}: {}", serial, stderr);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to execute adb kill command: {}", e);
                         }
                     }
                 }
             }
         }
 
-        // Fallback: kill first running emulator
-        for line in stdout.lines() {
-            if let Some(serial) = line.split_whitespace().next() {
-                if serial.starts_with("emulator-") && line.contains("device") {
-                    let _ = Command::new("adb")
-                        .arg("-s")
-                        .arg(serial)
-                        .arg("emu")
-                        .arg("kill")
-                        .output();
+        // If we didn't find a matching AVD, try to kill by partial name match
+        tracing::warn!("No exact AVD match found, trying partial match...");
+        for serial in &running_serials {
+            // Just kill the first one as fallback
+            let result = Command::new("adb")
+                .args(["-s", serial, "emu", "kill"])
+                .output();
+            
+            if let Ok(output) = result {
+                if output.status.success() {
+                    tracing::info!("Killed emulator {} as fallback", serial);
                     return Ok(());
                 }
             }
         }
 
-        Err(anyhow!("Could not find running emulator for AVD: {}", avd_name))
+        Err(anyhow!("Could not find or stop emulator for AVD: {}", avd_name))
     }
 
     pub async fn stream_video(&mut self) -> Result<impl tokio_stream::Stream<Item = Vec<u8>>> {

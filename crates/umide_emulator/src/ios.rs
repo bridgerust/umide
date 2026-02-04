@@ -13,6 +13,45 @@ impl IosSimulator {
         Self { udid }
     }
 
+    /// Get list of currently booted simulator UDIDs
+    pub fn get_booted_udids() -> Vec<String> {
+        let output = match Command::new("xcrun")
+            .args(["simctl", "list", "--json", "devices", "booted"])
+            .output() {
+                Ok(out) => out,
+                Err(_) => return Vec::new(),
+            };
+
+        if !output.status.success() {
+            return Vec::new();
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let v: Value = match serde_json::from_str(&stdout) {
+            Ok(v) => v,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut udids = Vec::new();
+        if let Some(runtimes) = v.get("devices").and_then(|d| d.as_object()) {
+            for (_runtime, devices) in runtimes {
+                if let Some(devices) = devices.as_array() {
+                    for device in devices {
+                        if let Some(udid) = device.get("udid").and_then(|u| u.as_str()) {
+                            udids.push(udid.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        udids
+    }
+
+    /// Check if a simulator is currently booted
+    pub fn is_running(udid: &str) -> bool {
+        Self::get_booted_udids().contains(&udid.to_string())
+    }
+
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
         let output = Command::new("xcrun")
             .arg("simctl")

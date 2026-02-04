@@ -14,7 +14,7 @@ unsafe impl Send for NativeEmulatorView {}
 unsafe impl Sync for NativeEmulatorView {}
 
 impl NativeEmulatorView {
-    pub fn new(window_handle: RawWindowHandle, width: u32, height: u32, platform: EmulatorPlatform) -> Result<Self, String> {
+    pub fn new(window_handle: RawWindowHandle, x: i32, y: i32, width: u32, height: u32, platform: EmulatorPlatform) -> Result<Self, String> {
         let parent_ptr = match window_handle {
             #[cfg(target_os = "macos")]
             RawWindowHandle::AppKit(handle) => handle.ns_view.as_ptr(),
@@ -22,7 +22,7 @@ impl NativeEmulatorView {
         };
 
         let handle = unsafe {
-            umide_native_create_emulator(parent_ptr, width, height, platform)
+            umide_native_create_emulator(parent_ptr, x, y, width, height, platform)
         };
 
         if handle.is_null() {
@@ -32,9 +32,9 @@ impl NativeEmulatorView {
         }
     }
 
-    pub fn resize(&self, width: u32, height: u32) {
+    pub fn resize(&self, x: i32, y: i32, width: u32, height: u32) {
         unsafe {
-            umide_native_resize_emulator(self.handle, width, height);
+            umide_native_resize_emulator(self.handle, x, y, width, height);
         }
     }
 

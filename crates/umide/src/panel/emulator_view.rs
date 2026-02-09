@@ -358,7 +358,7 @@ fn platform_panel(
             // Native Emulator View (shown when device running AND visible)
             Stack::new((
                 NativeEmulatorWidget::new(running_device, is_visible, current_device_id)
-                    .style(|s| s.flex_grow(1.0).width_full()),
+                    .style(|s| s.flex_grow(1.0).width_full().height_full()),
                 // Control buttons overlay
                 Stack::horizontal((
                     // Stop button - actually stops the emulator/simulator

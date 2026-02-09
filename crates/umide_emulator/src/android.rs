@@ -92,12 +92,15 @@ impl AndroidEmulator {
     }
 
     pub fn launch(avd_name: &str) -> Result<()> {
+        // Launch emulator in normal windowed mode so we can capture its display
+        // The window will appear briefly before we start capturing it
         Command::new("emulator")
             .arg("-avd")
             .arg(avd_name)
-            .arg("-no-window")  // Headless mode - no external window
             .arg("-grpc")
             .arg("5556")
+            .arg("-gpu")
+            .arg("swiftshader_indirect") // Force software rendering to avoid Vulkan crashes on macOS
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .stdin(Stdio::null())

@@ -100,16 +100,17 @@ impl IosSimulator {
     }
 
     pub fn launch(udid: &str) -> Result<()> {
-        // Boot the simulator (no external window)
+        // Boot the simulator
         Command::new("xcrun")
-            .arg("simctl")
-            .arg("boot")
-            .arg(udid)
+            .args(["simctl", "boot", udid])
             .spawn()?;
-            
-        // Note: We don't open Simulator.app - we capture screenshots directly
-        // via simctl without needing the visible window
-            
+        
+        // Open Simulator.app so the window is visible for screen capture
+        // ScreenCaptureKit needs the window to be visible to capture it
+        Command::new("open")
+            .args(["-a", "Simulator"])
+            .spawn()?;
+
         Ok(())
     }
 

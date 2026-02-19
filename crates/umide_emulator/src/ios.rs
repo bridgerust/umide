@@ -100,17 +100,67 @@ impl IosSimulator {
     }
 
     pub fn launch(udid: &str) -> Result<()> {
-        // Boot the simulator
-        Command::new("xcrun")
-            .args(["simctl", "boot", udid])
-            .spawn()?;
+        tracing::info!("Launching iOS Simulator for UDID: {}", udid);
         
-        // Open Simulator.app so the window is visible for screen capture
-        // ScreenCaptureKit needs the window to be visible to capture it
-        Command::new("open")
-            .args(["-a", "Simulator"])
-            .spawn()?;
+        // Check if already booted
+        if Self::is_running(udid) {
+            tracing::info!("Simulator {} is already booted", udid);
+            // Still open Simulator.app to ensure window is visible
+            let _ = Command::new("open")
+                .args(["-a", "Simulator"])
+                .output();
+            return Ok(());
+        }
+        
+        // Boot the simulator synchronously — wait for it to complete
+        let output = Command::new("xcrun")
+            .args(["simctl", "boot", udid])
+            .output()?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Ignore "already booted" errors
+            if !stderr.contains("current state: Booted") {
+                tracing::error!("Failed to boot simulator {}: {}", udid, stderr);
+                return Err(anyhow!("Failed to boot simulator: {}", stderr));
+            }
+            tracing::info!("Simulator {} was already booted", udid);
+        } else {
+            tracing::info!("Simulator {} booted successfully", udid);
+        }
 
+        // Open Simulator.app so the window is visible for ScreenCaptureKit capture
+        let _ = Command::new("open")
+            .args(["-a", "Simulator"])
+            .output()?;
+        
+        // Wait for the Simulator.app window to appear
+        // ScreenCaptureKit needs the window to be on-screen
+        tracing::info!("Waiting for Simulator.app window to appear...");
+        for attempt in 0..20 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            // Check if any simulator window exists
+            let check = Command::new("osascript")
+                .args([
+                    "-e",
+                    r#"tell application "System Events" to count windows of application process "Simulator""#,
+                ])
+                .output();
+            
+            if let Ok(out) = check {
+                let count_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if let Ok(count) = count_str.parse::<i32>() {
+                    if count > 0 {
+                        tracing::info!("Simulator window appeared after {}ms", (attempt + 1) * 500);
+                        // Give the window a moment to fully render
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        
+        tracing::warn!("Simulator window may not have appeared after 10s, proceeding anyway");
         Ok(())
     }
 

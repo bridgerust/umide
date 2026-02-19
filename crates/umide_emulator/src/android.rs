@@ -92,20 +92,67 @@ impl AndroidEmulator {
     }
 
     pub fn launch(avd_name: &str) -> Result<()> {
-        // Launch emulator in normal windowed mode so we can capture its display
-        // The window will appear briefly before we start capturing it
-        Command::new("emulator")
+        tracing::info!("Launching Android emulator for AVD: {}", avd_name);
+        
+        // Check if already running
+        if Self::is_running(avd_name) {
+            tracing::info!("AVD {} is already running", avd_name);
+            return Ok(());
+        }
+        
+        // Launch emulator headless — we capture the display via ScreenCaptureKit
+        // GPU mode "auto" picks the best available backend (Metal on macOS)
+        // without the Vulkan/SwiftShader crashes from "swiftshader_indirect"
+        let child = Command::new("emulator")
             .arg("-avd")
             .arg(avd_name)
             .arg("-grpc")
             .arg("5556")
             .arg("-gpu")
-            .arg("swiftshader_indirect") // Force software rendering to avoid Vulkan crashes on macOS
+            .arg("auto")
+            .arg("-no-boot-anim")
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .stdin(Stdio::null())
-            .spawn()?;
-        Ok(())
+            .spawn();
+        
+        match child {
+            Ok(_child) => {
+                tracing::info!("Emulator process spawned for AVD: {}", avd_name);
+                
+                // Wait for the emulator to become reachable via ADB
+                // Poll up to 30 seconds for the emulator to appear in adb devices
+                let mut ready = false;
+                for attempt in 0..60 {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let serials = Self::get_running_serials();
+                    if !serials.is_empty() {
+                        // Verify this AVD is the one that booted
+                        if Self::is_running(avd_name) {
+                            tracing::info!(
+                                "AVD {} is now running (detected after {}ms)", 
+                                avd_name, (attempt + 1) * 500
+                            );
+                            ready = true;
+                            break;
+                        }
+                    }
+                    if attempt % 10 == 0 && attempt > 0 {
+                        tracing::debug!("Still waiting for AVD {} to boot... ({}s)", avd_name, (attempt + 1) / 2);
+                    }
+                }
+                
+                if !ready {
+                    tracing::warn!("AVD {} may not be fully booted yet after 30s, proceeding anyway", avd_name);
+                }
+                
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("Failed to spawn emulator for AVD {}: {}", avd_name, e);
+                Err(anyhow!("Failed to launch emulator: {}", e))
+            }
+        }
     }
 
     pub fn stop(avd_name: &str) -> Result<()> {

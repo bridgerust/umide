@@ -532,6 +532,9 @@ public:
         }
     }
 
+    void (*inputCallbackFn)(int32_t, int32_t, int32_t, void*) = nullptr;
+    void* inputCallbackUserData = nullptr;
+
     bool initialize(void* parent_window, int32_t x, int32_t y, uint32_t width, uint32_t height) override {
         parentView = (__bridge NSView*)parent_window;
 
@@ -558,54 +561,11 @@ public:
             
             emulatorView = [[UmideEmulatorView alloc] initWithFrame:NSMakeRect(0, 0, width, height)];
             
-            // Wire up input callback to forward mouse events to emulator/simulator
-            EmulatorPlatform plat = this->platform;
-            std::string devId = this->currentDeviceId;
-            CGWindowID* embeddedWinPtr = &this->embeddedWindowID;
+            // Wire up input callback to forward mouse events to Rust
             emulatorView.inputCallback = ^(int eventType, int emuX, int emuY) {
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                    if (plat == EMULATOR_PLATFORM_ANDROID) {
-                        if (eventType == 0 || eventType == 2) {  // tap
-                            std::string cmd = std::string("adb shell input tap ") + 
-                                             std::to_string(emuX) + " " + std::to_string(emuY);
-                            system(cmd.c_str());
-                        } else if (eventType == 3) {  // scroll
-                            // emuY here is deltaY from scrollWheel
-                            int startY = 500;  // middle of screen
-                            int endY = startY - emuY * 5;  // scroll distance
-                            std::string cmd = std::string("adb shell input swipe ") +
-                                std::to_string(emuX) + " " + std::to_string(startY) + " " +
-                                std::to_string(emuX) + " " + std::to_string(endY) + " 100";
-                            system(cmd.c_str());
-                        }
-                    } else {
-                        // iOS Simulator — post CGEvents  
-                        if (eventType == 3) {  // scroll
-                            CGEventRef scrollEvent = CGEventCreateScrollWheelEvent(
-                                NULL, kCGScrollEventUnitPixel, 1, emuY);
-                            if (scrollEvent) {
-                                CGEventPost(kCGHIDEventTap, scrollEvent);
-                                CFRelease(scrollEvent);
-                            }
-                        } else {
-                            CGWindowID winID = *embeddedWinPtr;
-                            if (winID != 0) {
-                                CGPoint point = CGPointMake(emuX, emuY);
-                                CGEventType type;
-                                if (eventType == 0) type = kCGEventLeftMouseDown;
-                                else if (eventType == 2) type = kCGEventLeftMouseUp;
-                                else type = kCGEventLeftMouseDragged;
-                                
-                                CGEventRef mouseEvent = CGEventCreateMouseEvent(
-                                    NULL, type, point, kCGMouseButtonLeft);
-                                if (mouseEvent) {
-                                    CGEventPost(kCGHIDEventTap, mouseEvent);
-                                    CFRelease(mouseEvent);
-                                }
-                            }
-                        }
-                    }
-                });
+                if (this->inputCallbackFn) {
+                    this->inputCallbackFn(eventType, emuX, emuY, this->inputCallbackUserData);
+                }
             };
             
             [childWindow setContentView:emulatorView];
@@ -626,6 +586,11 @@ public:
         });
 
         return success;
+    }
+
+    void set_input_callback(void (*callback)(int32_t, int32_t, int32_t, void*), void* user_data) override {
+        inputCallbackFn = callback;
+        inputCallbackUserData = user_data;
     }
 
     void resize(int32_t x, int32_t y, uint32_t width, uint32_t height) override {

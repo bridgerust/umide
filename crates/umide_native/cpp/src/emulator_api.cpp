@@ -57,4 +57,10 @@ void umide_native_push_frame(NativeEmulator* emulator, const uint8_t* rgba_data,
     }
 }
 
+void umide_native_set_input_callback(NativeEmulator* emulator, EmulatorInputCallback callback, void* user_data) {
+    if (emulator) {
+        reinterpret_cast<Emulator*>(emulator)->set_input_callback(callback, user_data);
+    }
+}
+
 } // extern "C"

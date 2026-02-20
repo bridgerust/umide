@@ -25,6 +25,9 @@ public:
     // Push an RGBA frame for display (used by gRPC streaming for Android)
     virtual void push_frame(const uint8_t* rgba_data, uint32_t width, uint32_t height) = 0;
 
+    // Set input callback to route native NSView events back to Rust
+    virtual void set_input_callback(void (*callback)(int32_t, int32_t, int32_t, void*), void* user_data) = 0;
+
     // Factory method
     static Emulator* create(EmulatorPlatform platform);
 };

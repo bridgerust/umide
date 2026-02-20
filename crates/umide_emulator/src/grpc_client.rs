@@ -183,6 +183,30 @@ impl EmulatorGrpcClient {
         
         Ok(())
     }
+
+    /// Move a touch to new coordinates (pressure = 1)
+    pub async fn send_touch_move(&mut self, x: i32, y: i32) -> Result<(), GrpcError> {
+        let touch = Touch {
+            x,
+            y,
+            identifier: 0,
+            pressure: 1,  // Non-zero = touching
+            touch_major: 0,
+            touch_minor: 0,
+        };
+        
+        let event = TouchEvent {
+            touches: vec![touch],
+            display: 0,
+        };
+        
+        self.client
+            .send_touch(event)
+            .await
+            .map_err(|e| GrpcError::StreamError(e.to_string()))?;
+        
+        Ok(())
+    }
     
     /// Release a touch at coordinates (pressure = 0)
     pub async fn send_touch_up(&mut self, x: i32, y: i32) -> Result<(), GrpcError> {

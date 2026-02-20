@@ -8,11 +8,22 @@ use umide_native::emulator::{
     NativeEmulator, EmulatorPlatform, EmulatorInputEvent
 };
 
+/// Commands to send to the gRPC command client
+enum GrpcCommand {
+    Key(String),
+    KeyCode(i32),
+    TouchDown(i32, i32),
+    TouchMove(i32, i32),
+    TouchUp(i32, i32),
+}
+
 pub struct NativeEmulatorView {
     handle: *mut NativeEmulator,
     is_android: bool,
     /// Cancellation flag for the gRPC streaming task
     stream_cancel: Arc<AtomicBool>,
+    /// Channel to send commands to the gRPC command client
+    grpc_cmd_tx: Option<std::sync::mpsc::Sender<GrpcCommand>>,
 }
 
 unsafe impl Send for NativeEmulatorView {}
@@ -37,6 +48,7 @@ impl NativeEmulatorView {
                 handle,
                 is_android: matches!(platform, EmulatorPlatform::Android),
                 stream_cancel: Arc::new(AtomicBool::new(false)),
+                grpc_cmd_tx: None,
             })
         }
     }
@@ -67,10 +79,45 @@ impl NativeEmulatorView {
         }
     }
 
+    /// Send a key event to the Android emulator via gRPC (e.g. "GoHome", "GoBack", "Power")
+    pub fn send_key(&self, key: &str) {
+        if let Some(tx) = &self.grpc_cmd_tx {
+            let _ = tx.send(GrpcCommand::Key(key.to_string()));
+        }
+    }
+
+    /// Send a key code to the Android emulator via gRPC (e.g. 115=Vol+, 114=Vol-)
+    pub fn send_key_code(&self, code: i32) {
+        if let Some(tx) = &self.grpc_cmd_tx {
+            let _ = tx.send(GrpcCommand::KeyCode(code));
+        }
+    }
+
+    /// Send a touch down event to the Android emulator via gRPC
+    pub fn send_touch_down(&self, x: i32, y: i32) {
+        if let Some(tx) = &self.grpc_cmd_tx {
+            let _ = tx.send(GrpcCommand::TouchDown(x, y));
+        }
+    }
+
+    /// Send a touch move event to the Android emulator via gRPC
+    pub fn send_touch_move(&self, x: i32, y: i32) {
+        if let Some(tx) = &self.grpc_cmd_tx {
+            let _ = tx.send(GrpcCommand::TouchMove(x, y));
+        }
+    }
+
+    /// Send a touch up event to the Android emulator via gRPC
+    pub fn send_touch_up(&self, x: i32, y: i32) {
+        if let Some(tx) = &self.grpc_cmd_tx {
+            let _ = tx.send(GrpcCommand::TouchUp(x, y));
+        }
+    }
+
     /// Start gRPC frame streaming for Android emulator.
-    /// Spawns a background async task that connects to the emulator's gRPC endpoint
-    /// and continuously pushes frames to the native view.
-    pub fn start_grpc_stream(&self, grpc_endpoint: &str) {
+    /// Uses TWO separate gRPC clients: one for streaming frames, one for commands.
+    /// This avoids the deadlock where stream_screenshots holds a mutex forever.
+    pub fn start_grpc_stream(&mut self, grpc_endpoint: &str) {
         if !self.is_android {
             tracing::warn!("gRPC streaming is only for Android emulators");
             return;
@@ -79,13 +126,15 @@ impl NativeEmulatorView {
         // Cancel any existing stream
         self.stream_cancel.store(true, Ordering::SeqCst);
         let cancel = Arc::new(AtomicBool::new(false));
-        // We can't update self.stream_cancel here since &self is immutable,
-        // but the old cancel flag is set to true, so old tasks will stop.
+        self.stream_cancel = cancel.clone();
 
         let endpoint = grpc_endpoint.to_string();
-        // Cast to usize to cross thread boundary — usize is Send, *mut is not
         let handle_addr = self.handle as usize;
         let cancel_flag = cancel.clone();
+
+        // Create a sync channel for commands (key presses, touch events)
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<GrpcCommand>();
+        self.grpc_cmd_tx = Some(cmd_tx);
 
         // Spawn the streaming task on a background thread with its own tokio runtime
         std::thread::spawn(move || {
@@ -103,17 +152,17 @@ impl NativeEmulatorView {
 
                 tracing::info!("Android gRPC stream: connecting to {}...", endpoint);
 
-                // Connect with retry (up to 60 seconds for emulator boot)
-                let mut client = match EmulatorGrpcClient::connect_with_retry(
+                // Connect STREAMING client with retry
+                let mut stream_client = match EmulatorGrpcClient::connect_with_retry(
                     &endpoint,
                     std::time::Duration::from_secs(60),
                 ).await {
                     Ok(c) => {
-                        tracing::info!("Android gRPC stream: connected!");
+                        tracing::info!("Android gRPC stream: streaming client connected!");
                         c
                     }
                     Err(e) => {
-                        tracing::error!("Android gRPC stream: failed to connect: {}", e);
+                        tracing::error!("Android gRPC stream: failed to connect streaming client: {}", e);
                         return;
                     }
                 };
@@ -123,13 +172,73 @@ impl NativeEmulatorView {
                     return;
                 }
 
-                // Start streaming frames
-                let (tx, mut rx) = mpsc::channel(2); // Small buffer to avoid latency
+                // Connect COMMAND client (separate connection, no lock contention)
+                let cmd_endpoint = endpoint.clone();
+                let cmd_cancel = cancel_flag.clone();
+                tokio::spawn(async move {
+                    let mut cmd_client = match EmulatorGrpcClient::connect_with_retry(
+                        &cmd_endpoint,
+                        std::time::Duration::from_secs(10),
+                    ).await {
+                        Ok(c) => {
+                            tracing::info!("Android gRPC: command client connected!");
+                            c
+                        }
+                        Err(e) => {
+                            tracing::error!("Android gRPC: failed to connect command client: {}", e);
+                            return;
+                        }
+                    };
 
-                // Spawn the gRPC stream reader
+                    loop {
+                        if cmd_cancel.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        match cmd_rx.try_recv() {
+                            Ok(cmd) => {
+                                match cmd {
+                                    GrpcCommand::Key(key) => {
+                                        if let Err(e) = cmd_client.send_key(&key).await {
+                                            tracing::warn!("gRPC send_key error: {}", e);
+                                        }
+                                    }
+                                    GrpcCommand::KeyCode(code) => {
+                                        if let Err(e) = cmd_client.send_key_code(code).await {
+                                            tracing::warn!("gRPC send_key_code error: {}", e);
+                                        }
+                                    }
+                                    GrpcCommand::TouchDown(x, y) => {
+                                        if let Err(e) = cmd_client.send_touch_down(x, y).await {
+                                            tracing::warn!("gRPC touch_down error: {}", e);
+                                        }
+                                    }
+                                    GrpcCommand::TouchMove(x, y) => {
+                                        if let Err(e) = cmd_client.send_touch_down(x, y).await {
+                                            tracing::warn!("gRPC touch_move error: {}", e);
+                                        }
+                                    }
+                                    GrpcCommand::TouchUp(x, y) => {
+                                        if let Err(e) = cmd_client.send_touch_up(x, y).await {
+                                            tracing::warn!("gRPC touch_up error: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                            }
+                            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                                break;
+                            }
+                        }
+                    }
+                });
+
+                // Start streaming frames (this runs until cancelled or error)
+                let (tx, mut rx) = mpsc::channel(2);
                 let stream_cancel = cancel_flag.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = client.stream_screenshots(tx).await {
+                    if let Err(e) = stream_client.stream_screenshots(tx).await {
                         if !stream_cancel.load(Ordering::SeqCst) {
                             tracing::error!("Android gRPC stream error: {}", e);
                         }
@@ -144,8 +253,6 @@ impl NativeEmulatorView {
                     }
 
                     if let Some(rgba_data) = frame.to_rgba() {
-                        // Safety: handle_addr is valid as long as NativeEmulatorView exists
-                        // The cancel flag ensures we stop before the view is destroyed
                         let ptr = handle_addr as *mut NativeEmulator;
                         unsafe {
                             umide_native_push_frame(
@@ -161,9 +268,6 @@ impl NativeEmulatorView {
                 tracing::info!("Android gRPC stream: ended");
             });
         });
-
-        // Note: We store the cancel flag via interior mutability pattern
-        // The old stream_cancel is already set to true
     }
 
     /// Stop the gRPC streaming task
@@ -181,6 +285,8 @@ impl Drop for NativeEmulatorView {
     fn drop(&mut self) {
         // Cancel any running stream first
         self.stream_cancel.store(true, Ordering::SeqCst);
+        // Drop the command channel
+        self.grpc_cmd_tx = None;
         // Give the stream thread a moment to notice cancellation
         std::thread::sleep(std::time::Duration::from_millis(50));
         unsafe {

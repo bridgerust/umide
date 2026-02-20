@@ -115,7 +115,6 @@ impl View for NativeEmulatorWidget {
         let is_visible = self.is_visible.get_untracked();
         let current_device = self.running_device.get_untracked();
 
-        const HEADER_HEIGHT: i32 = 35;
         let window_origin = self.id.get_window_origin();
         let size = self.id.get_layout().map(|l| (l.size.width as u32, l.size.height as u32));
         
@@ -124,13 +123,15 @@ impl View for NativeEmulatorWidget {
                 return;
             }
             
+            // Use the widget's own layout position — Floem already accounts for
+            // the toolbar, header, and sidebar in the layout tree
             let x = window_origin.x as i32;
-            let y = window_origin.y as i32 + HEADER_HEIGHT;
+            let y = window_origin.y as i32;
             let device_name = current_device.as_ref().map(|d| d.name.as_str()).unwrap_or("unknown");
             
             tracing::debug!(
-                "NativeEmulatorWidget [{}]: origin=({},{}) adjusted_y={} size={}x{}",
-                device_name, window_origin.x as i32, window_origin.y as i32, y, width, height
+                "NativeEmulatorWidget [{}]: origin=({},{}) size={}x{}",
+                device_name, x, y, width, height
             );
 
             if let Some(view) = &self.native_view {
@@ -159,7 +160,7 @@ impl View for NativeEmulatorWidget {
                                 height, 
                                 platform
                             ) {
-                                Ok(view) => {
+                                Ok(mut view) => {
                                     if !device.id.is_empty() {
                                         view.attach_device(&device.id);
                                     }
@@ -329,9 +330,8 @@ fn platform_panel(
                             return Vec::new();
                         }
                         
-                        let platform_filter = platform.clone();
                         devices.get().into_iter()
-                            .filter(|d| d.platform == platform_filter)
+                            .filter(|d| d.platform == platform)
                             .collect::<Vec<_>>()
                     },
                     |d| format!("{}-{}", d.id, d.state as u32),
@@ -348,11 +348,9 @@ fn platform_panel(
 
             // Native Emulator View (shown when device running AND visible)
             Stack::new((
-                NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal)
-                    .style(|s| s.flex_grow(1.0).width_full().height_full()),
-                // Control buttons overlay
+                // Control toolbar at top
                 Stack::horizontal((
-                    // Stop button - actually stops the emulator/simulator
+                    // Stop button
                     clickable_icon(
                         || UmideIcons::DEBUG_STOP,
                         move || {
@@ -369,10 +367,12 @@ fn platform_panel(
                         },
                         || false,
                         || false,
-                        || "Stop Emulator",
+                        || "Stop",
                         config,
                     ),
-                    // Hide button - hides without stopping
+                    Label::new("Stop")
+                        .style(|s| s.font_size(10.0).margin_right(8.0)),
+                    // Hide button
                     clickable_icon(
                         || UmideIcons::CLOSE,
                         move || {
@@ -381,11 +381,31 @@ fn platform_panel(
                         },
                         || false,
                         || false,
-                        || "Hide (keep running)",
+                        || "Hide",
                         config,
                     ),
+                    Label::new("Hide")
+                        .style(|s| s.font_size(10.0)),
                 ))
-                .style(|s| s.absolute().margin_left(5.0).margin_top(5.0).gap(5.0))
+                .style(move |s| {
+                    let config_val = config.get();
+                    s.width_full()
+                        .items_center()
+                        .padding_vert(3.0)
+                        .padding_horiz(6.0)
+                        .gap(3.0)
+                        .border_bottom(1.0)
+                        .border_color(config_val.color(UmideColor::LAPCE_BORDER))
+                }),
+                // Emulator display + sidebar
+                Stack::horizontal((
+                    // Emulator display
+                    NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal)
+                        .style(|s| s.flex_grow(1.0).width_full().height_full()),
+                    // Android sidebar controls (only shown for Android)
+                    android_sidebar(platform, config),
+                ))
+                .style(|s| s.flex_grow(1.0).width_full().height_full()),
             ))
             .style(move |s| {
                 let visible = is_visible.get();
@@ -408,6 +428,75 @@ fn platform_panel(
             .height_full()
             .border(1.0)
             .border_color(config.color(UmideColor::LAPCE_BORDER))
+    })
+}
+
+/// Helper to create a sidebar button that sends an ADB keyevent
+fn adb_button(
+    label: &'static str,
+    _tooltip: &'static str,
+    keyevent: i32,
+    config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
+) -> impl View {
+    let label_text = label.to_string();
+    Stack::new((
+        Label::new(label_text)
+            .style(|s| s.font_size(14.0)),
+    ))
+    .on_click_stop(move |_| {
+        std::thread::spawn(move || {
+            let cmd = format!("adb shell input keyevent {}", keyevent);
+            let _ = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .output();
+        });
+    })
+    .style(move |s| {
+        let config_val = config.get();
+        s.width(28.0)
+            .height(28.0)
+            .items_center()
+            .justify_center()
+            .border_radius(4.0)
+            .cursor(floem::style::CursorStyle::Pointer)
+            .border(1.0)
+            .border_color(config_val.color(UmideColor::LAPCE_BORDER))
+            .hover(|s| s.background(floem::peniko::Color::from_rgba8(255, 255, 255, 20)))
+    })
+}
+
+/// Android emulator sidebar with hardware control buttons
+fn android_sidebar(
+    platform: DevicePlatform,
+    config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
+) -> impl View {
+    let is_android = matches!(platform, DevicePlatform::Android);
+    
+    Stack::new((
+        // Home button (keyevent 3)
+        adb_button("🏠", "Home", 3, config),
+        // Back button (keyevent 4)
+        adb_button("◀", "Back", 4, config),
+        // Overview/Recents button (keyevent 187)
+        adb_button("▦", "Overview", 187, config),
+        // Separator
+        Label::new("").style(|s| s.height(8.0)),
+        // Volume Up (keyevent 24)
+        adb_button("🔊", "Vol+", 24, config),
+        // Volume Down (keyevent 25)
+        adb_button("🔉", "Vol-", 25, config),
+        // Separator
+        Label::new("").style(|s| s.height(8.0)),
+        // Power button (keyevent 26)
+        adb_button("⏻", "Power", 26, config),
+    ))
+    .style(move |s| {
+        s.flex_col()
+            .items_center()
+            .gap(4.0)
+            .padding(4.0)
+            .apply_if(!is_android, |s| s.hide())
     })
 }
 

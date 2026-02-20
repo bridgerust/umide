@@ -709,7 +709,49 @@ public:
                 embeddedWindowID = windowID;
                 NSLog(@"MacOSEmulator: Found Simulator window ID %u for device '%s'", windowID, device_id.c_str());
                 
-                // iOS: start capture directly
+                // Get the Simulator's PID from the window info for AppleScript
+                pid_t simPid = 0;
+                CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
+                if (windowList) {
+                    for (CFIndex i = 0; i < CFArrayGetCount(windowList); i++) {
+                        CFDictionaryRef info = (CFDictionaryRef)CFArrayGetValueAtIndex(windowList, i);
+                        CFNumberRef winIDRef = (CFNumberRef)CFDictionaryGetValue(info, kCGWindowNumber);
+                        CGWindowID wid = 0;
+                        if (winIDRef) CFNumberGetValue(winIDRef, kCGWindowIDCFNumberType, &wid);
+                        if (wid == windowID) {
+                            CFNumberRef pidRef = (CFNumberRef)CFDictionaryGetValue(info, kCGWindowOwnerPID);
+                            if (pidRef) CFNumberGetValue(pidRef, kCFNumberIntType, &simPid);
+                            break;
+                        }
+                    }
+                    CFRelease(windowList);
+                }
+                
+                // Resize Simulator window for better capture resolution
+                if (simPid > 0) {
+                    NSString* resizeScript = [NSString stringWithFormat:
+                        @"tell application \"System Events\"\n"
+                        @"  set simProc to first process whose unix id is %d\n"
+                        @"  tell simProc\n"
+                        @"    set position of window 1 to {50, 50}\n"
+                        @"    set size of window 1 to {400, 860}\n"
+                        @"  end tell\n"
+                        @"end tell", simPid];
+                    
+                    NSAppleScript* script = [[NSAppleScript alloc] initWithSource:resizeScript];
+                    NSDictionary* errorDict = nil;
+                    [script executeAndReturnError:&errorDict];
+                    if (errorDict) {
+                        NSLog(@"MacOSEmulator: AppleScript resize warning: %@", errorDict);
+                    } else {
+                        NSLog(@"MacOSEmulator: Resized Simulator window to 400x860");
+                    }
+                    
+                    // Wait for Simulator to re-render at new size
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                }
+                
+                // Start capture
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (!destroyed && emulatorView) {
                         [emulatorView startCapturingWindowWithID:windowID];
@@ -717,6 +759,22 @@ public:
                               emulatorView.bounds.size.width, emulatorView.bounds.size.height);
                     }
                 });
+                
+                // Move Simulator window off-screen after capture starts
+                if (simPid > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    NSString* moveScript = [NSString stringWithFormat:
+                        @"tell application \"System Events\"\n"
+                        @"  set simProc to first process whose unix id is %d\n"
+                        @"  tell simProc\n"
+                        @"    set position of window 1 to {-2000, 0}\n"
+                        @"  end tell\n"
+                        @"end tell", simPid];
+                    
+                    NSAppleScript* moveScriptObj = [[NSAppleScript alloc] initWithSource:moveScript];
+                    [moveScriptObj executeAndReturnError:nil];
+                    NSLog(@"MacOSEmulator: Moved Simulator window off-screen");
+                }
             } else {
                 NSLog(@"MacOSEmulator: ERROR - Could not find Simulator window for device '%s' after %d seconds", 
                       device_id.c_str(), maxAttempts / 10);

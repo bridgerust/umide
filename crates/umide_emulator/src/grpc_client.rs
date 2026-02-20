@@ -216,6 +216,46 @@ impl EmulatorGrpcClient {
         Ok(())
     }
     
+    /// Send a key event using a key string (e.g. "GoHome", "GoBack", "Power", "AppSwitch")
+    pub async fn send_key(&mut self, key: &str) -> Result<(), GrpcError> {
+        use emulator_proto::{KeyboardEvent, keyboard_event::{KeyEventType, KeyCodeType}};
+        
+        let event = KeyboardEvent {
+            code_type: KeyCodeType::Evdev as i32,
+            event_type: KeyEventType::Keypress as i32,
+            key_code: 0,
+            key: key.to_string(),
+            text: String::new(),
+        };
+        
+        self.client
+            .send_key(event)
+            .await
+            .map_err(|e| GrpcError::StreamError(e.to_string()))?;
+        
+        Ok(())
+    }
+    
+    /// Send a key event using an Evdev keycode (e.g. 115=Vol+, 114=Vol-)
+    pub async fn send_key_code(&mut self, code: i32) -> Result<(), GrpcError> {
+        use emulator_proto::{KeyboardEvent, keyboard_event::{KeyEventType, KeyCodeType}};
+        
+        let event = KeyboardEvent {
+            code_type: KeyCodeType::Evdev as i32,
+            event_type: KeyEventType::Keypress as i32,
+            key_code: code,
+            key: String::new(),
+            text: String::new(),
+        };
+        
+        self.client
+            .send_key(event)
+            .await
+            .map_err(|e| GrpcError::StreamError(e.to_string()))?;
+        
+        Ok(())
+    }
+    
     /// Convert gRPC Image to DecodedFrame
     fn image_to_frame(&self, image: Image) -> Result<DecodedFrame, GrpcError> {
         // AOSP: width/height can be in Image (deprecated) or Image.format

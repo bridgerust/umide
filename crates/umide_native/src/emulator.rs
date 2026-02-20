@@ -6,6 +6,7 @@ pub struct NativeEmulator {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub enum EmulatorPlatform {
     Android = 0,
     Ios = 1,
@@ -45,4 +46,6 @@ extern "C" {
     pub fn umide_native_send_input(emulator: *mut NativeEmulator, event: *const EmulatorInputEvent);
 
     pub fn umide_native_attach_device(emulator: *mut NativeEmulator, device_id: *const i8);
+
+    pub fn umide_native_push_frame(emulator: *mut NativeEmulator, rgba_data: *const u8, width: u32, height: u32);
 }

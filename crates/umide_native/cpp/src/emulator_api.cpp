@@ -51,4 +51,10 @@ void umide_native_attach_device(NativeEmulator* emulator, const char* device_id)
     }
 }
 
+void umide_native_push_frame(NativeEmulator* emulator, const uint8_t* rgba_data, uint32_t width, uint32_t height) {
+    if (emulator && rgba_data && width > 0 && height > 0) {
+        reinterpret_cast<Emulator*>(emulator)->push_frame(rgba_data, width, height);
+    }
+}
+
 } // extern "C"

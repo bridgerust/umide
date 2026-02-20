@@ -22,6 +22,9 @@ public:
     // Handle input
     virtual void send_input(const EmulatorInputEvent& event) = 0;
 
+    // Push an RGBA frame for display (used by gRPC streaming for Android)
+    virtual void push_frame(const uint8_t* rgba_data, uint32_t width, uint32_t height) = 0;
+
     // Factory method
     static Emulator* create(EmulatorPlatform platform);
 };

@@ -3,7 +3,7 @@ use floem::{
     View, ViewId, prelude::{SignalGet, SignalUpdate}, 
     reactive::{RwSignal, Effect},
     views::{Decorators, Label, Scroll, Stack, dyn_stack, Container},
-    context::{PaintCx, UpdateCx, ComputeLayoutCx},
+    context::{UpdateCx, ComputeLayoutCx},
     peniko::kurbo::Rect,
 };
 
@@ -16,7 +16,8 @@ use crate::{
 use umide_emulator::{
     list_all_devices, launch_device, stop_device,
     DeviceInfo, DevicePlatform, DeviceState,
-    native_view::NativeEmulatorView,  
+    native_view::NativeEmulatorView,
+    decoder::DecodedFrame,
 };
 use umide_native::emulator::EmulatorPlatform;
 
@@ -29,6 +30,9 @@ struct NativeEmulatorWidget {
     current_device_id: RwSignal<String>,
     /// Track the last device ID we initialized for, to detect changes
     last_device_id: Option<String>,
+    /// Floem frame signal (for panel data, not used for rendering directly)
+    #[allow(dead_code)]
+    frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
 }
 
 impl NativeEmulatorWidget {
@@ -36,6 +40,7 @@ impl NativeEmulatorWidget {
         running_device: RwSignal<Option<DeviceInfo>>,
         is_visible: RwSignal<bool>,
         current_device_id: RwSignal<String>,
+        frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
     ) -> Self {
         Self {
             id: ViewId::new(),
@@ -44,6 +49,7 @@ impl NativeEmulatorWidget {
             is_visible,
             current_device_id,
             last_device_id: None,
+            frame_signal,
         }
     }
     
@@ -70,21 +76,16 @@ impl View for NativeEmulatorWidget {
         let current_device = self.running_device.get_untracked();
         let is_visible = self.is_visible.get_untracked();
         
-        // If not visible, cleanup the native view but keep device info
         if !is_visible && self.native_view.is_some() {
             tracing::info!("Hiding emulator view, cleaning up native view");
             self.native_view = None;
-            // Don't clear last_device_id to enable resume
         }
         
-        // Check if device was stopped - cleanup if so
         match (&current_device, &self.last_device_id) {
             (None, Some(_)) => {
-                // Device was stopped, cleanup
                 self.cleanup();
             }
             (Some(dev), Some(last_id)) if &dev.id != last_id => {
-                // Different device, cleanup old and let compute_layout initialize new
                 self.cleanup();
             }
             _ => {}
@@ -94,7 +95,6 @@ impl View for NativeEmulatorWidget {
     fn compute_layout(&mut self, _cx: &mut ComputeLayoutCx) -> Option<Rect> {
         let is_visible = self.is_visible.get_untracked();
         
-        // If not visible, cleanup and don't participate in layout
         if !is_visible {
             if self.native_view.is_some() {
                 self.cleanup();
@@ -102,15 +102,12 @@ impl View for NativeEmulatorWidget {
             return None;
         }
         
-        // Check if device is still running
         let current_device = self.running_device.get_untracked();
         if current_device.is_none() && self.native_view.is_some() {
             self.cleanup();
             return None;
         }
         
-        // Return None to let flex layout determine our size
-        // The actual size will be read in paint() via get_layout()
         None
     }
 
@@ -118,13 +115,8 @@ impl View for NativeEmulatorWidget {
         let is_visible = self.is_visible.get_untracked();
         let current_device = self.running_device.get_untracked();
 
-        // Header height offset: font_size(12) + padding(6*2) + border(1) + container padding ≈ 35px
-        // This is needed because get_window_origin() returns the panel's top, not the content area
         const HEADER_HEIGHT: i32 = 35;
-
-        // Get window_origin for absolute position
         let window_origin = self.id.get_window_origin();
-        
         let size = self.id.get_layout().map(|l| (l.size.width as u32, l.size.height as u32));
         
         if let Some((width, height)) = size {
@@ -132,12 +124,8 @@ impl View for NativeEmulatorWidget {
                 return;
             }
             
-            // Use window_origin and add header offset to Y
             let x = window_origin.x as i32;
             let y = window_origin.y as i32 + HEADER_HEIGHT;
-            // Use original height - the widget's layout should already account for content area
-            
-            // Get device name for debugging
             let device_name = current_device.as_ref().map(|d| d.name.as_str()).unwrap_or("unknown");
             
             tracing::debug!(
@@ -146,11 +134,9 @@ impl View for NativeEmulatorWidget {
             );
 
             if let Some(view) = &self.native_view {
-                // Update native view position and size to match the layout rect in window coordinates
                 view.resize(x, y, width, height);
             } else if is_visible {
                 if let Some(device) = current_device {
-                    // Initialize the native view if we have a window handle
                     use floem::window::WindowIdExt;
                     
                     if let Some(window_id) = self.id.window_id() {
@@ -174,9 +160,14 @@ impl View for NativeEmulatorWidget {
                                 platform
                             ) {
                                 Ok(view) => {
-                                    // Attach device if ID is available
                                     if !device.id.is_empty() {
                                         view.attach_device(&device.id);
+                                    }
+                                    
+                                    // Android: start gRPC frame streaming (headless, no window)
+                                    // iOS: uses ScreenCaptureKit via attach_device (no gRPC needed)
+                                    if view.is_android() {
+                                        view.start_grpc_stream("http://localhost:8554");
                                     }
                                     
                                     self.native_view = Some(view);
@@ -357,7 +348,7 @@ fn platform_panel(
 
             // Native Emulator View (shown when device running AND visible)
             Stack::new((
-                NativeEmulatorWidget::new(running_device, is_visible, current_device_id)
+                NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal)
                     .style(|s| s.flex_grow(1.0).width_full().height_full()),
                 // Control buttons overlay
                 Stack::horizontal((

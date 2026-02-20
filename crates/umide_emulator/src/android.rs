@@ -100,17 +100,20 @@ impl AndroidEmulator {
             return Ok(());
         }
         
-        // Launch emulator headless — we capture the display via ScreenCaptureKit
+        // Launch emulator headless — no window, frames arrive via gRPC streaming
         // GPU mode "auto" picks the best available backend (Metal on macOS)
-        // without the Vulkan/SwiftShader crashes from "swiftshader_indirect"
+        // -no-window: run headless, no macOS window (we render via gRPC frames)
+        // -grpc 8554: expose gRPC endpoint for frame streaming and input
         let child = Command::new("emulator")
             .arg("-avd")
             .arg(avd_name)
-            .arg("-grpc")
-            .arg("5556")
             .arg("-gpu")
             .arg("auto")
             .arg("-no-boot-anim")
+            .arg("-no-skin")
+            .arg("-no-window")     // Headless: no desktop window, frames via gRPC
+            .arg("-grpc")
+            .arg("8554")           // gRPC endpoint for streamScreenshot + sendTouch
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .stdin(Stdio::null())

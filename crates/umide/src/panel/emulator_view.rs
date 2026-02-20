@@ -284,7 +284,7 @@ fn platform_panel(
     };
     
     Stack::new((
-        // Header with device name if running
+        // Header with device name (ABOVE native view so always visible)
         Container::new(
             Stack::horizontal((
                 Label::new(platform_name.to_string())
@@ -305,7 +305,7 @@ fn platform_panel(
                         String::new()
                     }
                 })
-                .style(|s| s.font_size(10.0).padding_right(6.0)),
+                .style(|s| s.font_size(10.0).flex_grow(1.0).padding_right(6.0)),
             ))
             .style(|s| s.width_full().items_center())
         )
@@ -346,73 +346,20 @@ fn platform_panel(
                     .apply_if(has_running && visible, |s| s.hide())
             }),
 
-            // Native Emulator View (shown when device running AND visible)
-            Stack::new((
-                // Control toolbar at top
-                Stack::horizontal((
-                    // Stop button
-                    clickable_icon(
-                        || UmideIcons::DEBUG_STOP,
-                        move || {
-                            if let Some(device) = running_device.get_untracked() {
-                                tracing::info!("Stopping device: {}", device.name);
-                                if let Err(e) = stop_device(&device) {
-                                    tracing::error!("Failed to stop device {}: {}", device.name, e);
-                                }
-                            }
-                            running_device.set(None);
-                            is_visible.set(false);
-                            frame_signal.set(None);
-                            current_device_id.set(String::new());
-                        },
-                        || false,
-                        || false,
-                        || "Stop",
-                        config,
-                    ),
-                    Label::new("Stop")
-                        .style(|s| s.font_size(10.0).margin_right(8.0)),
-                    // Hide button
-                    clickable_icon(
-                        || UmideIcons::CLOSE,
-                        move || {
-                            tracing::info!("Hiding emulator view (device still running)");
-                            is_visible.set(false);
-                        },
-                        || false,
-                        || false,
-                        || "Hide",
-                        config,
-                    ),
-                    Label::new("Hide")
-                        .style(|s| s.font_size(10.0)),
-                ))
-                .style(move |s| {
-                    let config_val = config.get();
-                    s.width_full()
-                        .items_center()
-                        .padding_vert(3.0)
-                        .padding_horiz(6.0)
-                        .gap(3.0)
-                        .border_bottom(1.0)
-                        .border_color(config_val.color(UmideColor::LAPCE_BORDER))
-                }),
-                // Emulator display + sidebar
-                Stack::horizontal((
-                    // Emulator display
-                    NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal)
-                        .style(|s| s.flex_grow(1.0).width_full().height_full()),
-                    // Android sidebar controls (only shown for Android)
-                    android_sidebar(platform, config),
-                ))
-                .style(|s| s.flex_grow(1.0).width_full().height_full()),
+            // Native Emulator View + Sidebar (shown when device running AND visible)
+            Stack::horizontal((
+                // Emulator display
+                NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal)
+                    .style(|s| s.flex_grow(1.0).width_full().height_full()),
+                // Emulator sidebar controls
+                emulator_sidebar(platform, running_device, is_visible, frame_signal, current_device_id, config),
             ))
             .style(move |s| {
                 let visible = is_visible.get();
                 let has_running = running_device.get().is_some();
-                s.flex_col()
+                s.flex_grow(1.0)
                     .width_full()
-                    .flex_grow(1.0)
+                    .height_full()
                     .apply_if(!has_running || !visible, |s| s.hide())
             })
         ))
@@ -466,37 +413,94 @@ fn adb_button(
     })
 }
 
-/// Android emulator sidebar with hardware control buttons
-fn android_sidebar(
+/// Emulator sidebar with control buttons (Stop/Hide for all, hardware buttons for Android)
+fn emulator_sidebar(
     platform: DevicePlatform,
+    running_device: RwSignal<Option<DeviceInfo>>,
+    is_visible: RwSignal<bool>,
+    frame_signal: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>,
+    current_device_id: RwSignal<String>,
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
     let is_android = matches!(platform, DevicePlatform::Android);
     
     Stack::new((
-        // Home button (keyevent 3)
-        adb_button("🏠", "Home", 3, config),
-        // Back button (keyevent 4)
-        adb_button("◀", "Back", 4, config),
-        // Overview/Recents button (keyevent 187)
-        adb_button("▦", "Overview", 187, config),
-        // Separator
-        Label::new("").style(|s| s.height(8.0)),
-        // Volume Up (keyevent 24)
-        adb_button("🔊", "Vol+", 24, config),
-        // Volume Down (keyevent 25)
-        adb_button("🔉", "Vol-", 25, config),
-        // Separator
-        Label::new("").style(|s| s.height(8.0)),
-        // Power button (keyevent 26)
-        adb_button("⏻", "Power", 26, config),
+        // Generic controls (both platforms)
+        Stack::new((
+            // Stop button
+            clickable_icon(
+                || UmideIcons::DEBUG_STOP,
+                move || {
+                    if let Some(device) = running_device.get_untracked() {
+                        tracing::info!("Stopping device: {}", device.name);
+                        if let Err(e) = stop_device(&device) {
+                            tracing::error!("Failed to stop device {}: {}", device.name, e);
+                        }
+                    }
+                    running_device.set(None);
+                    is_visible.set(false);
+                    frame_signal.set(None);
+                    current_device_id.set(String::new());
+                },
+                || false,
+                || false,
+                || "Stop",
+                config,
+            ),
+            Label::new("Stop").style(|s| s.font_size(10.0)),
+            // Separator
+            Label::new("").style(|s| s.height(8.0)),
+            // Hide button
+            clickable_icon(
+                || UmideIcons::CLOSE,
+                move || {
+                    tracing::info!("Hiding emulator view (device still running)");
+                    is_visible.set(false);
+                },
+                || false,
+                || false,
+                || "Hide",
+                config,
+            ),
+            Label::new("Hide").style(|s| s.font_size(10.0)),
+            // Separator
+            Label::new("").style(|s| s.height(8.0)),
+        ))
+        .style(|s| s.flex_col().items_center().gap(2.0)),
+
+        // Android hardware controls
+        Stack::new((
+            // Home button (keyevent 3)
+            adb_button("🏠", "Home", 3, config),
+            // Back button (keyevent 4)
+            adb_button("◀", "Back", 4, config),
+            // Overview/Recents button (keyevent 187)
+            adb_button("▦", "Overview", 187, config),
+            // Separator
+            Label::new("").style(|s| s.height(8.0)),
+            // Volume Up (keyevent 24)
+            adb_button("🔊", "Vol+", 24, config),
+            // Volume Down (keyevent 25)
+            adb_button("🔉", "Vol-", 25, config),
+            // Separator
+            Label::new("").style(|s| s.height(8.0)),
+            // Power button (keyevent 26)
+            adb_button("⏻", "Power", 26, config),
+        ))
+        .style(move |s| {
+            s.flex_col()
+                .items_center()
+                .gap(4.0)
+                .apply_if(!is_android, |s| s.hide())
+        })
     ))
     .style(move |s| {
+        let config_val = config.get();
         s.flex_col()
             .items_center()
-            .gap(4.0)
             .padding(4.0)
-            .apply_if(!is_android, |s| s.hide())
+            .border_left(1.0)
+            .border_color(config_val.color(UmideColor::LAPCE_BORDER))
     })
 }
 

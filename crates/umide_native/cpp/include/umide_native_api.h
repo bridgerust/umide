@@ -24,6 +24,7 @@ typedef enum {
     EMULATOR_INPUT_TOUCH_UP = 2,
     EMULATOR_INPUT_KEY_DOWN = 3,
     EMULATOR_INPUT_KEY_UP = 4,
+    EMULATOR_INPUT_SCROLL = 5,
 } EmulatorInputType;
 
 typedef struct {
@@ -56,6 +57,12 @@ void umide_native_attach_device(NativeEmulator* emulator, const char* device_id)
 // rgba_data: pointer to RGBA8888 pixel data
 // width/height: dimensions in pixels
 void umide_native_push_frame(NativeEmulator* emulator, const uint8_t* rgba_data, uint32_t width, uint32_t height);
+
+// Input callback definition: event_type, x, y, user_data
+typedef void (*EmulatorInputCallback)(int32_t event_type, int32_t x, int32_t y, void* user_data);
+
+// Set input callback to route touch/mouse/scroll events back to Rust
+void umide_native_set_input_callback(NativeEmulator* emulator, EmulatorInputCallback callback, void* user_data);
 
 #ifdef __cplusplus
 }

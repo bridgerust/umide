@@ -19,6 +19,7 @@ pub enum EmulatorInputType {
     TouchUp = 2,
     KeyDown = 3,
     KeyUp = 4,
+    Scroll = 5,
 }
 
 #[repr(C)]
@@ -28,6 +29,8 @@ pub struct EmulatorInputEvent {
     pub y: i32,
     pub key_code: i32,
 }
+
+pub type EmulatorInputCallback = Option<extern "C" fn(event_type: i32, x: i32, y: i32, user_data: *mut c_void)>;
 
 extern "C" {
     pub fn umide_native_create_emulator(
@@ -44,6 +47,8 @@ extern "C" {
     pub fn umide_native_resize_emulator(emulator: *mut NativeEmulator, x: i32, y: i32, width: u32, height: u32);
 
     pub fn umide_native_send_input(emulator: *mut NativeEmulator, event: *const EmulatorInputEvent);
+
+    pub fn umide_native_set_input_callback(emulator: *mut NativeEmulator, callback: EmulatorInputCallback, user_data: *mut c_void);
 
     pub fn umide_native_attach_device(emulator: *mut NativeEmulator, device_id: *const i8);
 

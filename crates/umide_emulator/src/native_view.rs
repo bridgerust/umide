@@ -1,11 +1,11 @@
-use std::ffi::CString;
+use std::ffi::{CString, c_void};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use raw_window_handle::RawWindowHandle;
 use umide_native::emulator::{
     umide_native_create_emulator, umide_native_destroy_emulator, umide_native_resize_emulator,
     umide_native_send_input, umide_native_attach_device, umide_native_push_frame,
-    NativeEmulator, EmulatorPlatform, EmulatorInputEvent
+    umide_native_set_input_callback, NativeEmulator, EmulatorPlatform, EmulatorInputEvent, EmulatorInputType
 };
 
 /// Commands to send to the gRPC command client
@@ -15,6 +15,48 @@ enum GrpcCommand {
     TouchDown(i32, i32),
     TouchMove(i32, i32),
     TouchUp(i32, i32),
+    Scroll(i32, i32),
+}
+
+/// Context passed to the C++ callback
+struct CallbackCtx {
+    is_android: bool,
+    handle: *mut NativeEmulator,
+    grpc_cmd_tx: Option<std::sync::mpsc::Sender<GrpcCommand>>,
+}
+
+extern "C" fn input_callback(event_type: i32, x: i32, y: i32, user_data: *mut c_void) {
+    if user_data.is_null() { return; }
+    let ctx = unsafe { &*(user_data as *mut CallbackCtx) };
+    
+    if ctx.is_android {
+        if let Some(tx) = &ctx.grpc_cmd_tx {
+            let cmd = match event_type {
+                0 => GrpcCommand::TouchDown(x, y),
+                1 => GrpcCommand::TouchMove(x, y),
+                2 => GrpcCommand::TouchUp(x, y),
+                3 => GrpcCommand::Scroll(x, y), // y is deltaY
+                _ => return,
+            };
+            let _ = tx.send(cmd);
+        }
+    } else {
+        // iOS: send event directly back to C++ `send_input` handler where CGEventPost happens
+        let ev_type = match event_type {
+            0 => EmulatorInputType::TouchDown,
+            1 => EmulatorInputType::TouchMove,
+            2 => EmulatorInputType::TouchUp,
+            3 => EmulatorInputType::Scroll,
+            _ => return,
+        };
+        let ev = EmulatorInputEvent {
+            event_type: ev_type,
+            x,
+            y,
+            key_code: 0,
+        };
+        unsafe { umide_native_send_input(ctx.handle, &ev); }
+    }
 }
 
 pub struct NativeEmulatorView {
@@ -24,6 +66,8 @@ pub struct NativeEmulatorView {
     stream_cancel: Arc<AtomicBool>,
     /// Channel to send commands to the gRPC command client
     grpc_cmd_tx: Option<std::sync::mpsc::Sender<GrpcCommand>>,
+    /// Pointer to the callback context (so we can drop it)
+    callback_ctx: *mut CallbackCtx,
 }
 
 unsafe impl Send for NativeEmulatorView {}
@@ -44,11 +88,26 @@ impl NativeEmulatorView {
         if handle.is_null() {
             Err("Failed to create native emulator instance".to_string())
         } else {
+            let is_android = matches!(platform, EmulatorPlatform::Android);
+            let (grpc_cmd_tx, _) = std::sync::mpsc::channel::<GrpcCommand>(); // placeholder, replaced in start_grpc_stream
+            
+            let ctx = Box::new(CallbackCtx {
+                is_android,
+                handle,
+                grpc_cmd_tx: None, 
+            });
+            let ctx_ptr = Box::into_raw(ctx);
+            
+            unsafe {
+                umide_native_set_input_callback(handle, Some(input_callback), ctx_ptr as *mut c_void);
+            }
+
             Ok(Self {
                 handle,
-                is_android: matches!(platform, EmulatorPlatform::Android),
+                is_android,
                 stream_cancel: Arc::new(AtomicBool::new(false)),
                 grpc_cmd_tx: None,
+                callback_ctx: ctx_ptr,
             })
         }
     }
@@ -134,7 +193,15 @@ impl NativeEmulatorView {
 
         // Create a sync channel for commands (key presses, touch events)
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<GrpcCommand>();
-        self.grpc_cmd_tx = Some(cmd_tx);
+        self.grpc_cmd_tx = Some(cmd_tx.clone());
+        
+        // Update the callback context so the C++ callback can send to this channel
+        unsafe {
+            if !self.callback_ctx.is_null() {
+                let ctx = &mut *self.callback_ctx;
+                ctx.grpc_cmd_tx = Some(cmd_tx);
+            }
+        }
 
         // Spawn the streaming task on a background thread with its own tokio runtime
         std::thread::spawn(move || {
@@ -222,6 +289,15 @@ impl NativeEmulatorView {
                                             tracing::warn!("gRPC touch_up error: {}", e);
                                         }
                                     }
+                                    GrpcCommand::Scroll(x, delta_y) => {
+                                        let start_y = 500;
+                                        let end_y = start_y - delta_y * 5;
+                                        let _ = cmd_client.send_touch_down(x, start_y).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                                        let _ = cmd_client.send_touch_move(x, end_y).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                                        let _ = cmd_client.send_touch_up(x, end_y).await;
+                                    }
                                 }
                             }
                             Err(std::sync::mpsc::TryRecvError::Empty) => {
@@ -290,6 +366,9 @@ impl Drop for NativeEmulatorView {
         // Give the stream thread a moment to notice cancellation
         std::thread::sleep(std::time::Duration::from_millis(50));
         unsafe {
+            if !self.callback_ctx.is_null() {
+                let _ = Box::from_raw(self.callback_ctx);
+            }
             umide_native_destroy_emulator(self.handle);
         }
     }

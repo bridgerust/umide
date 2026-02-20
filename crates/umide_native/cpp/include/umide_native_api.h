@@ -52,6 +52,11 @@ void umide_native_send_input(NativeEmulator* emulator, const EmulatorInputEvent*
 // device_id: serial for ADB, UDID for iOS
 void umide_native_attach_device(NativeEmulator* emulator, const char* device_id);
 
+// Push an RGBA frame for display (used by gRPC streaming for Android)
+// rgba_data: pointer to RGBA8888 pixel data
+// width/height: dimensions in pixels
+void umide_native_push_frame(NativeEmulator* emulator, const uint8_t* rgba_data, uint32_t width, uint32_t height);
+
 #ifdef __cplusplus
 }
 #endif

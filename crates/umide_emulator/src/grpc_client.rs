@@ -17,7 +17,6 @@ use emulator_proto::{
     emulator_controller_client::EmulatorControllerClient,
     ImageFormat, Image, TouchEvent, Touch,
     image_format::ImgFormat,
-    touch::TouchType,
 };
 
 use crate::decoder::{DecodedFrame, GpuFrame};
@@ -49,24 +48,53 @@ impl EmulatorGrpcClient {
             .await
             .map_err(|e| GrpcError::ConnectionFailed(e.to_string()))?;
         
-        let client = EmulatorControllerClient::new(channel);
+        // Raw RGBA frames at device resolution can be large (1080x2400x4 = ~10MB)
+        // Default tonic limit is 4MB — increase to 50MB
+        let client = EmulatorControllerClient::new(channel)
+            .max_decoding_message_size(50 * 1024 * 1024);
         
         info!("Connected to Android emulator gRPC");
         
         Ok(Self { client })
     }
     
-    /// Connect to default emulator endpoint (localhost:5556)
+    /// Connect to default emulator endpoint (localhost:8554)
     pub async fn connect_default() -> Result<Self, GrpcError> {
-        Self::connect("http://localhost:5556").await
+        Self::connect("http://localhost:8554").await
+    }
+    
+    /// Connect with retry and exponential backoff.
+    /// The emulator takes time to boot and expose gRPC, so we retry patiently.
+    pub async fn connect_with_retry(endpoint: &str, max_duration: std::time::Duration) -> Result<Self, GrpcError> {
+        let start = std::time::Instant::now();
+        let mut delay = std::time::Duration::from_millis(200);
+        let max_delay = std::time::Duration::from_secs(2);
+        
+        loop {
+            match Self::connect(endpoint).await {
+                Ok(client) => return Ok(client),
+                Err(e) => {
+                    if start.elapsed() >= max_duration {
+                        return Err(GrpcError::ConnectionFailed(format!(
+                            "Failed to connect after {:?}: {}", max_duration, e
+                        )));
+                    }
+                    warn!("gRPC connection failed (retrying in {:?}): {}", delay, e);
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(max_delay);
+                }
+            }
+        }
     }
     
     /// Get a single screenshot
     pub async fn get_screenshot(&mut self) -> Result<DecodedFrame, GrpcError> {
         let format = ImageFormat {
             format: ImgFormat::Rgba8888 as i32,
-            width: 0,  // Native resolution
+            rotation: None,
+            width: 0,   // Native resolution
             height: 0,
+            display: 0, // Main display
         };
         
         let response = self.client
@@ -86,8 +114,10 @@ impl EmulatorGrpcClient {
     ) -> Result<(), GrpcError> {
         let format = ImageFormat {
             format: ImgFormat::Rgba8888 as i32,
-            width: 0,
+            rotation: None,
+            width: 0,   // Native resolution
             height: 0,
+            display: 0,
         };
         
         info!("Starting screenshot stream...");
@@ -130,17 +160,44 @@ impl EmulatorGrpcClient {
     }
     
     /// Send a touch event to the emulator
-    pub async fn send_touch(&mut self, x: i32, y: i32, touch_type: TouchType) -> Result<(), GrpcError> {
+    /// pressure > 0 means touching, pressure = 0 means release
+    pub async fn send_touch_down(&mut self, x: i32, y: i32) -> Result<(), GrpcError> {
         let touch = Touch {
             x,
             y,
             identifier: 0,
-            pressure: 1.0,
-            r#type: touch_type as i32,
+            pressure: 1,  // Non-zero = touching
+            touch_major: 0,
+            touch_minor: 0,
         };
         
         let event = TouchEvent {
             touches: vec![touch],
+            display: 0,
+        };
+        
+        self.client
+            .send_touch(event)
+            .await
+            .map_err(|e| GrpcError::StreamError(e.to_string()))?;
+        
+        Ok(())
+    }
+    
+    /// Release a touch at coordinates (pressure = 0)
+    pub async fn send_touch_up(&mut self, x: i32, y: i32) -> Result<(), GrpcError> {
+        let touch = Touch {
+            x,
+            y,
+            identifier: 0,
+            pressure: 0,  // 0 = release
+            touch_major: 0,
+            touch_minor: 0,
+        };
+        
+        let event = TouchEvent {
+            touches: vec![touch],
+            display: 0,
         };
         
         self.client
@@ -153,29 +210,42 @@ impl EmulatorGrpcClient {
     
     /// Send a tap (down + up) at coordinates
     pub async fn tap(&mut self, x: i32, y: i32) -> Result<(), GrpcError> {
-        self.send_touch(x, y, TouchType::Down).await?;
+        self.send_touch_down(x, y).await?;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        self.send_touch(x, y, TouchType::Up).await?;
+        self.send_touch_up(x, y).await?;
         Ok(())
     }
     
     /// Convert gRPC Image to DecodedFrame
     fn image_to_frame(&self, image: Image) -> Result<DecodedFrame, GrpcError> {
-        let width = image.width;
-        let height = image.height;
+        // AOSP: width/height can be in Image (deprecated) or Image.format
+        // Try format first, fall back to deprecated fields
+        let (width, height) = if let Some(ref fmt) = image.format {
+            let w = if fmt.width > 0 { fmt.width } else { image.width };
+            let h = if fmt.height > 0 { fmt.height } else { image.height };
+            (w, h)
+        } else {
+            (image.width, image.height)
+        };
+        
         let data = image.image;
         
         if data.is_empty() {
             return Err(GrpcError::DecodeError("Empty image data".to_string()));
         }
         
+        if width == 0 || height == 0 {
+            return Err(GrpcError::DecodeError(format!(
+                "Invalid dimensions: {}x{}", width, height
+            )));
+        }
+        
         // Image data should be RGBA8888
         let expected_size = (width * height * 4) as usize;
         if data.len() != expected_size {
             return Err(GrpcError::DecodeError(format!(
-                "Image size mismatch: expected {} bytes, got {}",
-                expected_size,
-                data.len()
+                "Image size mismatch: expected {} ({}x{}x4), got {}",
+                expected_size, width, height, data.len()
             )));
         }
         

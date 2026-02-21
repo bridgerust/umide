@@ -5,6 +5,7 @@ use raw_window_handle::RawWindowHandle;
 use umide_native::emulator::{
     umide_native_create_emulator, umide_native_destroy_emulator, umide_native_resize_emulator,
     umide_native_send_input, umide_native_attach_device, umide_native_push_frame,
+    umide_native_show_emulator, umide_native_hide_emulator,
     umide_native_set_input_callback, NativeEmulator, EmulatorPlatform, EmulatorInputEvent, EmulatorInputType
 };
 
@@ -89,7 +90,7 @@ impl NativeEmulatorView {
             Err("Failed to create native emulator instance".to_string())
         } else {
             let is_android = matches!(platform, EmulatorPlatform::Android);
-            let (grpc_cmd_tx, _) = std::sync::mpsc::channel::<GrpcCommand>(); // placeholder, replaced in start_grpc_stream
+            let (_grpc_cmd_tx, _) = std::sync::mpsc::channel::<GrpcCommand>(); // placeholder, replaced in start_grpc_stream
             
             let ctx = Box::new(CallbackCtx {
                 is_android,
@@ -135,6 +136,18 @@ impl NativeEmulatorView {
     pub fn push_frame(&self, rgba_data: &[u8], width: u32, height: u32) {
         unsafe {
             umide_native_push_frame(self.handle, rgba_data.as_ptr(), width, height);
+        }
+    }
+
+    pub fn show(&self) {
+        unsafe {
+            umide_native_show_emulator(self.handle);
+        }
+    }
+
+    pub fn hide(&self) {
+        unsafe {
+            umide_native_hide_emulator(self.handle);
         }
     }
 

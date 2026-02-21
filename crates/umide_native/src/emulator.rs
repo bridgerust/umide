@@ -53,4 +53,8 @@ extern "C" {
     pub fn umide_native_attach_device(emulator: *mut NativeEmulator, device_id: *const i8);
 
     pub fn umide_native_push_frame(emulator: *mut NativeEmulator, rgba_data: *const u8, width: u32, height: u32);
+
+    pub fn umide_native_show_emulator(emulator: *mut NativeEmulator);
+
+    pub fn umide_native_hide_emulator(emulator: *mut NativeEmulator);
 }

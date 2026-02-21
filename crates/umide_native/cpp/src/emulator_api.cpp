@@ -45,6 +45,18 @@ void umide_native_send_input(NativeEmulator* emulator, const EmulatorInputEvent*
     }
 }
 
+void umide_native_show_emulator(NativeEmulator* emulator) {
+    if (emulator) {
+        reinterpret_cast<Emulator*>(emulator)->show();
+    }
+}
+
+void umide_native_hide_emulator(NativeEmulator* emulator) {
+    if (emulator) {
+        reinterpret_cast<Emulator*>(emulator)->hide();
+    }
+}
+
 void umide_native_attach_device(NativeEmulator* emulator, const char* device_id) {
     if (emulator && device_id) {
         reinterpret_cast<Emulator*>(emulator)->attach_device(std::string(device_id));

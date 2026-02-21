@@ -23,7 +23,7 @@ use umide_native::emulator::EmulatorPlatform;
 
 struct NativeEmulatorWidget {
     id: ViewId,
-    native_view: Option<NativeEmulatorView>,
+    native_view: Rc<std::cell::RefCell<Option<NativeEmulatorView>>>,
     running_device: RwSignal<Option<DeviceInfo>>,
     is_visible: RwSignal<bool>,
     #[allow(dead_code)]
@@ -44,7 +44,7 @@ impl NativeEmulatorWidget {
     ) -> Self {
         Self {
             id: ViewId::new(),
-            native_view: None,
+            native_view: Rc::new(std::cell::RefCell::new(None)),
             running_device,
             is_visible,
             current_device_id,
@@ -55,9 +55,10 @@ impl NativeEmulatorWidget {
     
     /// Cleanup the native view
     fn cleanup(&mut self) {
-        if self.native_view.is_some() {
+        let mut view_lock = self.native_view.borrow_mut();
+        if view_lock.is_some() {
             tracing::info!("Cleaning up native emulator view");
-            self.native_view = None;
+            *view_lock = None;
             self.last_device_id = None;
         }
     }
@@ -89,14 +90,15 @@ impl View for NativeEmulatorWidget {
         }
 
         if should_cleanup {
-            if self.native_view.is_some() {
-                if let Some(ref view) = self.native_view {
+            let has_view = self.native_view.borrow().is_some();
+            if has_view {
+                if let Some(ref view) = *self.native_view.borrow() {
                     view.hide();
                 }
                 self.cleanup();
             }
         } else if is_visible {
-            if let Some(ref view) = self.native_view {
+            if let Some(ref view) = *self.native_view.borrow() {
                 view.show();
             }
         }
@@ -106,14 +108,14 @@ impl View for NativeEmulatorWidget {
         let is_visible = self.is_visible.get_untracked();
         
         if !is_visible {
-            if self.native_view.is_some() {
+            if self.native_view.borrow().is_some() {
                 self.cleanup();
             }
             return None;
         }
         
         let current_device = self.running_device.get_untracked();
-        if current_device.is_none() && self.native_view.is_some() {
+        if current_device.is_none() && self.native_view.borrow().is_some() {
             self.cleanup();
             return None;
         }
@@ -127,8 +129,9 @@ impl View for NativeEmulatorWidget {
 
         // Cleanup if hidden or no device
         if !is_visible || current_device.is_none() {
-            if self.native_view.is_some() {
-                if let Some(ref view) = self.native_view {
+            let has_view = self.native_view.borrow().is_some();
+            if has_view {
+                if let Some(ref view) = *self.native_view.borrow() {
                     view.hide();
                 }
                 self.cleanup();
@@ -155,9 +158,12 @@ impl View for NativeEmulatorWidget {
                 device_name, x, y, width, height
             );
 
-            if let Some(view) = &self.native_view {
-                view.resize(x, y, width, height);
-                view.show();
+            let has_view = self.native_view.borrow().is_some();
+            if has_view {
+                if let Some(view) = &*self.native_view.borrow() {
+                    view.resize(x, y, width, height);
+                    view.show();
+                }
             } else if is_visible {
                 if let Some(device) = current_device {
                     use floem::window::WindowIdExt;
@@ -193,7 +199,7 @@ impl View for NativeEmulatorWidget {
                                         view.start_grpc_stream("http://localhost:8554");
                                     }
                                     
-                                    self.native_view = Some(view);
+                                    *self.native_view.borrow_mut() = Some(view);
                                     self.last_device_id = Some(device.id.clone());
                                 }
                                 Err(e) => {
@@ -244,6 +250,7 @@ fn platform_panel(
                         if let Some(ref running) = running_device.get_untracked() {
                             if running.id == device_cloned_resume.id {
                                 // Just show it again
+                                current_device_id.set(device_cloned_resume.id.clone());
                                 is_visible.set(true);
                                 return;
                             }
@@ -253,6 +260,7 @@ fn platform_panel(
                         let mut d = device_cloned_start.clone();
                         d.state = DeviceState::Running;
                         running_device.set(Some(d));
+                        current_device_id.set(device_cloned_start.id.clone());
                         is_visible.set(true);
                     },
                     || false,
@@ -375,6 +383,8 @@ fn platform_panel(
                 let native_widget = NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal);
                 let widget_id = native_widget.id();
                 
+
+                
                 // Effect to force an update when signals change
                 Effect::new(move |_| {
                     let _ = is_visible.get();
@@ -417,11 +427,12 @@ fn platform_panel(
     })
 }
 
-/// Helper to create a sidebar button that sends an ADB keyevent
-fn adb_button(
+/// Helper to create a sidebar button that executes an arbitrary shell command
+fn action_button(
     label: &'static str,
     _tooltip: &'static str,
-    keyevent: i32,
+    device_id: RwSignal<String>,
+    cmd_builder: impl Fn(String) -> String + 'static + Send + Sync,
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
     let label_text = label.to_string();
@@ -430,9 +441,14 @@ fn adb_button(
             .style(|s| s.font_size(14.0)),
     ))
     .on_click_stop(move |_| {
+        let id = device_id.get_untracked();
+        if id.is_empty() { return; }
+        
+        let cmd = cmd_builder(id);
         std::thread::spawn(move || {
-            let cmd = format!("adb shell input keyevent {}", keyevent);
+            let env_path = std::env::var("PATH").unwrap_or_default();
             let _ = std::process::Command::new("sh")
+                .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{}", env_path))
                 .arg("-c")
                 .arg(&cmd)
                 .output();
@@ -509,28 +525,35 @@ fn emulator_sidebar(
 
         // Android hardware controls
         Stack::new((
-            // Home button (keyevent 3)
-            adb_button("🏠", "Home", 3, config),
-            // Back button (keyevent 4)
-            adb_button("◀", "Back", 4, config),
-            // Overview/Recents button (keyevent 187)
-            adb_button("▦", "Overview", 187, config),
-            // Separator
+            action_button("🏠", "Home", current_device_id, |_id| "adb shell input keyevent 3".to_string(), config),
+            action_button("◀", "Back", current_device_id, |_id| "adb shell input keyevent 4".to_string(), config),
+            action_button("▦", "Overview", current_device_id, |_id| "adb shell input keyevent 187".to_string(), config),
             Label::new("").style(|s| s.height(8.0)),
-            // Volume Up (keyevent 24)
-            adb_button("🔊", "Vol+", 24, config),
-            // Volume Down (keyevent 25)
-            adb_button("🔉", "Vol-", 25, config),
-            // Separator
+            action_button("🔊", "Vol+", current_device_id, |_id| "adb shell input keyevent 24".to_string(), config),
+            action_button("🔉", "Vol-", current_device_id, |_id| "adb shell input keyevent 25".to_string(), config),
             Label::new("").style(|s| s.height(8.0)),
-            // Power button (keyevent 26)
-            adb_button("⏻", "Power", 26, config),
+            action_button("⏻", "Power", current_device_id, |_id| "adb shell input keyevent 26".to_string(), config),
+            Label::new("").style(|s| s.height(8.0)),
+            action_button("📷", "Screenshot", current_device_id, |_id| "adb exec-out screencap -p > ~/Desktop/umide_screenshot_$(date +%s).png".to_string(), config),
         ))
         .style(move |s| {
             s.flex_col()
                 .items_center()
                 .gap(4.0)
                 .apply_if(!is_android, |s| s.hide())
+        }),
+
+        // iOS hardware controls
+        Stack::new((
+            action_button("🏠", "Home", current_device_id, |id| format!("idb ui button --udid {} HOME", id), config),
+            Label::new("").style(|s| s.height(8.0)),
+            action_button("📷", "Screenshot", current_device_id, |id| format!("idb screenshot --udid {} ~/Desktop/umide_screenshot_$(date +%s).png", id), config),
+        ))
+        .style(move |s| {
+            s.flex_col()
+                .items_center()
+                .gap(4.0)
+                .apply_if(is_android, |s| s.hide()) // Hide if android
         })
     ))
     .style(move |s| {
@@ -577,6 +600,7 @@ pub fn emulator_panel(
                     DevicePlatform::Android => {
                         if running_android.get().is_none() {
                             running_android.set(Some(device.clone()));
+                            current_android_id.set(device.id.clone());
                             // Don't auto-show, let user click "Show"
                             // android_visible.set(true);
                         }
@@ -584,6 +608,7 @@ pub fn emulator_panel(
                     DevicePlatform::Ios => {
                         if running_ios.get().is_none() {
                             running_ios.set(Some(device.clone()));
+                            current_ios_id.set(device.id.clone());
                             // Don't auto-show, let user click "Show"
                             // ios_visible.set(true);
                         }

@@ -595,35 +595,74 @@ pub fn emulator_panel(
         devices.set(dev_list);
     });
 
+    let android_panel_visible = RwSignal::new(true);
+    let ios_panel_visible = RwSignal::new(cfg!(target_os = "macos"));
+    let show_ios_ui = cfg!(target_os = "macos");
+
+    let toggle_btn = move |label: &'static str, visible_sig: RwSignal<bool>| {
+        Label::derived(move || {
+            if visible_sig.get() {
+                format!("☑ {}", label)
+            } else {
+                format!("☐ {}", label)
+            }
+        })
+        .on_click_stop(move |_| {
+            visible_sig.update(|v| *v = !*v);
+        })
+        .style(move |s| {
+            s.cursor(floem::style::CursorStyle::Pointer)
+                .padding_right(15.0)
+                .font_size(12.0)
+                .apply_if(label == "iOS" && !show_ios_ui, |s| s.hide())
+        })
+    };
+
+    let toggle_bar = Stack::horizontal((
+        toggle_btn("Android", android_panel_visible),
+        toggle_btn("iOS", ios_panel_visible),
+    ))
+    .style(move |s| {
+        let config_val = config.get();
+        s.width_full()
+            .padding(5.0)
+            .border_bottom(1.0)
+            .border_color(config_val.color(UmideColor::LAPCE_BORDER))
+    });
+
     PanelBuilder::new(config, position)
         .add(
             "Emulators",
-            Stack::horizontal((
-                platform_panel(
-                    DevicePlatform::Android,
-                    devices,
-                    running_android,
-                    android_visible,
-                    android_frame,
-                    current_android_id,
-                    config,
-                ),
-                platform_panel(
-                    DevicePlatform::Ios,
-                    devices,
-                    running_ios,
-                    ios_visible,
-                    ios_frame,
-                    current_ios_id,
-                    config,
-                ),
+            Stack::new((
+                toggle_bar,
+                Stack::horizontal((
+                    platform_panel(
+                        DevicePlatform::Android,
+                        devices,
+                        running_android,
+                        android_visible,
+                        android_frame,
+                        current_android_id,
+                        config,
+                    ).style(move |s| s.apply_if(!android_panel_visible.get(), |s| s.hide())),
+                    platform_panel(
+                        DevicePlatform::Ios,
+                        devices,
+                        running_ios,
+                        ios_visible,
+                        ios_frame,
+                        current_ios_id,
+                        config,
+                    ).style(move |s| s.apply_if(!ios_panel_visible.get() || !show_ios_ui, |s| s.hide())),
+                ))
+                .style(|s| {
+                    s.flex_row()
+                        .size_full()
+                        .gap(5.0)
+                        .padding(5.0)
+                }),
             ))
-            .style(|s| {
-                s.flex_row()
-                    .size_full()
-                    .gap(5.0)
-                    .padding(5.0)
-            }),
+            .style(|s| s.flex_col().size_full()),
             window_tab_data.panel.section_open(crate::panel::data::PanelSection::Process),
         )
         .build()

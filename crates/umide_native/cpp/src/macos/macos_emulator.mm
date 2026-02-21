@@ -28,6 +28,7 @@ API_AVAILABLE(macos(12.3))
     CIContext* ciContext;
     volatile BOOL isBeingDestroyed;
     // Track the captured image dimensions for coordinate mapping
+@public
     CGFloat capturedWidth;
     CGFloat capturedHeight;
 }
@@ -464,6 +465,11 @@ private:
     uint32_t viewWidth = 400;
     uint32_t viewHeight = 860;
 
+    // State tracking for iOS idb touches
+    int lastTouchX = 0;
+    int lastTouchY = 0;
+    std::chrono::steady_clock::time_point lastMoveTime;
+
 public:
     MacOSEmulator(EmulatorPlatform p) : platform(p) {}
 
@@ -685,33 +691,69 @@ public:
                 });
             }
         } else {
-            // Forward touch events to iOS Simulator
-            // Post CGEvents to the simulator window
-            if (embeddedWindowID != 0) {
+            // Forward touch events to iOS Simulator using idb
+            if (embeddedWindowID != 0 && emulatorView != nil) {
+                
+                // Convert simulator capture pixels into idb logical points (assume 3.0x retina scale)
+                int mappedX = (int)(event.x / 3.0f);
+                int mappedY = (int)(event.y / 3.0f);
+
                 if (event.type == EMULATOR_INPUT_TOUCH_DOWN) {
-                    CGPoint point = CGPointMake(event.x, event.y);
-                    CGEventRef mouseDown = CGEventCreateMouseEvent(
-                        NULL, kCGEventLeftMouseDown, point, kCGMouseButtonLeft);
-                    if (mouseDown) {
-                        CGEventPost(kCGHIDEventTap, mouseDown);
-                        CFRelease(mouseDown);
-                    }
+                    lastTouchX = mappedX;
+                    lastTouchY = mappedY;
                 } else if (event.type == EMULATOR_INPUT_TOUCH_UP) {
-                    CGPoint point = CGPointMake(event.x, event.y);
-                    CGEventRef mouseUp = CGEventCreateMouseEvent(
-                        NULL, kCGEventLeftMouseUp, point, kCGMouseButtonLeft);
-                    if (mouseUp) {
-                        CGEventPost(kCGHIDEventTap, mouseUp);
-                        CFRelease(mouseUp);
+                    int startX = lastTouchX;
+                    int startY = lastTouchY;
+                    int endX = mappedX;
+                    int endY = mappedY;
+                    std::string udid = currentDeviceId;
+                    
+                    int dx = abs(endX - startX);
+                    int dy = abs(endY - startY);
+                    
+                    if (dx < 10 && dy < 10) {
+                        // It's a tap
+                        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                            NSLog(@"MacOSEmulator: Sending idb tap to x=%d y=%d", endX, endY);
+                            NSString* cmd = [NSString stringWithFormat:@"idb ui tap --udid %s %d %d", udid.c_str(), endX, endY];
+                            int result = system([cmd UTF8String]);
+                            if (result != 0) {
+                                NSLog(@"MacOSEmulator: idb tap command failed with code %d", result);
+                            }
+                        });
+                    } else {
+                        // It's a swipe
+                        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                            NSLog(@"MacOSEmulator: Sending idb swipe from x=%d y=%d to x=%d y=%d", startX, startY, endX, endY);
+                            NSString* cmd = [NSString stringWithFormat:@"idb ui swipe --udid %s --duration 0.2 %d %d %d %d", udid.c_str(), startX, startY, endX, endY];
+                            system([cmd UTF8String]);
+                        });
                     }
                 } else if (event.type == EMULATOR_INPUT_TOUCH_MOVE) {
-                    CGPoint point = CGPointMake(event.x, event.y);
-                    CGEventRef mouseDrag = CGEventCreateMouseEvent(
-                        NULL, kCGEventLeftMouseDragged, point, kCGMouseButtonLeft);
-                    if (mouseDrag) {
-                        CGEventPost(kCGHIDEventTap, mouseDrag);
-                        CFRelease(mouseDrag);
-                    }
+                    // Empty tracking block; we batch swipe invocations to fire cleanly out of TOUCH_UP instead.
+                } else if (event.type == EMULATOR_INPUT_SCROLL) {
+                    auto now = std::chrono::steady_clock::now();
+                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastMoveTime).count();
+                    
+                    if (elapsed < 100) return; // scroll throttle
+                    lastMoveTime = now;
+                    
+                    int deltaY = event.y;
+                    
+                    // Synthetic swipe originating from center of iOS simulator bounds
+                    int centerX = emulatorView->capturedWidth > 0 ? (emulatorView->capturedWidth / 2) / 3 : 200;
+                    int centerY = emulatorView->capturedHeight > 0 ? (emulatorView->capturedHeight / 2) / 3 : 400;
+                    
+                    int startX = centerX;
+                    int startY = centerY;
+                    int endX = startX;
+                    int endY = startY - (deltaY * 20); // scroll direction translation
+                    
+                    std::string udid = currentDeviceId;
+                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                        NSString* cmd = [NSString stringWithFormat:@"idb ui swipe --udid %s --duration 0.1 %d %d %d %d", udid.c_str(), startX, startY, endX, endY];
+                        system([cmd UTF8String]);
+                    });
                 }
             }
         }

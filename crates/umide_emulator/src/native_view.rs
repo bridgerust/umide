@@ -124,13 +124,48 @@ impl NativeEmulatorView {
         unsafe {
             umide_native_attach_device(self.handle, c_str.as_ptr());
         }
-    }
 
-    pub fn send_input(&self, event: EmulatorInputEvent) {
-        unsafe {
-            umide_native_send_input(self.handle, &event);
+        if !self.is_android {
+            self.ensure_idb_installed();
         }
     }
+
+    /// Silently checks and installs `idb` via Homebrew and pip if it is missing on the host.
+    /// This is strictly required for iOS interactability (taps/swipes).
+    fn ensure_idb_installed(&self) {
+        std::thread::spawn(move || {
+            // Check if idb exists
+            let output = std::process::Command::new("which")
+                .arg("idb")
+                .output();
+                
+            let needs_install = match output {
+                Ok(out) => !out.status.success() || out.stdout.is_empty(),
+                Err(_) => true,
+            };
+
+            if needs_install {
+                tracing::info!("'idb' not found. Auto-installing iOS interaction dependencies...");
+                
+                // 1. Install idb-companion via brew
+                let _ = std::process::Command::new("brew")
+                    .args(["tap", "facebook/fb"])
+                    .output();
+                let _ = std::process::Command::new("brew")
+                    .args(["install", "idb-companion"])
+                    .output();
+                    
+                // 2. Install fb-idb via pip3
+                let _ = std::process::Command::new("pip3")
+                    .args(["install", "fb-idb"])
+                    .output();
+                    
+                tracing::info!("Finished installing iOS idb dependencies.");
+            }
+        });
+    }
+
+
 
     /// Push RGBA frame data for display (used by gRPC streaming for Android)
     pub fn push_frame(&self, rgba_data: &[u8], width: u32, height: u32) {
@@ -368,6 +403,8 @@ impl NativeEmulatorView {
     pub fn is_android(&self) -> bool {
         self.is_android
     }
+
+
 }
 
 impl Drop for NativeEmulatorView {

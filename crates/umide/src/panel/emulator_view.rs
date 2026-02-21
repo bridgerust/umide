@@ -115,6 +115,14 @@ impl View for NativeEmulatorWidget {
         let is_visible = self.is_visible.get_untracked();
         let current_device = self.running_device.get_untracked();
 
+        // Cleanup if hidden or no device
+        if !is_visible || current_device.is_none() {
+            if self.native_view.is_some() {
+                self.cleanup();
+            }
+            return;
+        }
+
         let window_origin = self.id.get_window_origin();
         let size = self.id.get_layout().map(|l| (l.size.width as u32, l.size.height as u32));
         
@@ -136,6 +144,7 @@ impl View for NativeEmulatorWidget {
 
             if let Some(view) = &self.native_view {
                 view.resize(x, y, width, height);
+                view.show();
             } else if is_visible {
                 if let Some(device) = current_device {
                     use floem::window::WindowIdExt;
@@ -347,13 +356,25 @@ fn platform_panel(
             }),
 
             // Native Emulator View + Sidebar (shown when device running AND visible)
-            Stack::horizontal((
-                // Emulator display
-                NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal)
-                    .style(|s| s.flex_grow(1.0).width_full().height_full()),
-                // Emulator sidebar controls
-                emulator_sidebar(platform, running_device, is_visible, frame_signal, current_device_id, config),
-            ))
+            Stack::horizontal({
+                let native_widget = NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal);
+                let widget_id = native_widget.id();
+                
+                // Effect to force a repaint when signals change
+                Effect::new(move |_| {
+                    let _ = is_visible.get();
+                    let _ = running_device.get();
+                    widget_id.request_paint();
+                });
+
+                (
+                    // Emulator display
+                    native_widget
+                        .style(|s| s.flex_grow(1.0).width_full().height_full()),
+                    // Emulator sidebar controls
+                    emulator_sidebar(platform, running_device, is_visible, frame_signal, current_device_id, config),
+                )
+            })
             .style(move |s| {
                 let visible = is_visible.get();
                 let has_running = running_device.get().is_some();

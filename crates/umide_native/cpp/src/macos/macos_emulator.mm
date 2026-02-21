@@ -54,8 +54,8 @@ API_AVAILABLE(macos(12.3))
         ciContext = [CIContext context];
         [self setWantsLayer:YES];
         self.layer.backgroundColor = [[NSColor blackColor] CGColor];
-        // Auto-resize with the window — without this, the view stays at initial size
-        self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        // Ensure CoreAnimation scales the video frames automatically while maintaining aspect ratio
+        self.layer.contentsGravity = kCAGravityResizeAspect;
     }
     return self;
 }
@@ -100,23 +100,17 @@ API_AVAILABLE(macos(12.3))
         SCContentFilter* filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:targetWindow];
         
         SCStreamConfiguration* config = [[SCStreamConfiguration alloc] init];
-        // Capture at high resolution for sharp emulator output.
-        // ScreenCaptureKit can render the window content at higher-than-screen
-        // resolution, which is critical for Android emulators that render internally 
-        // at device resolution (e.g. 1080x2400) but display in a smaller window.
-        // We use 4x the window's point size to capture as much detail as possible,
-        // then drawRect scales down with high-quality interpolation for a crisp result.
-        CGFloat retinaScale = [[NSScreen mainScreen] backingScaleFactor];
-        CGFloat captureScale = MAX(retinaScale, 2.0) * 2.0;  // Typically 4x on Retina
-        config.width = (size_t)MAX(targetWindow.frame.size.width * captureScale, 1);
-        config.height = (size_t)MAX(targetWindow.frame.size.height * captureScale, 1);
-        NSLog(@"UmideEmulatorView: Capture resolution: %zux%zu (%.0fx%.0f pts @ %.0fx)", 
-              config.width, config.height,
-              targetWindow.frame.size.width, targetWindow.frame.size.height, captureScale);
+        config.width = (size_t)MAX(targetWindow.frame.size.width, 1);
+        config.height = (size_t)MAX(targetWindow.frame.size.height, 1);
         config.minimumFrameInterval = CMTimeMake(1, 60);  // 60 FPS
         config.pixelFormat = kCVPixelFormatType_32BGRA;
         config.showsCursor = NO;
         config.capturesAudio = NO;
+        
+        // Remove massive macOS window drop shadow from the capture if supported (macOS 14+)
+        if ([config respondsToSelector:NSSelectorFromString(@"setIgnoreShadowsSingleWindow:")]) {
+            [config setValue:@YES forKey:@"ignoreShadowsSingleWindow"];
+        }
         
         self->captureStream = [[SCStream alloc] initWithFilter:filter configuration:config delegate:self];
         
@@ -193,7 +187,10 @@ API_AVAILABLE(macos(12.3))
             self->latestFrame = newFrame;
             self->capturedWidth = imgW;
             self->capturedHeight = imgH;
-            [self setNeedsDisplay:YES];
+            
+            // Render directly through the layer tree instead of relying on drawRect:
+            // This grants hardware-accelerated kCAGravityResizeAspect perfect fit
+            self.layer.contents = (__bridge id)self->latestFrame;
         });
     }
 }
@@ -288,56 +285,7 @@ API_AVAILABLE(macos(12.3))
     }
 }
 
-- (void)drawRect:(NSRect)dirtyRect {
-    NSRect bounds = self.bounds;
-    
-    if (latestFrame && bounds.size.width > 0 && bounds.size.height > 0) {
-        // Aspect-fit: preserve the emulator's aspect ratio, center in view
-        // This prevents stretching a 9:19 phone display into a wider panel
-        CGFloat imgW = capturedWidth;
-        CGFloat imgH = capturedHeight;
-        
-        if (imgW > 0 && imgH > 0) {
-            CGFloat viewW = bounds.size.width;
-            CGFloat viewH = bounds.size.height;
-            
-            // Image aspect ratio (pixels cancel out, ratio is scale-invariant)
-            CGFloat imgAspect = imgW / imgH;
-            CGFloat viewAspect = viewW / viewH;
-            
-            CGFloat drawW, drawH;
-            if (imgAspect > viewAspect) {
-                // Image is wider than view — fit width, letterbox top/bottom
-                drawW = viewW;
-                drawH = viewW / imgAspect;
-            } else {
-                // Image is taller than view — fit height, pillarbox left/right
-                drawH = viewH;
-                drawW = viewH * imgAspect;
-            }
-            
-            CGFloat drawX = (viewW - drawW) / 2.0;
-            CGFloat drawY = (viewH - drawH) / 2.0;
-            
-            CGContextRef ctx = [[NSGraphicsContext currentContext] CGContext];
-            CGContextSetInterpolationQuality(ctx, kCGInterpolationHigh);
-            CGContextDrawImage(ctx, CGRectMake(drawX, drawY, drawW, drawH), latestFrame);
-        }
-    } else {
-        // Draw placeholder
-        [[NSColor blackColor] setFill];
-        NSRectFill(dirtyRect);
-        
-        NSString* text = @"Waiting for emulator...";
-        NSDictionary* attrs = @{
-            NSForegroundColorAttributeName: [NSColor grayColor],
-            NSFontAttributeName: [NSFont systemFontOfSize:14]
-        };
-        NSSize textSize = [text sizeWithAttributes:attrs];
-        [text drawAtPoint:NSMakePoint(bounds.size.width/2 - textSize.width/2, 
-                                       bounds.size.height/2) withAttributes:attrs];
-    }
-}
+// Removed manual drawRect: - replaced by CALayer rendering
 
 - (void)dealloc {
     isBeingDestroyed = YES;
@@ -381,7 +329,9 @@ API_AVAILABLE(macos(12.3))
             latestFrame = newFrame;
             capturedWidth = width;
             capturedHeight = height;
-            [self setNeedsDisplay:YES];
+            
+            // Render directly through the layer tree instead of relying on drawRect:
+            self.layer.contents = (__bridge id)self->latestFrame;
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (self->isBeingDestroyed) {
@@ -392,7 +342,9 @@ API_AVAILABLE(macos(12.3))
                 self->latestFrame = newFrame;
                 self->capturedWidth = width;
                 self->capturedHeight = height;
-                [self setNeedsDisplay:YES];
+                
+                // Render directly through the layer tree instead of relying on drawRect:
+                self.layer.contents = (__bridge id)self->latestFrame;
             });
         }
     }
@@ -509,6 +461,8 @@ private:
     std::string currentDeviceId;
     EmulatorPlatform platform;
     volatile bool destroyed = false;
+    uint32_t viewWidth = 400;
+    uint32_t viewHeight = 860;
 
 public:
     MacOSEmulator(EmulatorPlatform p) : platform(p) {}
@@ -547,8 +501,16 @@ public:
                 return;
             }
 
-            // Create a borderless child window
-            childWindow = [[NSPanel alloc] initWithContentRect:NSZeroRect
+            // Calculate exact screen coordinates for initialization to avoid 0x0 bugs
+            NSRect windowFrame = [parentWin frame];
+            NSRect contentRect = [parentWin contentLayoutRect];
+            CGFloat screenX = windowFrame.origin.x + x;
+            CGFloat screenTop = windowFrame.origin.y + windowFrame.size.height - contentRect.origin.y - y;
+            CGFloat screenY = screenTop - height;
+            NSRect initialChildFrame = NSMakeRect(screenX, screenY, width, height);
+
+            // Create a borderless child window sized precisely
+            childWindow = [[NSPanel alloc] initWithContentRect:initialChildFrame
                                                      styleMask:NSWindowStyleMaskBorderless
                                                        backing:NSBackingStoreBuffered
                                                          defer:NO];
@@ -611,11 +573,13 @@ public:
                 NSRect rectInScreen = NSMakeRect(screenX, screenY, width, height);
                 [childWindow setFrame:rectInScreen display:YES];
                 
+                viewWidth = width;
+                viewHeight = height;
+                
                 // CRITICAL: Explicitly update the content view's frame
                 // The NSPanel starts at NSZeroRect, so autoresizingMask from 0x0 stays 0x0
                 // We must manually set the view frame to match the window's content area
                 if (emulatorView) {
-                    NSRect contentBounds = [[childWindow contentView] superview].bounds;
                     [emulatorView setFrame:NSMakeRect(0, 0, width, height)];
                     NSLog(@"MacOSEmulator::resize: window=%dx%d view=%dx%d",
                           (int)width, (int)height,
@@ -674,72 +638,11 @@ public:
                 embeddedWindowID = windowID;
                 NSLog(@"MacOSEmulator: Found Simulator window ID %u for device '%s'", windowID, device_id.c_str());
                 
-                // Get the Simulator's PID from the window info for AppleScript
-                pid_t simPid = 0;
-                CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
-                if (windowList) {
-                    for (CFIndex i = 0; i < CFArrayGetCount(windowList); i++) {
-                        CFDictionaryRef info = (CFDictionaryRef)CFArrayGetValueAtIndex(windowList, i);
-                        CFNumberRef winIDRef = (CFNumberRef)CFDictionaryGetValue(info, kCGWindowNumber);
-                        CGWindowID wid = 0;
-                        if (winIDRef) CFNumberGetValue(winIDRef, kCGWindowIDCFNumberType, &wid);
-                        if (wid == windowID) {
-                            CFNumberRef pidRef = (CFNumberRef)CFDictionaryGetValue(info, kCGWindowOwnerPID);
-                            if (pidRef) CFNumberGetValue(pidRef, kCFNumberIntType, &simPid);
-                            break;
-                        }
-                    }
-                    CFRelease(windowList);
-                }
-                
-                // Resize Simulator window for better capture resolution
-                if (simPid > 0) {
-                    NSString* resizeScript = [NSString stringWithFormat:
-                        @"tell application \"System Events\"\n"
-                        @"  set simProc to first process whose unix id is %d\n"
-                        @"  tell simProc\n"
-                        @"    set position of window 1 to {50, 50}\n"
-                        @"    set size of window 1 to {400, 860}\n"
-                        @"  end tell\n"
-                        @"end tell", simPid];
-                    
-                    NSAppleScript* script = [[NSAppleScript alloc] initWithSource:resizeScript];
-                    NSDictionary* errorDict = nil;
-                    [script executeAndReturnError:&errorDict];
-                    if (errorDict) {
-                        NSLog(@"MacOSEmulator: AppleScript resize warning: %@", errorDict);
-                    } else {
-                        NSLog(@"MacOSEmulator: Resized Simulator window to 400x860");
-                    }
-                    
-                    // Wait for Simulator to re-render at new size
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                }
-                
-                // Start capture
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (!destroyed && emulatorView) {
                         [emulatorView startCapturingWindowWithID:windowID];
-                        NSLog(@"MacOSEmulator: Capture started, view bounds=%.0fx%.0f",
-                              emulatorView.bounds.size.width, emulatorView.bounds.size.height);
                     }
                 });
-                
-                // Move Simulator window off-screen after capture starts
-                if (simPid > 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                    NSString* moveScript = [NSString stringWithFormat:
-                        @"tell application \"System Events\"\n"
-                        @"  set simProc to first process whose unix id is %d\n"
-                        @"  tell simProc\n"
-                        @"    set position of window 1 to {-2000, 0}\n"
-                        @"  end tell\n"
-                        @"end tell", simPid];
-                    
-                    NSAppleScript* moveScriptObj = [[NSAppleScript alloc] initWithSource:moveScript];
-                    [moveScriptObj executeAndReturnError:nil];
-                    NSLog(@"MacOSEmulator: Moved Simulator window off-screen");
-                }
             } else {
                 NSLog(@"MacOSEmulator: ERROR - Could not find Simulator window for device '%s' after %d seconds", 
                       device_id.c_str(), maxAttempts / 10);
@@ -806,6 +709,22 @@ public:
                 }
             }
         }
+    }
+
+    void show() override {
+        runOnMainThread(^{
+            if (childWindow) {
+                [childWindow orderFront:nil];
+            }
+        });
+    }
+
+    void hide() override {
+        runOnMainThread(^{
+            if (childWindow) {
+                [childWindow orderOut:nil];
+            }
+        });
     }
 
     void push_frame(const uint8_t* rgba_data, uint32_t width, uint32_t height) override {

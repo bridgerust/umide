@@ -19,8 +19,15 @@ public:
     // Attach a specific emulator instance
     virtual void attach_device(const std::string& device_id) = 0;
 
+    // Show the emulator
+    virtual void show() = 0;
+
+    // Hide the emulator
+    virtual void hide() = 0;
+
     // Handle input
     virtual void send_input(const EmulatorInputEvent& event) = 0;
+
 
     // Push an RGBA frame for display (used by gRPC streaming for Android)
     virtual void push_frame(const uint8_t* rgba_data, uint32_t width, uint32_t height) = 0;

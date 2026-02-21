@@ -568,21 +568,27 @@ public:
                 
                 CGFloat screenX = windowFrame.origin.x + x;
                 CGFloat screenTop = windowFrame.origin.y + windowFrame.size.height - contentRect.origin.y - y;
-                CGFloat screenY = screenTop - height;
                 
-                NSRect rectInScreen = NSMakeRect(screenX, screenY, width, height);
+                // CLAMP : ne jamais dépasser le bas de la fenêtre parente
+                CGFloat parentBottom = windowFrame.origin.y;
+                CGFloat maxHeight = screenTop - parentBottom;
+                CGFloat clampedHeight = MIN((CGFloat)height, maxHeight);
+                
+                CGFloat screenY = screenTop - clampedHeight;
+                
+                NSRect rectInScreen = NSMakeRect(screenX, screenY, width, clampedHeight);
                 [childWindow setFrame:rectInScreen display:YES];
                 
                 viewWidth = width;
-                viewHeight = height;
+                viewHeight = height; // Keep original requested dimensions for logical sizing if needed later
                 
                 // CRITICAL: Explicitly update the content view's frame
                 // The NSPanel starts at NSZeroRect, so autoresizingMask from 0x0 stays 0x0
                 // We must manually set the view frame to match the window's content area
                 if (emulatorView) {
-                    [emulatorView setFrame:NSMakeRect(0, 0, width, height)];
+                    [emulatorView setFrame:NSMakeRect(0, 0, width, clampedHeight)];
                     NSLog(@"MacOSEmulator::resize: window=%dx%d view=%dx%d",
-                          (int)width, (int)height,
+                          (int)width, (int)clampedHeight,
                           (int)emulatorView.frame.size.width, (int)emulatorView.frame.size.height);
                 }
             }

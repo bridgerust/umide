@@ -72,23 +72,33 @@ impl View for NativeEmulatorWidget {
         "NativeEmulatorWidget".into()
     }
 
-    fn update(&mut self, _cx: &mut UpdateCx, _state: Box<dyn std::any::Any>) {
+    fn update(&mut self, _cx: &mut floem::context::UpdateCx, _state: Box<dyn std::any::Any>) {
         let current_device = self.running_device.get_untracked();
         let is_visible = self.is_visible.get_untracked();
         
-        if !is_visible && self.native_view.is_some() {
-            tracing::info!("Hiding emulator view, cleaning up native view");
-            self.native_view = None;
+        let mut should_cleanup = false;
+
+        if !is_visible || current_device.is_none() {
+            should_cleanup = true;
+        } else if let Some(ref dev) = current_device {
+            if let Some(ref last_id) = self.last_device_id {
+                if dev.id != *last_id {
+                    should_cleanup = true;
+                }
+            }
         }
-        
-        match (&current_device, &self.last_device_id) {
-            (None, Some(_)) => {
+
+        if should_cleanup {
+            if self.native_view.is_some() {
+                if let Some(ref view) = self.native_view {
+                    view.hide();
+                }
                 self.cleanup();
             }
-            (Some(dev), Some(last_id)) if &dev.id != last_id => {
-                self.cleanup();
+        } else if is_visible {
+            if let Some(ref view) = self.native_view {
+                view.show();
             }
-            _ => {}
         }
     }
 
@@ -118,6 +128,9 @@ impl View for NativeEmulatorWidget {
         // Cleanup if hidden or no device
         if !is_visible || current_device.is_none() {
             if self.native_view.is_some() {
+                if let Some(ref view) = self.native_view {
+                    view.hide();
+                }
                 self.cleanup();
             }
             return;
@@ -352,6 +365,8 @@ fn platform_panel(
                 let has_running = running_device.get().is_some();
                 s.flex_grow(1.0)
                     .width_full()
+                    .min_width(0.0)
+                    .min_height(0.0)
                     .apply_if(has_running && visible, |s| s.hide())
             }),
 
@@ -360,10 +375,11 @@ fn platform_panel(
                 let native_widget = NativeEmulatorWidget::new(running_device, is_visible, current_device_id, frame_signal);
                 let widget_id = native_widget.id();
                 
-                // Effect to force a repaint when signals change
+                // Effect to force an update when signals change
                 Effect::new(move |_| {
                     let _ = is_visible.get();
                     let _ = running_device.get();
+                    widget_id.update_state(());
                     widget_id.request_paint();
                 });
 
@@ -381,18 +397,20 @@ fn platform_panel(
                 s.flex_grow(1.0)
                     .width_full()
                     .height_full()
+                    .min_width(0.0)
+                    .min_height(0.0)
                     .apply_if(!has_running || !visible, |s| s.hide())
             })
         ))
-        .style(|s| s.flex_col().flex_grow(1.0).width_full()),
+        .style(|s| s.flex_col().flex_grow(1.0).width_full().height_full().min_width(0.0).min_height(0.0)),
     ))
     .style(move |s| {
         let config = config.get();
         s.flex_col()
             .flex_grow(1.0)
             .flex_basis(0.0)
-            .min_width(200.0)
-            .min_height(300.0)
+            .min_width(0.0)
+            .min_height(0.0)
             .height_full()
             .border(1.0)
             .border_color(config.color(UmideColor::LAPCE_BORDER))

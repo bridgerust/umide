@@ -71,7 +71,7 @@ zstd              = { version = "0.11.2" }                                      
 lsp-types = { version = "0.95.1", features = ["proposed"] }                                                  # not following semver, so should be locked to patch version updates only
 psp-types = { path = "vendor/psp-types" }
 
-lapce-xi-rope = { version = "0.4.0", features = ["serde"] }
+lapce-xi-rope = { version = "0.3.2", features = ["serde"] }
 
 umide-core  = { path = "./umide-core" }
 umide-rpc   = { path = "./umide-rpc" }

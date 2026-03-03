@@ -2133,6 +2133,7 @@ checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
 [[package]]
 name = "floem"
 version = "0.2.0"
+source = "git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "bitflags 2.10.0",
  "clipboard-win",
@@ -2142,7 +2143,7 @@ dependencies = [
  "floem-editor-core",
  "floem-winit 25.10.0",
  "floem_reactive",
- "floem_renderer 0.2.0",
+ "floem_renderer 0.2.0 (git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "floem_tiny_skia_renderer",
  "floem_vger_renderer",
  "futures",
@@ -2178,6 +2179,7 @@ dependencies = [
 [[package]]
 name = "floem-editor-core"
 version = "0.2.0"
+source = "git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "bitflags 2.10.0",
  "itertools 0.14.0",
@@ -2470,25 +2472,10 @@ dependencies = [
 [[package]]
 name = "floem_reactive"
 version = "0.2.0"
+source = "git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "parking_lot",
  "smallvec",
-]
-
-[[package]]
-name = "floem_renderer"
-version = "0.2.0"
-dependencies = [
- "cosmic-text 0.14.2",
- "floem-winit 25.10.0",
- "futures",
- "parking_lot",
- "peniko 0.5.0",
- "resvg 0.45.1",
- "swash 0.2.6",
- "unicode-segmentation",
- "wasm-bindgen-futures",
- "wgpu 26.0.1",
 ]
 
 [[package]]
@@ -2511,11 +2498,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "floem_renderer"
+version = "0.2.0"
+source = "git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+dependencies = [
+ "cosmic-text 0.14.2",
+ "floem-winit 25.10.0",
+ "futures",
+ "parking_lot",
+ "peniko 0.5.0",
+ "resvg 0.45.1",
+ "swash 0.2.6",
+ "unicode-segmentation",
+ "wasm-bindgen-futures",
+ "wgpu 26.0.1",
+]
+
+[[package]]
 name = "floem_tiny_skia_renderer"
 version = "0.2.0"
+source = "git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "anyhow",
- "floem_renderer 0.2.0",
+ "floem_renderer 0.2.0 (git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "peniko 0.5.0",
  "raw-window-handle 0.6.2",
  "resvg 0.45.1",
@@ -2525,10 +2530,11 @@ dependencies = [
 [[package]]
 name = "floem_vger_renderer"
 version = "0.2.0"
+source = "git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "anyhow",
  "floem-vger",
- "floem_renderer 0.2.0",
+ "floem_renderer 0.2.0 (git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "image",
  "peniko 0.5.0",
  "resvg 0.45.1",
@@ -8218,6 +8224,7 @@ dependencies = [
 [[package]]
 name = "ui-events-floem-winit"
 version = "0.2.0"
+source = "git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "dpi 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "floem-winit 25.10.0",
@@ -8252,7 +8259,7 @@ dependencies = [
  "flate2",
  "floem",
  "floem-editor-core",
- "floem_renderer 0.2.0",
+ "floem_renderer 0.2.0 (git+https://github.com/dev-josias/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "fs_extra",
  "globset",
  "im",

@@ -63,6 +63,8 @@ jobs:
 
       - name: Set up protoc
         uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Linux build dependencies
         run: sudo make ubuntu-deps
@@ -110,6 +112,8 @@ jobs:
 
       - name: Set up protoc
         uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare floem dependency
         run: |
@@ -157,6 +161,8 @@ jobs:
 
       - name: Set up protoc
         uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare floem dependency
         shell: bash

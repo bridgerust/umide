@@ -13,6 +13,10 @@ vendor/*
 !vendor/lsp-types/**
 !vendor/psp-types/
 !vendor/psp-types/**
+!vendor/locale_config/
+!vendor/locale_config/**
+!vendor/wasi-experimental-http/
+!vendor/wasi-experimental-http/**
 
 .DS_Store
 *.patch

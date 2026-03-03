@@ -79,9 +79,9 @@ umide-proxy = { path = "./umide-proxy" }
 umide_emulator = { path = "./crates/umide_emulator" }
 umide_native = { path = "./crates/umide_native" }
 
-floem = { git = "https://github.com/dev-josias/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", features = ["editor", "serde", "default-image-formats"] }
-floem_renderer = { git = "https://github.com/dev-josias/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", package = "floem_renderer" }
-floem-editor-core = { git = "https://github.com/dev-josias/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", package = "floem-editor-core", features = ["serde"] }
+floem = { git = "https://github.com/bridgerust/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", features = ["editor", "serde", "default-image-formats"] }
+floem_renderer = { git = "https://github.com/bridgerust/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", package = "floem_renderer" }
+floem-editor-core = { git = "https://github.com/bridgerust/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", package = "floem-editor-core", features = ["serde"] }
 [patch.crates-io]
 # Temporarily patch lsp-types with a version that adds message-type debug
 lsp-types = { path = "vendor/lsp-types" }

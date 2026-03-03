@@ -421,7 +421,7 @@ impl KeyPressData {
         #[cfg(not(target_os = "macos"))]
         {
             mods.set(Modifiers::SHIFT, false);
-            mods.set(Modifiers::ALTGR, false);
+            mods.set(Modifiers::ALT, false);
         }
         if mods.is_empty() {
             if let KeyInput::Keyboard { logical: Key::Character(c), .. } = &keypress.key {

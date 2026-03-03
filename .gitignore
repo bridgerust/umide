@@ -6,7 +6,13 @@ shell.nix
 lib/
 target/
 core/languages/
-vendor/
+vendor/*
+!vendor/structdesc/
+!vendor/structdesc/**
+!vendor/lsp-types/
+!vendor/lsp-types/**
+!vendor/psp-types/
+!vendor/psp-types/**
 
 .DS_Store
 *.patch

@@ -22,8 +22,6 @@ env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   FLOEM_REPOSITORY: https://github.com/lapce/floem
   FLOEM_REV: e0dd862564e3afbad5cba8ebe60df166a7a41e56
-  LAPCE_SOURCE_REPOSITORY: https://github.com/lapce/lapce
-  LAPCE_SOURCE_TAG: v0.4.6
 
 jobs:
   meta:
@@ -72,15 +70,6 @@ jobs:
           git clone "${FLOEM_REPOSITORY}" ../floem
           git -C ../floem checkout "${FLOEM_REV}"
 
-      - name: Prepare vendor dependencies
-        run: |
-          rm -rf ../lapce-src
-          git clone --depth 1 --branch "${LAPCE_SOURCE_TAG}" "${LAPCE_SOURCE_REPOSITORY}" ../lapce-src
-          mkdir -p ./vendor
-          cp -R ../lapce-src/vendor/structdesc ./vendor/structdesc
-          cp -R ../lapce-src/vendor/lsp-types ./vendor/lsp-types
-          cp -R ../lapce-src/vendor/psp-types ./vendor/psp-types
-
       - name: Update toolchain
         run: rustup update --no-self-update
 
@@ -121,15 +110,6 @@ jobs:
           if (Test-Path ../floem) { Remove-Item -Path ../floem -Recurse -Force }
           git clone "${env:FLOEM_REPOSITORY}" ../floem
           git -C ../floem checkout "${env:FLOEM_REV}"
-
-      - name: Prepare vendor dependencies
-        run: |
-          if (Test-Path ../lapce-src) { Remove-Item -Path ../lapce-src -Recurse -Force }
-          git clone --depth 1 --branch "${env:LAPCE_SOURCE_TAG}" "${env:LAPCE_SOURCE_REPOSITORY}" ../lapce-src
-          New-Item -ItemType Directory -Path .\vendor -Force | Out-Null
-          Copy-Item -Path ..\lapce-src\vendor\structdesc -Destination .\vendor\structdesc -Recurse -Force
-          Copy-Item -Path ..\lapce-src\vendor\lsp-types -Destination .\vendor\lsp-types -Recurse -Force
-          Copy-Item -Path ..\lapce-src\vendor\psp-types -Destination .\vendor\psp-types -Recurse -Force
 
       - name: Update toolchain
         run: rustup update --no-self-update
@@ -175,16 +155,6 @@ jobs:
           rm -rf ../floem
           git clone "${FLOEM_REPOSITORY}" ../floem
           git -C ../floem checkout "${FLOEM_REV}"
-
-      - name: Prepare vendor dependencies
-        shell: bash
-        run: |
-          rm -rf ../lapce-src
-          git clone --depth 1 --branch "${LAPCE_SOURCE_TAG}" "${LAPCE_SOURCE_REPOSITORY}" ../lapce-src
-          mkdir -p ./vendor
-          cp -R ../lapce-src/vendor/structdesc ./vendor/structdesc
-          cp -R ../lapce-src/vendor/lsp-types ./vendor/lsp-types
-          cp -R ../lapce-src/vendor/psp-types ./vendor/psp-types
 
       - name: Update toolchain and install targets
         run: |

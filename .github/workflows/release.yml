@@ -21,7 +21,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   FLOEM_REPOSITORY: https://github.com/lapce/floem
-  FLOEM_REV: e0dd862564e3afbad5cba8ebe60df166a7a41e56
+  FLOEM_REV: e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3
 
 jobs:
   meta:

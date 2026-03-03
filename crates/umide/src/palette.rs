@@ -849,7 +849,7 @@ impl PaletteData {
             vec![]
         };
 
-        let db: Arc<UmideDb> = use_context().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         let workspaces = db.recent_workspaces().unwrap_or_default();
         let mut hosts = HashSet::new();
         for distro in distros {

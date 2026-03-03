@@ -16,10 +16,45 @@ use crate::{
 use umide_emulator::{
     list_all_devices, launch_device, stop_device,
     DeviceInfo, DevicePlatform, DeviceState,
-    native_view::NativeEmulatorView,
     decoder::DecodedFrame,
 };
+#[cfg(target_os = "macos")]
+use umide_emulator::native_view::NativeEmulatorView;
+#[cfg(target_os = "macos")]
 use umide_native::emulator::EmulatorPlatform;
+
+#[cfg(not(target_os = "macos"))]
+#[derive(Clone, Copy)]
+enum EmulatorPlatform {
+    Android,
+    Ios,
+}
+
+#[cfg(not(target_os = "macos"))]
+struct NativeEmulatorView;
+
+#[cfg(not(target_os = "macos"))]
+impl NativeEmulatorView {
+    fn new<T>(
+        _handle: T,
+        _x: i32,
+        _y: i32,
+        _width: u32,
+        _height: u32,
+        _platform: EmulatorPlatform,
+    ) -> Result<Self, String> {
+        Err("Native emulator embedding is only supported on macOS".to_string())
+    }
+
+    fn resize(&self, _x: i32, _y: i32, _width: u32, _height: u32) {}
+    fn show(&self) {}
+    fn hide(&self) {}
+    fn attach_device(&mut self, _device_id: &str) {}
+    fn is_android(&self) -> bool {
+        false
+    }
+    fn start_grpc_stream(&mut self, _grpc_endpoint: &str) {}
+}
 
 struct NativeEmulatorWidget {
     id: ViewId,
@@ -692,4 +727,3 @@ pub fn emulator_panel(
         )
         .build()
 }
-

@@ -77,7 +77,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build binaries
-        run: cargo build --locked --profile release-lto --bin umide --bin umide-proxy
+        run: cargo build --profile release-lto --bin umide --bin umide-proxy
 
       - name: Package artifacts
         shell: bash
@@ -118,7 +118,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build binaries
-        run: cargo build --locked --profile release-lto --bin umide --bin umide-proxy
+        run: cargo build --profile release-lto --bin umide --bin umide-proxy
 
       - name: Package artifacts
         run: |
@@ -166,8 +166,8 @@ jobs:
 
       - name: Build binaries
         run: |
-          cargo build --locked --profile release-lto --target x86_64-apple-darwin --bin umide --bin umide-proxy
-          cargo build --locked --profile release-lto --target aarch64-apple-darwin --bin umide --bin umide-proxy
+          cargo build --profile release-lto --target x86_64-apple-darwin --bin umide --bin umide-proxy
+          cargo build --profile release-lto --target aarch64-apple-darwin --bin umide --bin umide-proxy
 
       - name: Build universal artifacts
         shell: bash

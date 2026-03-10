@@ -5,6 +5,7 @@
 shell.nix
 lib/
 target/
+dist/
 core/languages/
 vendor/*
 !vendor/structdesc/

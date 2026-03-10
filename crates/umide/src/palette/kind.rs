@@ -1,6 +1,6 @@
 use strum_macros::EnumIter;
 
-use crate::command::LapceWorkbenchCommand;
+use crate::command::UmideWorkbenchCommand;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumIter)]
 pub enum PaletteKind {
@@ -68,41 +68,41 @@ impl PaletteKind {
         }
     }
 
-    /// Get the [`LapceWorkbenchCommand`] that opens this palette kind, if one exists.
-    pub fn command(self) -> Option<LapceWorkbenchCommand> {
+    /// Get the [`UmideWorkbenchCommand`] that opens this palette kind, if one exists.
+    pub fn command(self) -> Option<UmideWorkbenchCommand> {
         match self {
-            PaletteKind::PaletteHelp => Some(LapceWorkbenchCommand::PaletteHelp),
-            PaletteKind::Line => Some(LapceWorkbenchCommand::PaletteLine),
+            PaletteKind::PaletteHelp => Some(UmideWorkbenchCommand::PaletteHelp),
+            PaletteKind::Line => Some(UmideWorkbenchCommand::PaletteLine),
             PaletteKind::DocumentSymbol => {
-                Some(LapceWorkbenchCommand::PaletteSymbol)
+                Some(UmideWorkbenchCommand::PaletteSymbol)
             }
             PaletteKind::WorkspaceSymbol => {
-                Some(LapceWorkbenchCommand::PaletteWorkspaceSymbol)
+                Some(UmideWorkbenchCommand::PaletteWorkspaceSymbol)
             }
-            PaletteKind::Workspace => Some(LapceWorkbenchCommand::PaletteWorkspace),
-            PaletteKind::Command => Some(LapceWorkbenchCommand::PaletteCommand),
-            PaletteKind::File => Some(LapceWorkbenchCommand::Palette),
+            PaletteKind::Workspace => Some(UmideWorkbenchCommand::PaletteWorkspace),
+            PaletteKind::Command => Some(UmideWorkbenchCommand::PaletteCommand),
+            PaletteKind::File => Some(UmideWorkbenchCommand::Palette),
             PaletteKind::HelpAndFile => {
-                Some(LapceWorkbenchCommand::PaletteHelpAndFile)
+                Some(UmideWorkbenchCommand::PaletteHelpAndFile)
             }
             PaletteKind::Reference => None, // InternalCommand::PaletteReferences
-            PaletteKind::SshHost => Some(LapceWorkbenchCommand::ConnectSshHost),
+            PaletteKind::SshHost => Some(UmideWorkbenchCommand::ConnectSshHost),
             #[cfg(windows)]
-            PaletteKind::WslHost => Some(LapceWorkbenchCommand::ConnectWslHost),
+            PaletteKind::WslHost => Some(UmideWorkbenchCommand::ConnectWslHost),
             PaletteKind::RunAndDebug => {
-                Some(LapceWorkbenchCommand::PaletteRunAndDebug)
+                Some(UmideWorkbenchCommand::PaletteRunAndDebug)
             }
-            PaletteKind::ColorTheme => Some(LapceWorkbenchCommand::ChangeColorTheme),
-            PaletteKind::IconTheme => Some(LapceWorkbenchCommand::ChangeIconTheme),
-            PaletteKind::Language => Some(LapceWorkbenchCommand::ChangeFileLanguage),
+            PaletteKind::ColorTheme => Some(UmideWorkbenchCommand::ChangeColorTheme),
+            PaletteKind::IconTheme => Some(UmideWorkbenchCommand::ChangeIconTheme),
+            PaletteKind::Language => Some(UmideWorkbenchCommand::ChangeFileLanguage),
             PaletteKind::LineEnding => {
-                Some(LapceWorkbenchCommand::ChangeFileLineEnding)
+                Some(UmideWorkbenchCommand::ChangeFileLineEnding)
             }
             PaletteKind::SCMReferences => {
-                Some(LapceWorkbenchCommand::PaletteSCMReferences)
+                Some(UmideWorkbenchCommand::PaletteSCMReferences)
             }
             PaletteKind::TerminalProfile => None, // InternalCommand::NewTerminal
-            PaletteKind::DiffFiles => Some(LapceWorkbenchCommand::DiffFiles),
+            PaletteKind::DiffFiles => Some(UmideWorkbenchCommand::DiffFiles),
         }
     }
 

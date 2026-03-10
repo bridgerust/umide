@@ -24,6 +24,7 @@ typedef enum {
     EMULATOR_INPUT_TOUCH_UP = 2,
     EMULATOR_INPUT_KEY_DOWN = 3,
     EMULATOR_INPUT_KEY_UP = 4,
+    EMULATOR_INPUT_SCROLL = 5,
 } EmulatorInputType;
 
 typedef struct {
@@ -37,13 +38,13 @@ typedef struct {
 // Create a new emulator view hosted within the given parent window.
 // parent_window: On macOS, this is a void* pointer to an NSView.
 //                On Windows, an HWND. Linux, XID/Wayland surface.
-NativeEmulator* umide_native_create_emulator(void* parent_window, uint32_t width, uint32_t height, EmulatorPlatform platform);
+NativeEmulator* umide_native_create_emulator(void* parent_window, int32_t x, int32_t y, uint32_t width, uint32_t height, EmulatorPlatform platform);
 
 // Destroy the emulator view
 void umide_native_destroy_emulator(NativeEmulator* emulator);
 
-// Resize the emulator view
-void umide_native_resize_emulator(NativeEmulator* emulator, uint32_t width, uint32_t height);
+// Resize and move the emulator view
+void umide_native_resize_emulator(NativeEmulator* emulator, int32_t x, int32_t y, uint32_t width, uint32_t height);
 
 // Send input to the emulator
 void umide_native_send_input(NativeEmulator* emulator, const EmulatorInputEvent* event);
@@ -51,6 +52,17 @@ void umide_native_send_input(NativeEmulator* emulator, const EmulatorInputEvent*
 // Attach a specific device/AVD to this view
 // device_id: serial for ADB, UDID for iOS
 void umide_native_attach_device(NativeEmulator* emulator, const char* device_id);
+
+// Push an RGBA frame for display (used by gRPC streaming for Android)
+// rgba_data: pointer to RGBA8888 pixel data
+// width/height: dimensions in pixels
+void umide_native_push_frame(NativeEmulator* emulator, const uint8_t* rgba_data, uint32_t width, uint32_t height);
+
+// Input callback definition: event_type, x, y, user_data
+typedef void (*EmulatorInputCallback)(int32_t event_type, int32_t x, int32_t y, void* user_data);
+
+// Set input callback to route touch/mouse/scroll events back to Rust
+void umide_native_set_input_callback(NativeEmulator* emulator, EmulatorInputCallback callback, void* user_data);
 
 #ifdef __cplusplus
 }

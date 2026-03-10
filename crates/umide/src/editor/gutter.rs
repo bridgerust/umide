@@ -10,7 +10,7 @@ use umide_core::{buffer::rope_text::RopeText, mode::Mode};
 use serde::{Deserialize, Serialize};
 
 use super::{EditorData, view::changes_colors_screen};
-use crate::config::{LapceConfig, color::LapceColor};
+use crate::config::{UmideConfig, color::UmideColor};
 
 pub struct EditorGutterView {
     id: ViewId,
@@ -40,7 +40,7 @@ impl EditorGutterView {
         e_data: &EditorData,
         viewport: Rect,
         is_normal: bool,
-        config: &LapceConfig,
+        config: &UmideConfig,
     ) {
         if !is_normal {
             return;
@@ -76,7 +76,7 @@ impl EditorGutterView {
         &self,
         cx: &mut PaintCx,
         is_normal: bool,
-        config: &LapceConfig,
+        config: &UmideConfig,
     ) {
         if !is_normal {
             return;
@@ -97,12 +97,12 @@ impl EditorGutterView {
                 .inflate(25.0, 0.0);
         cx.fill(
             &sticky_area_rect,
-            config.color(LapceColor::LAPCE_DROPDOWN_SHADOW),
+            config.color(UmideColor::LAPCE_DROPDOWN_SHADOW),
             3.0,
         );
         cx.fill(
             &sticky_area_rect,
-            config.color(LapceColor::EDITOR_STICKY_HEADER_BACKGROUND),
+            config.color(UmideColor::EDITOR_STICKY_HEADER_BACKGROUND),
             0.0,
         );
     }
@@ -149,13 +149,13 @@ impl View for EditorGutterView {
             FamilyOwned::parse_list(&config.editor.font_family).collect();
         let attrs = Attrs::new()
             .family(&family)
-            .color(config.color(LapceColor::EDITOR_DIM))
+            .color(config.color(UmideColor::EDITOR_DIM))
             .font_size(config.editor.font_size() as f32);
         let attrs_list = AttrsList::new(attrs.clone());
         let current_line_attrs_list = AttrsList::new(
             attrs
                 .clone()
-                .color(config.color(LapceColor::EDITOR_FOREGROUND)),
+                .color(config.color(UmideColor::EDITOR_FOREGROUND)),
         );
         let show_relative = config.core.modal
             && config.editor.modal_mode_relative_line_numbers

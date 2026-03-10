@@ -28,7 +28,7 @@ use umide_rpc::{
 use tracing::error;
 
 #[derive(Parser)]
-#[clap(name = "Lapce-proxy")]
+#[clap(name = "Umide-proxy")]
 #[clap(version = meta::VERSION)]
 struct Cli {
     #[clap(short, long, action, hide = true)]
@@ -145,8 +145,10 @@ pub fn register_lapce_path() -> Result<()> {
     let current_path = std::env::var("PATH")?;
     let paths = std::env::split_paths(&current_path);
     for path in paths {
-        if exedir == path.canonicalize()? {
-            return Ok(());
+        if let Ok(path) = path.canonicalize() {
+            if exedir == path {
+                return Ok(());
+            }
         }
     }
     let paths = std::env::split_paths(&current_path);

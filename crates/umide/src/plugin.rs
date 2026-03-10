@@ -35,8 +35,8 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     command::{CommandExecuted, CommandKind},
-    config::{LapceConfig, color::LapceColor},
-    db::LapceDb,
+    config::{UmideConfig, color::UmideColor},
+    db::UmideDb,
     editor::EditorData,
     keypress::{KeyPressFocus, condition::Condition},
     main_split::Editors,
@@ -120,7 +120,7 @@ impl KeyPressFocus for PluginData {
 
     fn run_command(
         &self,
-        command: &crate::command::LapceCommand,
+        command: &crate::command::UmideCommand,
         count: Option<usize>,
         mods: Modifiers,
     ) -> CommandExecuted {
@@ -313,7 +313,7 @@ impl PluginData {
             self.disabled.update(|d| {
                 d.remove(&id);
             });
-            let db: Arc<LapceDb> = Context::get().unwrap();
+            let db: Arc<UmideDb> = Context::get().unwrap();
             db.save_disabled_volts(
                 self.disabled.get_untracked().into_iter().collect(),
             );
@@ -323,7 +323,7 @@ impl PluginData {
             self.workspace_disabled.update(|d| {
                 d.remove(&id);
             });
-            let db: Arc<LapceDb> = Context::get().unwrap();
+            let db: Arc<UmideDb> = Context::get().unwrap();
             db.save_workspace_disabled_volts(
                 self.common.workspace.clone(),
                 self.workspace_disabled
@@ -451,7 +451,7 @@ impl PluginData {
 
     fn download_readme(
         volt: &VoltInfo,
-        config: &LapceConfig,
+        config: &UmideConfig,
     ) -> Result<Vec<MarkdownContent>> {
         let url = format!(
             "https://plugins.lapce.dev/api/v1/plugins/{}/{}/{}/readme",
@@ -535,7 +535,7 @@ impl PluginData {
         if !self.plugin_disabled(&id) {
             self.common.proxy.enable_volt(volt);
         }
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         db.save_disabled_volts(self.disabled.get_untracked().into_iter().collect());
     }
 
@@ -545,7 +545,7 @@ impl PluginData {
             d.insert(id);
         });
         self.common.proxy.disable_volt(volt);
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         db.save_disabled_volts(self.disabled.get_untracked().into_iter().collect());
     }
 
@@ -557,7 +557,7 @@ impl PluginData {
         if !self.plugin_disabled(&id) {
             self.common.proxy.enable_volt(volt);
         }
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         db.save_workspace_disabled_volts(
             self.common.workspace.clone(),
             self.disabled.get_untracked().into_iter().collect(),
@@ -570,7 +570,7 @@ impl PluginData {
             d.insert(id);
         });
         self.common.proxy.disable_volt(volt);
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         db.save_workspace_disabled_volts(
             self.common.workspace.clone(),
             self.disabled.get_untracked().into_iter().collect(),
@@ -769,17 +769,17 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                         .border_radius(6.0)
                         .color(
                             config
-                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+                                .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
                         )
                         .background(
                             config
-                                .color(LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
+                                .color(UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
                         )
                         .hover(|s| {
                             s.cursor(CursorStyle::Pointer).background(
                                 config
                                     .color(
-                                        LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
+                                        UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
                                     )
                                     .multiply_alpha(0.8),
                             )
@@ -788,13 +788,13 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                             s.background(
                                 config
                                     .color(
-                                        LapceColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
+                                        UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND,
                                     )
                                     .multiply_alpha(0.6),
                             )
                         })
                         .disabled(|s| {
-                            s.background(config.color(LapceColor::EDITOR_DIM))
+                            s.background(config.color(UmideColor::EDITOR_DIM))
                         })
                         .selectable(false)
                         .set_disabled(installing.map(|i| i.get()).unwrap_or(false))
@@ -891,7 +891,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                                         move || {
                                             config
                                                 .get()
-                                                .color(LapceColor::EDITOR_LINK)
+                                                .color(UmideColor::EDITOR_LINK)
                                         },
                                         internal_command,
                                     ),
@@ -904,7 +904,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                                     .unwrap_or(""),
                             )
                             .style(move |s| {
-                                s.color(config.get().color(LapceColor::EDITOR_DIM))
+                                s.color(config.get().color(UmideColor::EDITOR_DIM))
                             }),
                             version_view(local_plugin.clone(), plugin_info.clone()),
                         ))
@@ -924,7 +924,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                         s.margin_vert(6)
                             .height(1)
                             .width_full()
-                            .background(config.get().color(LapceColor::LAPCE_BORDER))
+                            .background(config.get().color(UmideColor::LAPCE_BORDER))
                     }),
                     {
                         let readme = RwSignal::new(None);
@@ -982,7 +982,7 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                                                 .height(1.0)
                                                 .background(
                                                     config.get().color(
-                                                        LapceColor::LAPCE_BORDER,
+                                                        UmideColor::LAPCE_BORDER,
                                                     ),
                                                 )
                                         }))

@@ -1,6 +1,6 @@
 [package]
 name         = "umide-rpc"
-description  = "Data formats between lapce components"
+description  = "Data formats between umide components"
 license      = { workspace = true }
 version      = { workspace = true }
 authors      = { workspace = true }

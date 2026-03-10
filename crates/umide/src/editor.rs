@@ -9,7 +9,7 @@ use std::{
 use umide_core::cursor::CursorAffinity;
 
 use floem::{
-    ViewId, action::{TimerToken, exec_after, show_context_menu}, ext_event::create_ext_action, kurbo::{Affine, Point, Rect, Vec2}, menu::Menu, prelude::{
+    ViewId, action::{TimerToken, exec_after, show_context_menu}, ext_event::create_ext_action, kurbo::{Point, Rect, Vec2}, menu::Menu, prelude::{
         Modifiers, PointerButtonEvent, PointerEvent, SignalTrack,
     }, reactive::{
         Context, Effect, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
@@ -36,7 +36,7 @@ use umide_core::{
         EditCommand, FocusCommand, MotionModeCommand, MultiSelectionCommand,
         ScrollCommand,
     },
-    cursor::{ColPosition, Cursor, CursorMode},
+    cursor::{Cursor, CursorMode},
     editor::EditType,
     mode::{Mode, MotionMode},
     rope_text_pos::RopeTextPosition,
@@ -58,10 +58,10 @@ use self::{
     location::{EditorLocation, EditorPosition},
 };
 use crate::{
-    command::{CommandKind, InternalCommand, LapceCommand, LapceWorkbenchCommand},
+    command::{CommandKind, InternalCommand, UmideCommand, UmideWorkbenchCommand},
     completion::CompletionStatus,
-    config::LapceConfig,
-    db::LapceDb,
+    config::UmideConfig,
+    db::UmideDb,
     doc::{Doc, DocContent},
     editor_tab::EditorTabChild,
     id::{DiffEditorId, EditorTabId},
@@ -508,7 +508,7 @@ impl EditorData {
         let doc = self.doc();
         let config = self.common.config.get_untracked();
 
-        // This is currently special-cased in Lapce because floem editor does not have 'find'
+        // This is currently special-cased in Umide because floem editor does not have 'find'
         match cmd {
             MultiSelectionCommand::SelectAllCurrent => {
                 if let CursorMode::Insert(mut selection) = cursor.mode.clone() {
@@ -2157,7 +2157,7 @@ impl EditorData {
         } else if let Some(edits) = edits.as_ref() {
             self.do_text_edit(edits);
         } else {
-            let db: Arc<LapceDb> = Context::get().unwrap();
+            let db: Arc<UmideDb> = Context::get().unwrap();
             if let Ok(info) = db.get_doc_info(&self.common.workspace, &location.path)
             {
                 self.go_to_position(
@@ -2507,7 +2507,7 @@ impl EditorData {
         let cursor_offset = self.cursor().with_untracked(|c| c.offset());
         let scroll_offset = self.viewport().with_untracked(|v| v.origin().to_vec2());
 
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         db.save_doc_position(
             &self.common.workspace,
             path,
@@ -2706,7 +2706,7 @@ impl EditorData {
                     match rs {
                         FindHintRs::NoMatchBreak
                         | FindHintRs::NoMatchContinue { .. } => {
-                            self.common.lapce_command.send(LapceCommand {
+                            self.common.lapce_command.send(UmideCommand {
                                 kind: CommandKind::Focus(
                                     FocusCommand::GotoDefinition,
                                 ),
@@ -2908,24 +2908,24 @@ impl EditorData {
             {
                 vec![
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::RevealInPanel,
+                        UmideWorkbenchCommand::RevealInPanel,
                     )),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::RevealInFileExplorer,
+                        UmideWorkbenchCommand::RevealInFileExplorer,
                     )),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::SourceControlOpenActiveFileRemoteUrl,
+                        UmideWorkbenchCommand::SourceControlOpenActiveFileRemoteUrl,
                     )),
                     None,
                     Some(CommandKind::Edit(EditCommand::ClipboardCut)),
                     Some(CommandKind::Edit(EditCommand::ClipboardCopy)),
                     Some(CommandKind::Edit(EditCommand::ClipboardPaste)),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::AddRunDebugConfig,
+                        UmideWorkbenchCommand::AddRunDebugConfig,
                     )),
                     None,
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::PaletteCommand,
+                        UmideWorkbenchCommand::PaletteCommand,
                     )),
                 ]
             } else {
@@ -2933,27 +2933,27 @@ impl EditorData {
                     Some(CommandKind::Focus(FocusCommand::GotoDefinition)),
                     Some(CommandKind::Focus(FocusCommand::GotoTypeDefinition)),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::ShowCallHierarchy,
+                        UmideWorkbenchCommand::ShowCallHierarchy,
                     )),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::FindReferences,
+                        UmideWorkbenchCommand::FindReferences,
                     )),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::GoToImplementation,
+                        UmideWorkbenchCommand::GoToImplementation,
                     )),
                     Some(CommandKind::Focus(FocusCommand::Rename)),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::RunInTerminal,
+                        UmideWorkbenchCommand::RunInTerminal,
                     )),
                     None,
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::RevealInPanel,
+                        UmideWorkbenchCommand::RevealInPanel,
                     )),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::RevealInFileExplorer,
+                        UmideWorkbenchCommand::RevealInFileExplorer,
                     )),
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::SourceControlOpenActiveFileRemoteUrl,
+                        UmideWorkbenchCommand::SourceControlOpenActiveFileRemoteUrl,
                     )),
                     None,
                     Some(CommandKind::Edit(EditCommand::ClipboardCut)),
@@ -2961,7 +2961,7 @@ impl EditorData {
                     Some(CommandKind::Edit(EditCommand::ClipboardPaste)),
                     None,
                     Some(CommandKind::Workbench(
-                        LapceWorkbenchCommand::PaletteCommand,
+                        UmideWorkbenchCommand::PaletteCommand,
                     )),
                 ]
             }
@@ -2972,13 +2972,13 @@ impl EditorData {
                 Some(CommandKind::Edit(EditCommand::ClipboardPaste)),
                 None,
                 Some(CommandKind::Workbench(
-                    LapceWorkbenchCommand::PaletteCommand,
+                    UmideWorkbenchCommand::PaletteCommand,
                 )),
             ]
         };
         if self.diff_editor_id.get_untracked().is_some() && is_file {
             cmds.push(Some(CommandKind::Workbench(
-                LapceWorkbenchCommand::GoToLocation,
+                UmideWorkbenchCommand::GoToLocation,
             )));
         }
         let lapce_command = self.common.lapce_command;
@@ -2987,7 +2987,7 @@ impl EditorData {
                 menu = menu.item(
                     cmd.desc().unwrap_or_else(|| cmd.str()), |i| i.action(
                         move || {
-                            lapce_command.send(LapceCommand {
+                            lapce_command.send(UmideCommand {
                                 kind: cmd.clone(),
                                 data: None,
                             })
@@ -3289,7 +3289,7 @@ impl KeyPressFocus for EditorData {
     #[instrument]
     fn run_command(
         &self,
-        command: &crate::command::LapceCommand,
+        command: &crate::command::UmideCommand,
         count: Option<usize>,
         mods: Modifiers,
     ) -> CommandExecuted {
@@ -3520,7 +3520,7 @@ fn show_inline_completion(cmd: &EditCommand) -> bool {
 
 // TODO(minor): Should we just put this on view, since it only requires those values?
 pub(crate) fn compute_screen_lines(
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
     base: RwSignal<ScreenLinesBase>,
     view_kind: ReadSignal<EditorViewKind>,
     doc: &Doc,
@@ -3850,7 +3850,7 @@ pub(crate) fn compute_screen_lines(
 
 fn parse_hover_resp(
     hover: lsp_types::Hover,
-    config: &LapceConfig,
+    config: &UmideConfig,
 ) -> Vec<MarkdownContent> {
     match hover.contents {
         HoverContents::Scalar(text) => match text {

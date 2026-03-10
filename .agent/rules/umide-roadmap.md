@@ -35,13 +35,13 @@ Future-proof for complex graphics (Metal/Vulkan/OpenGL)
 
 No IDE rewrite
 
-Lapce remains the editor core
+Umide remains the editor core
 
 2. High-Level Architecture (Layered & Decoupled)
    ┌────────────────────────────────────────────┐
    │ UMIDE (Shell) │
    │ │
-   │ ┌───────────── Lapce / Floem ───────────┐ │
+   │ ┌───────────── Umide / Floem ───────────┐ │
    │ │ Editor, LSP, Git, Commands, Panels │ │
    │ └────────────────────────────────────────┘ │
    │ │
@@ -62,12 +62,12 @@ Lapce remains the editor core
    │ │
    └────────────────────────────────────────────┘
 
-3. Why Lapce + C++ Is the Correct Choice
+3. Why Umide + C++ Is the Correct Choice
    Why NOT rewrite the IDE
 
 Editor/LSP/keybindings are hard problems already solved
 
-Lapce is fast, native, modern
+Umide is fast, native, modern
 
 Floem is evolving rapidly
 
@@ -128,7 +128,7 @@ It is a native GPU surface embedded into the window.
 
 Create a native GPU surface
 
-Attach it to the same window Lapce owns
+Attach it to the same window Umide owns
 
 Share the graphics context
 
@@ -165,7 +165,7 @@ Future rendering APIs
    └─ NativeSurfaceHandle ─────▶ C++ Emulator Core
 
 Responsibilities
-Rust (Lapce side)
+Rust (Umide side)
 
 Layout & docking
 

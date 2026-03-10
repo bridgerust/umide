@@ -6,7 +6,17 @@ shell.nix
 lib/
 target/
 core/languages/
-vendor/
+vendor/*
+!vendor/structdesc/
+!vendor/structdesc/**
+!vendor/lsp-types/
+!vendor/lsp-types/**
+!vendor/psp-types/
+!vendor/psp-types/**
+!vendor/locale_config/
+!vendor/locale_config/**
+!vendor/wasi-experimental-http/
+!vendor/wasi-experimental-http/**
 
 .DS_Store
 *.patch

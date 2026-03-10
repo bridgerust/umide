@@ -2133,6 +2133,7 @@ checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
 [[package]]
 name = "floem"
 version = "0.2.0"
+source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "bitflags 2.10.0",
  "clipboard-win",
@@ -2142,7 +2143,7 @@ dependencies = [
  "floem-editor-core",
  "floem-winit 25.10.0",
  "floem_reactive",
- "floem_renderer 0.2.0",
+ "floem_renderer 0.2.0 (git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "floem_tiny_skia_renderer",
  "floem_vger_renderer",
  "futures",
@@ -2178,6 +2179,7 @@ dependencies = [
 [[package]]
 name = "floem-editor-core"
 version = "0.2.0"
+source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "bitflags 2.10.0",
  "itertools 0.14.0",
@@ -2470,25 +2472,10 @@ dependencies = [
 [[package]]
 name = "floem_reactive"
 version = "0.2.0"
+source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "parking_lot",
  "smallvec",
-]
-
-[[package]]
-name = "floem_renderer"
-version = "0.2.0"
-dependencies = [
- "cosmic-text 0.14.2",
- "floem-winit 25.10.0",
- "futures",
- "parking_lot",
- "peniko 0.5.0",
- "resvg 0.45.1",
- "swash 0.2.6",
- "unicode-segmentation",
- "wasm-bindgen-futures",
- "wgpu 26.0.1",
 ]
 
 [[package]]
@@ -2511,11 +2498,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "floem_renderer"
+version = "0.2.0"
+source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+dependencies = [
+ "cosmic-text 0.14.2",
+ "floem-winit 25.10.0",
+ "futures",
+ "parking_lot",
+ "peniko 0.5.0",
+ "resvg 0.45.1",
+ "swash 0.2.6",
+ "unicode-segmentation",
+ "wasm-bindgen-futures",
+ "wgpu 26.0.1",
+]
+
+[[package]]
 name = "floem_tiny_skia_renderer"
 version = "0.2.0"
+source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "anyhow",
- "floem_renderer 0.2.0",
+ "floem_renderer 0.2.0 (git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "peniko 0.5.0",
  "raw-window-handle 0.6.2",
  "resvg 0.45.1",
@@ -2525,10 +2530,11 @@ dependencies = [
 [[package]]
 name = "floem_vger_renderer"
 version = "0.2.0"
+source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "anyhow",
  "floem-vger",
- "floem_renderer 0.2.0",
+ "floem_renderer 0.2.0 (git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "image",
  "peniko 0.5.0",
  "resvg 0.45.1",
@@ -4431,7 +4437,6 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "locale_config"
 version = "0.3.1-alpha.0"
-source = "git+https://github.com/lapce/locale_config.git?branch=lapce#54c9fe6a247c3618c224ec57e6c3a747bc3a96e4"
 dependencies = [
  "lazy_static",
  "objc2 0.5.2",
@@ -4473,7 +4478,6 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 [[package]]
 name = "lsp-types"
 version = "0.95.1"
-source = "git+https://github.com/lapce/lsp-types?rev=feaa1e2ec80975c9dadd400a238ceacf071058e6#feaa1e2ec80975c9dadd400a238ceacf071058e6"
 dependencies = [
  "bitflags 1.3.2",
  "serde",
@@ -5942,7 +5946,6 @@ dependencies = [
 [[package]]
 name = "psp-types"
 version = "0.1.0"
-source = "git+https://github.com/lapce/psp-types?rev=f7fea28f59e7b2d6faa1034a21679ad49b3524ad#f7fea28f59e7b2d6faa1034a21679ad49b3524ad"
 dependencies = [
  "lsp-types",
  "serde",
@@ -7314,7 +7317,6 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 [[package]]
 name = "structdesc"
 version = "0.1.0"
-source = "git+https://github.com/lapce/structdesc?rev=bb56969f22fdb2c2d6c03f158fd4a2bdc983b659#bb56969f22fdb2c2d6c03f158fd4a2bdc983b659"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -8222,6 +8224,7 @@ dependencies = [
 [[package]]
 name = "ui-events-floem-winit"
 version = "0.2.0"
+source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
 dependencies = [
  "dpi 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "floem-winit 25.10.0",
@@ -8255,6 +8258,8 @@ dependencies = [
  "dmg",
  "flate2",
  "floem",
+ "floem-editor-core",
+ "floem_renderer 0.2.0 (git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3)",
  "fs_extra",
  "globset",
  "im",

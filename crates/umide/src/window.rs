@@ -14,19 +14,19 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app::AppCommand,
     command::{InternalCommand, WindowCommand},
-    config::LapceConfig,
-    db::LapceDb,
+    config::UmideConfig,
+    db::UmideDb,
     keypress::EventRef,
     listener::Listener,
     update::ReleaseInfo,
     window_tab::WindowTabData,
-    workspace::LapceWorkspace,
+    workspace::UmideWorkspace,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TabsInfo {
     pub active_tab: usize,
-    pub workspaces: Vec<LapceWorkspace>,
+    pub workspaces: Vec<UmideWorkspace>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +57,7 @@ pub struct WindowCommonData {
 /// `WindowData` is the application model for a top-level window.
 ///
 /// A top-level window can be independently moved around and
-/// resized using your window manager. Normally Lapce has only one
+/// resized using your window manager. Normally Umide has only one
 /// top-level window, but new ones can be created using the "New Window"
 /// command.
 ///
@@ -77,7 +77,7 @@ pub struct WindowData {
     pub position: RwSignal<Point>,
     pub root_view_id: RwSignal<ViewId>,
     pub window_scale: RwSignal<f64>,
-    pub config: RwSignal<Arc<LapceConfig>>,
+    pub config: RwSignal<Arc<UmideConfig>>,
     pub ime_enabled: RwSignal<bool>,
     pub common: Rc<WindowCommonData>,
 }
@@ -94,7 +94,7 @@ impl WindowData {
     ) -> Self {
         let cx = Scope::new();
         let config =
-            LapceConfig::load(&LapceWorkspace::default(), &[], &extra_plugin_paths);
+            UmideConfig::load(&UmideWorkspace::default(), &[], &extra_plugin_paths);
         let config = cx.create_rw_signal(Arc::new(config));
         let root_view_id = cx.create_rw_signal(ViewId::new());
 
@@ -136,7 +136,7 @@ impl WindowData {
         if window_tabs.with_untracked(|window_tabs| window_tabs.is_empty()) {
             let window_tab = Rc::new(WindowTabData::new(
                 cx,
-                Arc::new(LapceWorkspace::default()),
+                Arc::new(UmideWorkspace::default()),
                 common.clone(),
             ));
             window_tabs.update(|window_tabs| {
@@ -186,8 +186,8 @@ impl WindowData {
     }
 
     pub fn reload_config(&self) {
-        let config = LapceConfig::load(
-            &LapceWorkspace::default(),
+        let config = UmideConfig::load(
+            &UmideWorkspace::default(),
             &[],
             &self.common.extra_plugin_paths,
         );
@@ -201,7 +201,7 @@ impl WindowData {
     pub fn run_window_command(&self, cmd: WindowCommand) {
         match cmd {
             WindowCommand::SetWorkspace { workspace } => {
-                let db: Arc<LapceDb> = Context::get().unwrap();
+                let db: Arc<UmideDb> = Context::get().unwrap();
                 if let Err(err) = db.update_recent_workspace(&workspace) {
                     tracing::error!("{:?}", err);
                 }
@@ -238,7 +238,7 @@ impl WindowData {
                 })
             }
             WindowCommand::NewWorkspaceTab { workspace, end } => {
-                let db: Arc<LapceDb> = Context::get().unwrap();
+                let db: Arc<UmideDb> = Context::get().unwrap();
                 if let Err(err) = db.update_recent_workspace(&workspace) {
                     tracing::error!("{:?}", err);
                 }
@@ -281,7 +281,7 @@ impl WindowData {
                     if index < window_tabs.len() {
                         let (_, old_window_tab) = window_tabs.remove(index);
                         old_window_tab.proxy.shutdown();
-                        let db: Arc<LapceDb> = Context::get().unwrap();
+                        let db: Arc<UmideDb> = Context::get().unwrap();
                         if let Err(err) = db.save_window_tab(old_window_tab) {
                             tracing::error!("{:?}", err);
                         }
@@ -348,7 +348,7 @@ impl WindowData {
     }
 
     pub fn info(&self) -> WindowInfo {
-        let workspaces: Vec<LapceWorkspace> = self
+        let workspaces: Vec<UmideWorkspace> = self
             .window_tabs
             .get_untracked()
             .iter()

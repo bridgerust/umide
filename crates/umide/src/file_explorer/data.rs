@@ -25,8 +25,8 @@ use umide_rpc::{
 };
 
 use crate::{
-    command::{CommandExecuted, CommandKind, InternalCommand, LapceCommand},
-    config::LapceConfig,
+    command::{CommandExecuted, CommandKind, InternalCommand, UmideCommand},
+    config::UmideConfig,
     editor::EditorData,
     keypress::{KeyPressFocus, condition::Condition},
     main_split::Editors,
@@ -65,7 +65,7 @@ impl KeyPressFocus for FileExplorerData {
 
     fn run_command(
         &self,
-        command: &LapceCommand,
+        command: &UmideCommand,
         count: Option<usize>,
         mods: Modifiers,
     ) -> CommandExecuted {
@@ -386,7 +386,7 @@ impl FileExplorerData {
         self.naming.set(Naming::None);
     }
 
-    pub fn click(&self, path: &Path, config: ReadSignal<Arc<LapceConfig>>) {
+    pub fn click(&self, path: &Path, config: ReadSignal<Arc<UmideConfig>>) {
         if self.is_dir(path) {
             self.toggle_expand(path);
         } else if !config.get_untracked().core.file_explorer_double_click {
@@ -454,7 +454,7 @@ impl FileExplorerData {
     pub fn double_click(
         &self,
         path: &Path,
-        config: ReadSignal<Arc<LapceConfig>>,
+        config: ReadSignal<Arc<UmideConfig>>,
     ) -> EventPropagation {
         if self.is_dir(path) {
             EventPropagation::Continue

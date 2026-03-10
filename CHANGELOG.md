@@ -147,14 +147,14 @@
 
 - [#2190](https://github.com/lapce/lapce/pull/2190): Rewrite with Floem UI
 - [#2425](https://github.com/lapce/lapce/pull/2425): Reimplement completion lens
-- [#2498](https://github.com/lapce/lapce/pull/2498): Show Lapce as an option when doing "Open With..." on Linux
+- [#2498](https://github.com/lapce/lapce/pull/2498): Show Umide as an option when doing "Open With..." on Linux
 - [#2549](https://github.com/lapce/lapce/pull/2549): Implement multi-line vim-motion yank and delete (`3dd`, `2yy`, etc.)
 - [#2553](https://github.com/lapce/lapce/pull/2553): Implement search and replace
 - [#1809](https://github.com/lapce/lapce/pull/1809): Implement debug adapter protocol
 
 ### Bug Fixes
 
-- [#2650](https://github.com/lapce/lapce/pull/2650): Inform language servers that Lapce supports LSP diagnostics
+- [#2650](https://github.com/lapce/lapce/pull/2650): Inform language servers that Umide supports LSP diagnostics
 
 ## 0.2.8
 
@@ -172,7 +172,7 @@
 ### Bug Fixes
 
 - [#2209](https://github.com/lapce/lapce/pull/2209): Fix macOS crashes
-- [#2228](https://github.com/lapce/lapce/pull/2228): Fix `.desktop` entry to properly associate with Lapce on Wayland
+- [#2228](https://github.com/lapce/lapce/pull/2228): Fix `.desktop` entry to properly associate with Umide on Wayland
 
 ## 0.2.6
 
@@ -200,7 +200,7 @@
 - [#2045](https://github.com/lapce/lapce/pull/2045): Add 'Rename Symbol' option on right-click
 - [#2071](https://github.com/lapce/lapce/pull/2071): Add command and keybinds to delete line
 - [#2073](https://github.com/lapce/lapce/pull/2073): Add Ctrl+{a,e,k} keybinds on macOS
-- [#2128](https://github.com/lapce/lapce/pull/2128): Add Lapce app icon to logo collection
+- [#2128](https://github.com/lapce/lapce/pull/2128): Add Umide app icon to logo collection
 - [#2127](https://github.com/lapce/lapce/pull/2127): Extended double-click options with file-only and file + folders mode
 - [#1944](https://github.com/lapce/lapce/pull/1944): Add filter input in git branch selection
   - ![image](https://user-images.githubusercontent.com/4404609/211232461-293e3b31-4e17-457e-825c-3018699a6fc2.png)
@@ -304,7 +304,7 @@
 - [#1472](https://github.com/lapce/lapce/pull/1472): Added SQL language support
 - [#1531](https://github.com/lapce/lapce/pull/1531): Improved Ctrl+Left command on spaces at the beginning of a line
 - [#1491](https://github.com/lapce/lapce/pull/1491): Added Vim shift+c to delete remainder of line
-- [#1508](https://github.com/lapce/lapce/pull/1508): Show in progress when Lapce is self updating
+- [#1508](https://github.com/lapce/lapce/pull/1508): Show in progress when Umide is self updating
 - [#1475](https://github.com/lapce/lapce/pull/1475): Add editor setting: "Cursor Surrounding Lines" which sets minimum number of lines above and below cursor
 - [#1525](https://github.com/lapce/lapce/pull/1525): Add editor indent guide
 - [#1521](https://github.com/lapce/lapce/pull/1521): Show unique paths to disambiguate same file names
@@ -360,7 +360,7 @@
 - [#1440](https://github.com/lapce/lapce/pull/1440): IME support
 - [#1449](https://github.com/lapce/lapce/pull/1449): Plugin settings in the editor support. Though this still needs some work from plugins to expose them all nicely!
 - [#1441](https://github.com/lapce/lapce/pull/1441): Button for Case-Sensitive search
-- [#1471](https://github.com/lapce/lapce/pull/1471): Add command to (un)install Lapce from/to PATH
+- [#1471](https://github.com/lapce/lapce/pull/1471): Add command to (un)install Umide from/to PATH
 - [#1419](https://github.com/lapce/lapce/pull/1419): Add atomic soft tabs: now you can move your cursor over four spaces as if it was a single block
 
 ### Syntax / Extensions
@@ -388,7 +388,7 @@
 
 - [#1030](https://github.com/lapce/lapce/pull/1030): Don't try to open an font file with an empty name if there is no font family set
 - [9f0120d](https://github.com/lapce/lapce/commit/9f0120df85e3aaaef7fbb43385bb15d88443260a): Fix excessive CPU usage in part of the code
-- [bf5a98a](https://github.com/lapce/lapce/commit/bf5a98a6d432f9d2abdc1737da2d075e204771fb): Fix issue where sometimes Lapce can't open
+- [bf5a98a](https://github.com/lapce/lapce/commit/bf5a98a6d432f9d2abdc1737da2d075e204771fb): Fix issue where sometimes Umide can't open
 - [#1084](https://github.com/lapce/lapce/pull/1084): Use host shell in terminal when running inside Flatpak
 - [#1120](https://github.com/lapce/lapce/pull/1120): Make Alt+Backspace work in the terminal properly
 - [#1127](https://github.com/lapce/lapce/pull/1127): Improve Julia highlighting
@@ -410,7 +410,7 @@
 
 ### Other
 
-- [#1191](https://github.com/lapce/lapce/pull/1191): Tone down default inlay hint background color in Lapce dark theme
+- [#1191](https://github.com/lapce/lapce/pull/1191): Tone down default inlay hint background color in Umide dark theme
 - [#1227](https://github.com/lapce/lapce/pull/1227): Don't restore cursor mode on undo
 - [#1413](https://github.com/lapce/lapce/pull/1413): Disable format-on-save by default. Remember to re-enable this if you want it!
 - [#1404](https://github.com/lapce/lapce/pull/1404): Log panics with full backtrace as error

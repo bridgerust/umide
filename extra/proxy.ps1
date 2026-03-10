@@ -6,8 +6,8 @@ param(
 
 $proxy = (Join-Path $directory 'lapce.exe')
 
-$LapceProcesses = (Get-Process -Name 'lapce' -EA SilentlyContinue).Count
-if ($LapceProcesses -ne 0) {
+$UmideProcesses = (Get-Process -Name 'lapce' -EA SilentlyContinue).Count
+if ($UmideProcesses -ne 0) {
     Write-Host 'Proxy currently in use. Aborting installation'
     exit
 }

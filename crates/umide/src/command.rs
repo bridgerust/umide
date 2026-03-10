@@ -29,18 +29,18 @@ use crate::{
     editor_tab::EditorTabChild,
     id::EditorTabId,
     main_split::{SplitDirection, SplitMoveDirection, TabCloseKind},
-    workspace::LapceWorkspace,
+    workspace::UmideWorkspace,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LapceCommand {
+pub struct UmideCommand {
     pub kind: CommandKind,
     pub data: Option<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CommandKind {
-    Workbench(LapceWorkbenchCommand),
+    Workbench(UmideWorkbenchCommand),
     Edit(EditCommand),
     Move(MoveCommand),
     Scroll(ScrollCommand),
@@ -89,11 +89,11 @@ impl From<Command> for CommandKind {
     }
 }
 
-pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
+pub fn lapce_internal_commands() -> IndexMap<String, UmideCommand> {
     let mut commands = IndexMap::new();
 
-    for c in LapceWorkbenchCommand::iter() {
-        let command = LapceCommand {
+    for c in UmideWorkbenchCommand::iter() {
+        let command = UmideCommand {
             kind: CommandKind::Workbench(c.clone()),
             data: None,
         };
@@ -101,7 +101,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     }
 
     for c in EditCommand::iter() {
-        let command = LapceCommand {
+        let command = UmideCommand {
             kind: CommandKind::Edit(c.clone()),
             data: None,
         };
@@ -109,7 +109,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     }
 
     for c in MoveCommand::iter() {
-        let command = LapceCommand {
+        let command = UmideCommand {
             kind: CommandKind::Move(c.clone()),
             data: None,
         };
@@ -117,7 +117,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     }
 
     for c in ScrollCommand::iter() {
-        let command = LapceCommand {
+        let command = UmideCommand {
             kind: CommandKind::Scroll(c.clone()),
             data: None,
         };
@@ -125,7 +125,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     }
 
     for c in FocusCommand::iter() {
-        let command = LapceCommand {
+        let command = UmideCommand {
             kind: CommandKind::Focus(c.clone()),
             data: None,
         };
@@ -133,7 +133,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     }
 
     for c in MotionModeCommand::iter() {
-        let command = LapceCommand {
+        let command = UmideCommand {
             kind: CommandKind::MotionMode(c.clone()),
             data: None,
         };
@@ -141,7 +141,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     }
 
     for c in MultiSelectionCommand::iter() {
-        let command = LapceCommand {
+        let command = UmideCommand {
             kind: CommandKind::MultiSelection(c.clone()),
             data: None,
         };
@@ -162,7 +162,7 @@ pub fn lapce_internal_commands() -> IndexMap<String, LapceCommand> {
     EnumMessage,
     IntoStaticStr,
 )]
-pub enum LapceWorkbenchCommand {
+pub enum UmideWorkbenchCommand {
     #[strum(serialize = "enable_modal_editing")]
     #[strum(message = "Enable Modal Editing")]
     EnableModal,
@@ -548,7 +548,7 @@ pub enum LapceWorkbenchCommand {
     RestartToUpdate,
 
     #[strum(serialize = "show_about")]
-    #[strum(message = "About Lapce")]
+    #[strum(message = "About Umide")]
     ShowAbout,
 
     #[strum(message = "Save All Files")]
@@ -556,12 +556,12 @@ pub enum LapceWorkbenchCommand {
     SaveAll,
 
     #[cfg(target_os = "macos")]
-    #[strum(message = "Install Lapce to PATH")]
+    #[strum(message = "Install Umide to PATH")]
     #[strum(serialize = "install_to_path")]
     InstallToPATH,
 
     #[cfg(target_os = "macos")]
-    #[strum(message = "Uninstall Lapce from PATH")]
+    #[strum(message = "Uninstall Umide from PATH")]
     #[strum(serialize = "uninstall_from_path")]
     UninstallFromPATH,
 
@@ -720,12 +720,12 @@ pub enum InternalCommand {
         s: String,
     },
     FindEditorCommand {
-        command: LapceCommand,
+        command: UmideCommand,
         count: Option<usize>,
         mods: Modifiers,
     },
     ReplaceEditorCommand {
-        command: LapceCommand,
+        command: UmideCommand,
         count: Option<usize>,
         mods: Modifiers,
     },
@@ -802,13 +802,13 @@ pub enum InternalCommand {
 #[derive(Clone)]
 pub enum WindowCommand {
     SetWorkspace {
-        workspace: LapceWorkspace,
+        workspace: UmideWorkspace,
     },
     CloseWorkspaceTab {
         index: Option<usize>,
     },
     NewWorkspaceTab {
-        workspace: LapceWorkspace,
+        workspace: UmideWorkspace,
         end: bool,
     },
     NextWorkspaceTab,

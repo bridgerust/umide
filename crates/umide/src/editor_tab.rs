@@ -18,7 +18,7 @@ use umide_rpc::plugin::VoltID;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{UmideConfig, color::UmideColor, icon::UmideIcons},
     doc::{Doc, DocContent},
     editor::{
         EditorData, EditorInfo,
@@ -202,7 +202,7 @@ impl EditorTabChild {
         editors: Editors,
         diff_editors: RwSignal<im::HashMap<DiffEditorId, DiffEditorData>>,
         plugin: PluginData,
-        config: ReadSignal<Arc<LapceConfig>>,
+        config: ReadSignal<Arc<UmideConfig>>,
     ) -> Memo<EditorTabChildViewInfo> {
         match self.clone() {
             EditorTabChild::Editor(editor_id) => Memo::new(move |_| {
@@ -243,8 +243,8 @@ impl EditorTabChild {
                         )
                     }
                     None => (
-                        config.ui_svg(LapceIcons::FILE),
-                        Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
+                        config.ui_svg(UmideIcons::FILE),
+                        Some(config.color(UmideColor::LAPCE_ICON_ACTIVE)),
                         "local".to_string(),
                         RwSignal::new(true),
                         true,
@@ -325,8 +325,8 @@ impl EditorTabChild {
                         )
                     }
                     [None, None] => (
-                        config.ui_svg(LapceIcons::FILE),
-                        Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
+                        config.ui_svg(UmideIcons::FILE),
+                        Some(config.color(UmideColor::LAPCE_ICON_ACTIVE)),
                         "local".to_string(),
                         true,
                     ),
@@ -343,8 +343,8 @@ impl EditorTabChild {
             EditorTabChild::Settings(_) => Memo::new(move |_| {
                 let config = config.get();
                 EditorTabChildViewInfo {
-                    icon: config.ui_svg(LapceIcons::SETTINGS),
-                    color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
+                    icon: config.ui_svg(UmideIcons::SETTINGS),
+                    color: Some(config.color(UmideColor::LAPCE_ICON_ACTIVE)),
                     name: "Settings".to_string(),
                     path: None,
                     confirmed: None,
@@ -354,8 +354,8 @@ impl EditorTabChild {
             EditorTabChild::ThemeColorSettings(_) => Memo::new(move |_| {
                 let config = config.get();
                 EditorTabChildViewInfo {
-                    icon: config.ui_svg(LapceIcons::SYMBOL_COLOR),
-                    color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
+                    icon: config.ui_svg(UmideIcons::SYMBOL_COLOR),
+                    color: Some(config.color(UmideColor::LAPCE_ICON_ACTIVE)),
                     name: "Theme Colors".to_string(),
                     path: None,
                     confirmed: None,
@@ -365,8 +365,8 @@ impl EditorTabChild {
             EditorTabChild::Keymap(_) => Memo::new(move |_| {
                 let config = config.get();
                 EditorTabChildViewInfo {
-                    icon: config.ui_svg(LapceIcons::KEYBOARD),
-                    color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
+                    icon: config.ui_svg(UmideIcons::KEYBOARD),
+                    color: Some(config.color(UmideColor::LAPCE_ICON_ACTIVE)),
                     name: "Keyboard Shortcuts".to_string(),
                     path: None,
                     confirmed: None,
@@ -389,8 +389,8 @@ impl EditorTabChild {
                     })
                     .unwrap_or_else(|| id.name.clone());
                 EditorTabChildViewInfo {
-                    icon: config.ui_svg(LapceIcons::EXTENSIONS),
-                    color: Some(config.color(LapceColor::LAPCE_ICON_ACTIVE)),
+                    icon: config.ui_svg(UmideIcons::EXTENSIONS),
+                    color: Some(config.color(UmideColor::LAPCE_ICON_ACTIVE)),
                     name: display_name,
                     path: None,
                     confirmed: None,

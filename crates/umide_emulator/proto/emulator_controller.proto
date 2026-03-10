@@ -1,10 +1,12 @@
 // Android Emulator gRPC Protocol
-// Based on AOSP android/android-grpc/android/emulation/control/emulator_controller.proto
-// Simplified version with screenshot streaming and touch input
+// Based on AOSP emulator_controller.proto (field numbers must match exactly)
+// https://android.googlesource.com/platform/prebuilts/android-emulator
 
 syntax = "proto3";
 
 package android.emulation.control;
+
+import "google/protobuf/empty.proto";
 
 option java_multiple_files = true;
 option java_package = "com.android.emulator.control";
@@ -12,69 +14,84 @@ option java_package = "com.android.emulator.control";
 // The EmulatorController service provides methods to control the emulator
 service EmulatorController {
     // Stream a series of screenshots from the emulator
-    // This will return a new frame whenever the emulated device produces one
     rpc streamScreenshot(ImageFormat) returns (stream Image) {}
     
     // Get a single screenshot from the emulator
     rpc getScreenshot(ImageFormat) returns (Image) {}
     
     // Send a touch event to the emulator
-    rpc sendTouch(TouchEvent) returns (Empty) {}
+    rpc sendTouch(TouchEvent) returns (google.protobuf.Empty) {}
     
     // Send a key event to the emulator
-    rpc sendKey(KeyboardEvent) returns (Empty) {}
+    rpc sendKey(KeyboardEvent) returns (google.protobuf.Empty) {}
     
     // Get the status of the emulator
-    rpc getStatus(Empty) returns (EmulatorStatus) {}
+    rpc getStatus(google.protobuf.Empty) returns (EmulatorStatus) {}
 }
 
-// Empty message for methods that don't need parameters
-message Empty {}
+// Rotation information for the device display
+message Rotation {
+    enum SkinRotation {
+        PORTRAIT = 0;
+        LANDSCAPE = 1;
+        REVERSE_PORTRAIT = 2;
+        REVERSE_LANDSCAPE = 3;
+    }
+    SkinRotation rotation = 1;
+}
 
 // Image format specification for screenshots
+// Field numbers MUST match AOSP emulator_controller.proto exactly
 message ImageFormat {
-    // Format of the image
     enum ImgFormat {
         PNG = 0;
-        RGB888 = 1;
-        RGBA8888 = 2;
+        RGBA8888 = 1;   // 4 bytes per pixel
+        RGB888 = 2;     // 3 bytes per pixel
     }
     
+    // The (desired) format of the resulting bytes
     ImgFormat format = 1;
     
-    // Optional width/height for resized images
-    // If not specified, uses native resolution
-    uint32 width = 2;
-    uint32 height = 3;
+    // [Output Only] The rotation of the image
+    Rotation rotation = 2;
+    
+    // The (desired) width of the image (0 = native resolution)
+    uint32 width = 3;
+    
+    // The (desired) height of the image (0 = native resolution)
+    uint32 height = 4;
+    
+    // The display id (0 = main display)
+    uint32 display = 5;
 }
 
 // The screenshot image returned by the emulator
 message Image {
-    // Image format
+    // Image format (contains actual width/height in AOSP)
     ImageFormat format = 1;
     
-    // Width of the image in pixels
+    // Deprecated in AOSP but still present for backwards compat
     uint32 width = 2;
-    
-    // Height of the image in pixels
     uint32 height = 3;
     
-    // The actual image data (raw bytes)
+    // The actual image data (raw bytes, bottom-up, left-to-right)
     bytes image = 4;
     
-    // Sequence number for frame ordering
+    // Monotonically increasing sequence number
     uint32 seq = 5;
     
-    // Timestamp in microseconds
+    // Unix timestamp in microseconds when frame was generated
     uint64 timestampUs = 6;
 }
 
-// Touch event types
+// Touch event containing a list of touch contacts
 message TouchEvent {
-    // List of touches (supports multi-touch)
     repeated Touch touches = 1;
+    // Display where the touch occurred (0 = main display)
+    int32 display = 2;
 }
 
+// A single touch contact point
 message Touch {
     // X coordinate in device pixels
     int32 x = 1;
@@ -82,45 +99,46 @@ message Touch {
     // Y coordinate in device pixels
     int32 y = 2;
     
-    // Touch identifier for multi-touch
+    // Touch identifier for multi-touch tracking
     int32 identifier = 3;
     
-    // Pressure (0-1)
-    float pressure = 4;
+    // Pressure: non-zero when touching, 0 to release.
+    // Must send pressure=0 to release a touch identifier!
+    int32 pressure = 4;
     
-    // Touch type
-    enum TouchType {
-        DOWN = 0;
-        UP = 1;
-        MOVE = 2;
-    }
-    TouchType type = 5;
+    // Optional touch major axis
+    int32 touch_major = 5;
+    
+    // Optional touch minor axis
+    int32 touch_minor = 6;
 }
 
 // Keyboard event
 message KeyboardEvent {
-    // Key code
-    int32 keycode = 1;
-    
-    // Event type
-    enum KeyEventType {
-        DOWN = 0;
-        UP = 1;
+    enum KeyCodeType {
+        Usb = 0;
+        Evdev = 1;
+        XKB = 2;
+        Win = 3;
+        Mac = 4;
     }
-    KeyEventType type = 2;
+    
+    enum KeyEventType {
+        keydown = 0;
+        keyup = 1;
+        keypress = 2;
+    }
+    
+    KeyCodeType codeType = 1;
+    KeyEventType eventType = 2;
+    int32 keyCode = 3;
+    string key = 4;
+    string text = 5;
 }
 
 // Emulator status information
 message EmulatorStatus {
-    // Whether the emulator is running
-    bool running = 1;
-    
-    // The AVD name
-    string avd_name = 2;
-    
-    // Display width
-    uint32 width = 3;
-    
-    // Display height
-    uint32 height = 4;
+    string version = 1;
+    uint64 uptime = 2;
+    bool booted = 3;
 }

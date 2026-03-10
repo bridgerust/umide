@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{EditorData, EditorViewKind};
 use crate::{
-    config::{color::LapceColor, icon::LapceIcons},
+    config::{color::UmideColor, icon::UmideIcons},
     doc::{Doc, DocContent},
     id::{DiffEditorId, EditorTabId},
     main_split::{Editors, MainSplitData},
@@ -363,16 +363,16 @@ pub fn diff_show_more_section_view(
             wave_box().style(move |s| {
                 s.absolute()
                     .size_pct(100.0, 100.0)
-                    .color(config.get().color(LapceColor::PANEL_BACKGROUND))
+                    .color(config.get().color(UmideColor::PANEL_BACKGROUND))
             }),
             Label::new(format!("{} Hidden Lines", section.lines)),
             Label::new("|".to_string()).style(|s| s.margin_left(10.0)),
             Stack::new((
-                svg(move || config.get().ui_svg(LapceIcons::FOLD)).style(move |s| {
+                svg(move || config.get().ui_svg(UmideIcons::FOLD)).style(move |s| {
                     let config = config.get();
                     let size = config.ui.icon_size() as f32;
                     s.size(size, size)
-                        .color(config.color(LapceColor::EDITOR_FOREGROUND))
+                        .color(config.color(UmideColor::EDITOR_FOREGROUND))
                 }),
                 Label::new("Expand All".to_string()).style(|s| s.margin_left(6.0)),
             ))
@@ -407,12 +407,12 @@ pub fn diff_show_more_section_view(
             }),
             Label::new("|".to_string()).style(|s| s.margin_left(10.0)),
             Stack::new((
-                svg(move || config.get().ui_svg(LapceIcons::FOLD_UP)).style(
+                svg(move || config.get().ui_svg(UmideIcons::FOLD_UP)).style(
                     move |s| {
                         let config = config.get();
                         let size = config.ui.icon_size() as f32;
                         s.size(size, size)
-                            .color(config.color(LapceColor::EDITOR_FOREGROUND))
+                            .color(config.color(UmideColor::EDITOR_FOREGROUND))
                     },
                 ),
                 Label::new("Expand Up".to_string()).style(|s| s.margin_left(6.0)),
@@ -448,12 +448,12 @@ pub fn diff_show_more_section_view(
             }),
             Label::new("|".to_string()).style(|s| s.margin_left(10.0)),
             Stack::new((
-                svg(move || config.get().ui_svg(LapceIcons::FOLD_DOWN)).style(
+                svg(move || config.get().ui_svg(UmideIcons::FOLD_DOWN)).style(
                     move |s| {
                         let config = config.get();
                         let size = config.ui.icon_size() as f32;
                         s.size(size, size)
-                            .color(config.color(LapceColor::EDITOR_FOREGROUND))
+                            .color(config.color(UmideColor::EDITOR_FOREGROUND))
                     },
                 ),
                 Label::new("Expand Down".to_string()).style(|s| s.margin_left(6.0)),

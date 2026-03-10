@@ -63,7 +63,7 @@ impl KeyPressFocus for CodeActionData {
 
     fn run_command(
         &self,
-        command: &crate::command::LapceCommand,
+        command: &crate::command::UmideCommand,
         _count: Option<usize>,
         _mods: Modifiers,
     ) -> crate::command::CommandExecuted {

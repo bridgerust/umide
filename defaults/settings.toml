@@ -2,8 +2,8 @@
 
 [core]
 modal = false
-color-theme = "Lapce Dark"
-icon-theme = "Lapce Codicons"
+color-theme = "Umide Dark"
+icon-theme = "Umide Codicons"
 custom-titlebar = true
 file-explorer-double-click = false
 auto-reload-plugin = false

@@ -15,13 +15,13 @@ use lsp_types::{DiagnosticRelatedInformation, DiagnosticSeverity};
 use super::{data::PanelSection, position::PanelPosition, view::PanelBuilder};
 use crate::{
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{UmideConfig, color::UmideColor, icon::UmideIcons},
     doc::{DiagnosticData, EditorDiagnostic},
     editor::location::{EditorLocation, EditorPosition},
     listener::Listener,
     lsp::path_from_url,
     window_tab::WindowTabData,
-    workspace::LapceWorkspace,
+    workspace::UmideWorkspace,
 };
 
 pub fn problem_panel(
@@ -36,7 +36,7 @@ pub fn problem_panel(
             problem_section(window_tab_data.clone(), DiagnosticSeverity::ERROR),
             window_tab_data.panel.section_open(PanelSection::Error),
             move |s| {
-                s.border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                s.border_color(config.get().color(UmideColor::LAPCE_BORDER))
                     .apply_if(is_bottom, |s| s.border_right(1.0))
                     .apply_if(!is_bottom, |s| s.border_bottom(1.0))
             },
@@ -81,12 +81,12 @@ fn problem_section(
 }
 
 fn file_view(
-    workspace: Arc<LapceWorkspace>,
+    workspace: Arc<UmideWorkspace>,
     path: PathBuf,
     diagnostic_data: DiagnosticData,
     severity: DiagnosticSeverity,
     internal_command: Listener<InternalCommand>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let collapsed = RwSignal::new(false);
 
@@ -137,14 +137,14 @@ fn file_view(
     let style_path = path.clone();
 
     let icon = match severity {
-        DiagnosticSeverity::ERROR => LapceIcons::ERROR,
-        _ => LapceIcons::WARNING,
+        DiagnosticSeverity::ERROR => UmideIcons::ERROR,
+        _ => UmideIcons::WARNING,
     };
     let icon_color = move || {
         let config = config.get();
         match severity {
-            DiagnosticSeverity::ERROR => config.color(LapceColor::LAPCE_ERROR),
-            _ => config.color(LapceColor::LAPCE_WARN),
+            DiagnosticSeverity::ERROR => config.color(UmideColor::LAPCE_ERROR),
+            _ => config.color(UmideColor::LAPCE_WARN),
         }
     };
 
@@ -171,7 +171,7 @@ fn file_view(
                             .selectable(false)
                     }),
                     Label::new( folder.clone()).style(move |s| {
-                        s.color(config.get().color(LapceColor::EDITOR_DIM))
+                        s.color(config.get().color(UmideColor::EDITOR_DIM))
                             .min_width(0.0)
                             .text_ellipsis()
                             .selectable(false)
@@ -190,16 +190,16 @@ fn file_view(
                     .padding_right(10.0)
                     .hover(|s| {
                         s.cursor(CursorStyle::Pointer).background(
-                            config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                            config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
                         )
                     })
             }),
             Stack::new((
                 svg(move || {
                     config.get().ui_svg(if collapsed.get() {
-                        LapceIcons::ITEM_CLOSED
+                        UmideIcons::ITEM_CLOSED
                     } else {
-                        LapceIcons::ITEM_OPENED
+                        UmideIcons::ITEM_OPENED
                     })
                 })
                 .style(move |s| {
@@ -207,7 +207,7 @@ fn file_view(
                     let size = config.ui.icon_size() as f32;
                     s.margin_right(6.0)
                         .size(size, size)
-                        .color(config.color(LapceColor::LAPCE_ICON_ACTIVE))
+                        .color(config.color(UmideColor::LAPCE_ICON_ACTIVE))
                 }),
                 svg(move || config.get().file_svg(&path).0).style(move |s| {
                     let config = config.get();
@@ -258,7 +258,7 @@ fn item_view(
     icon: &'static str,
     icon_color: impl Fn() -> Color + 'static,
     internal_command: Listener<InternalCommand>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let related = d.diagnostic.related_information.unwrap_or_default();
     let position = if let Some((start, _)) = d.range {
@@ -301,7 +301,7 @@ fn item_view(
             .style(move |s| {
                 s.width_pct(100.0).min_width(0.0).hover(|s| {
                     s.cursor(CursorStyle::Pointer).background(
-                        config.get().color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                        config.get().color(UmideColor::PANEL_HOVERED_BACKGROUND),
                     )
                 })
             })
@@ -320,7 +320,7 @@ fn item_view(
 fn related_view(
     related: Vec<DiagnosticRelatedInformation>,
     internal_command: Listener<InternalCommand>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let is_empty = related.is_empty();
     Stack::new((
@@ -367,7 +367,7 @@ fn related_view(
                         .min_width(0.0)
                         .hover(|s| {
                             s.cursor(CursorStyle::Pointer).background(
-                                config.color(LapceColor::PANEL_HOVERED_BACKGROUND),
+                                config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
                             )
                         })
                 })
@@ -375,11 +375,11 @@ fn related_view(
         )
         .style(|s| s.width_pct(100.0).min_width(0.0).flex_col()),
         Stack::new((
-            svg(move || config.get().ui_svg(LapceIcons::LINK)).style(move |s| {
+            svg(move || config.get().ui_svg(UmideIcons::LINK)).style(move |s| {
                 let config = config.get();
                 let size = config.ui.icon_size() as f32;
                 s.size(size, size)
-                    .color(config.color(LapceColor::EDITOR_DIM))
+                    .color(config.color(UmideColor::EDITOR_DIM))
             }),
             Label::new(" ".to_string()).style(move |s| s.selectable(false)),
         ))
@@ -393,7 +393,7 @@ fn related_view(
         s.width_pct(100.0)
             .min_width(0.0)
             .items_start()
-            .color(config.get().color(LapceColor::EDITOR_DIM))
+            .color(config.get().color(UmideColor::EDITOR_DIM))
             .apply_if(is_empty, |s| s.hide())
     })
 }

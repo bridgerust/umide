@@ -14,14 +14,14 @@ use super::{kind::PanelKind, position::PanelPosition};
 use crate::{
     app::clickable_icon,
     command::InternalCommand,
-    config::{LapceConfig, color::LapceColor, icon::LapceIcons},
+    config::{UmideConfig, color::UmideColor, icon::UmideIcons},
     editor::location::{EditorLocation, EditorPosition},
     focus_text::focus_text,
     global_search::{GlobalSearchData, SearchMatchData},
     listener::Listener,
     text_input::TextInputBuilder,
     window_tab::{Focus, WindowTabData},
-    workspace::LapceWorkspace,
+    workspace::UmideWorkspace,
 };
 
 struct SearchMatchList(im::Vector<SearchMatch>);
@@ -60,7 +60,7 @@ pub fn global_search_panel(
                     .build_editor(editor.clone())
                     .style(|s| s.width_pct(100.0)),
                 clickable_icon(
-                    || LapceIcons::SEARCH_CASE_SENSITIVE,
+                    || UmideIcons::SEARCH_CASE_SENSITIVE,
                     move || {
                         let new = match case_matching.get_untracked() {
                             CaseMatching::Exact => CaseMatching::CaseInsensitive,
@@ -75,7 +75,7 @@ pub fn global_search_panel(
                 )
                 .style(|s| s.padding_vert(4.0)),
                 clickable_icon(
-                    || LapceIcons::SEARCH_WHOLE_WORD,
+                    || UmideIcons::SEARCH_WHOLE_WORD,
                     move || {
                         whole_word.update(|whole_word| {
                             *whole_word = !*whole_word;
@@ -88,7 +88,7 @@ pub fn global_search_panel(
                 )
                 .style(|s| s.padding_left(6.0)),
                 clickable_icon(
-                    || LapceIcons::SEARCH_REGEX,
+                    || UmideIcons::SEARCH_REGEX,
                     move || {
                         is_regex.update(|is_regex| {
                             *is_regex = !*is_regex;
@@ -110,7 +110,7 @@ pub fn global_search_panel(
                     .items_center()
                     .border(1.0)
                     .border_radius(6.0)
-                    .border_color(config.get().color(LapceColor::LAPCE_BORDER))
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
             }),
         )
         .style(|s| s.width_pct(100.0).padding(10.0)),
@@ -121,10 +121,10 @@ pub fn global_search_panel(
 }
 
 fn search_result(
-    workspace: Arc<LapceWorkspace>,
+    workspace: Arc<UmideWorkspace>,
     global_search_data: GlobalSearchData,
     internal_command: Listener<InternalCommand>,
-    config: ReadSignal<Arc<LapceConfig>>,
+    config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let ui_line_height = global_search_data.common.ui_line_height;
     Container::new({
@@ -162,9 +162,9 @@ fn search_result(
                         Stack::new((
                             svg(move || {
                                 config.get().ui_svg(if expanded.get() {
-                                    LapceIcons::ITEM_OPENED
+                                    UmideIcons::ITEM_OPENED
                                 } else {
-                                    LapceIcons::ITEM_CLOSED
+                                    UmideIcons::ITEM_CLOSED
                                 })
                             })
                             .style(move |s| {
@@ -175,7 +175,7 @@ fn search_result(
                                     .size(size, size)
                                     .min_size(size, size)
                                     .color(
-                                        config.color(LapceColor::LAPCE_ICON_ACTIVE),
+                                        config.color(UmideColor::LAPCE_ICON_ACTIVE),
                                     )
                             }),
                             svg(move || config.get().file_svg(&path).0).style(
@@ -197,7 +197,7 @@ fn search_result(
                                 }),
                                 Label::new(folder.clone()).style(move |s| {
                                     s.color(
-                                        config.get().color(LapceColor::EDITOR_DIM),
+                                        config.get().color(UmideColor::EDITOR_DIM),
                                     )
                                     .min_width(0.0)
                                     .text_ellipsis()
@@ -215,7 +215,7 @@ fn search_result(
                                 .hover(|s| {
                                     s.cursor(CursorStyle::Pointer).background(
                                         config.get().color(
-                                            LapceColor::PANEL_HOVERED_BACKGROUND,
+                                            UmideColor::PANEL_HOVERED_BACKGROUND,
                                         ),
                                     )
                                 })
@@ -268,7 +268,7 @@ fn search_result(
                                             .collect()
                                     },
                                     move || {
-                                        config.get().color(LapceColor::EDITOR_FOCUS)
+                                        config.get().color(UmideColor::EDITOR_FOCUS)
                                     },
                                 )
                                 .style(move |s| {
@@ -278,7 +278,7 @@ fn search_result(
                                         |s| {
                                             s.cursor(CursorStyle::Pointer)
                                                 .background(config.color(
-                                                LapceColor::PANEL_HOVERED_BACKGROUND,
+                                                UmideColor::PANEL_HOVERED_BACKGROUND,
                                             ))
                                         },
                                     )

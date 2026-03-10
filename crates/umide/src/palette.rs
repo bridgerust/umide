@@ -22,7 +22,7 @@ use floem::{
 use im::Vector;
 use itertools::Itertools;
 use umide_core::{
-    buffer::rope_text::RopeText, command::FocusCommand, cursor::CursorAffinity, language::LapceLanguage, line_ending::LineEnding, mode::Mode, movement::Movement, selection::Selection, syntax::Syntax
+    buffer::rope_text::RopeText, command::FocusCommand, cursor::CursorAffinity, language::UmideLanguage, line_ending::LineEnding, mode::Mode, movement::Movement, selection::Selection, syntax::Syntax
 };
 use umide_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
@@ -37,9 +37,9 @@ use self::{
 };
 use crate::{
     command::{
-        CommandExecuted, CommandKind, InternalCommand, LapceCommand, WindowCommand,
+        CommandExecuted, CommandKind, InternalCommand, UmideCommand, WindowCommand,
     },
-    db::LapceDb,
+    db::UmideDb,
     debug::{RunDebugConfigs, RunDebugMode},
     editor::{
         EditorData,
@@ -50,7 +50,7 @@ use crate::{
     main_split::MainSplitData,
     source_control::SourceControlData,
     window_tab::{CommonData, Focus},
-    workspace::{LapceWorkspace, LapceWorkspaceType, SshHost},
+    workspace::{UmideWorkspace, UmideWorkspaceType, SshHost},
 };
 
 pub mod item;
@@ -83,7 +83,7 @@ impl PaletteInput {
 pub struct PaletteData {
     run_id_counter: Arc<AtomicU64>,
     pub run_id: RwSignal<u64>,
-    pub workspace: Arc<LapceWorkspace>,
+    pub workspace: Arc<UmideWorkspace>,
     pub status: RwSignal<PaletteStatus>,
     pub index: RwSignal<usize>,
     pub preselect_index: RwSignal<Option<usize>>,
@@ -115,7 +115,7 @@ impl std::fmt::Debug for PaletteData {
 impl PaletteData {
     pub fn new(
         cx: Scope,
-        workspace: Arc<LapceWorkspace>,
+        workspace: Arc<UmideWorkspace>,
         main_split: MainSplitData,
         keypress: ReadSignal<KeyPressData>,
         source_control: SourceControlData,
@@ -597,7 +597,7 @@ impl PaletteData {
 
     /// Initialize the palette with all the available workspaces, local and remote.
     fn get_workspaces(&self) {
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         let workspaces = db.recent_workspaces().unwrap_or_default();
 
         let items = workspaces
@@ -605,12 +605,12 @@ impl PaletteData {
             .filter_map(|w| {
                 let text = w.path.as_ref()?.to_str()?.to_string();
                 let filter_text = match &w.kind {
-                    LapceWorkspaceType::Local => text,
-                    LapceWorkspaceType::RemoteSSH(remote) => {
+                    UmideWorkspaceType::Local => text,
+                    UmideWorkspaceType::RemoteSSH(remote) => {
                         format!("[{remote}] {text}")
                     }
                     #[cfg(windows)]
-                    LapceWorkspaceType::RemoteWSL(remote) => {
+                    UmideWorkspaceType::RemoteWSL(remote) => {
                         format!("[{remote}] {text}")
                     }
                 };
@@ -796,11 +796,11 @@ impl PaletteData {
     }
 
     fn get_ssh_hosts(&self) {
-        let db: Arc<LapceDb> = Context::get().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         let workspaces = db.recent_workspaces().unwrap_or_default();
         let mut hosts = HashSet::new();
         for workspace in workspaces.iter() {
-            if let LapceWorkspaceType::RemoteSSH(host) = &workspace.kind {
+            if let UmideWorkspaceType::RemoteSSH(host) = &workspace.kind {
                 hosts.insert(host.clone());
             }
         }
@@ -849,7 +849,7 @@ impl PaletteData {
             vec![]
         };
 
-        let db: Arc<LapceDb> = use_context().unwrap();
+        let db: Arc<UmideDb> = Context::get().unwrap();
         let workspaces = db.recent_workspaces().unwrap_or_default();
         let mut hosts = HashSet::new();
         for distro in distros {
@@ -857,7 +857,7 @@ impl PaletteData {
         }
 
         for workspace in workspaces.iter() {
-            if let LapceWorkspaceType::RemoteWSL(host) = &workspace.kind {
+            if let UmideWorkspaceType::RemoteWSL(host) = &workspace.kind {
                 hosts.insert(host.host.clone());
             }
         }
@@ -1005,7 +1005,7 @@ impl PaletteData {
     }
 
     fn get_languages(&self) {
-        let langs = LapceLanguage::languages();
+        let langs = UmideLanguage::languages();
         let items = langs
             .iter()
             .map(|lang| PaletteItem {
@@ -1125,7 +1125,7 @@ impl PaletteData {
         if let Some(item) = items.get(index) {
             match &item.content {
                 PaletteItemContent::PaletteHelp { cmd } => {
-                    let cmd = LapceCommand {
+                    let cmd = UmideCommand {
                         kind: CommandKind::Workbench(cmd.clone()),
                         data: None,
                     };
@@ -1202,8 +1202,8 @@ impl PaletteData {
                 PaletteItemContent::SshHost { host } => {
                     self.common.window_common.window_command.send(
                         WindowCommand::SetWorkspace {
-                            workspace: LapceWorkspace {
-                                kind: LapceWorkspaceType::RemoteSSH(host.clone()),
+                            workspace: UmideWorkspace {
+                                kind: UmideWorkspaceType::RemoteSSH(host.clone()),
                                 path: None,
                                 last_open: 0,
                             },
@@ -1214,8 +1214,8 @@ impl PaletteData {
                 PaletteItemContent::WslHost { host } => {
                     self.common.window_common.window_command.send(
                         WindowCommand::SetWorkspace {
-                            workspace: LapceWorkspace {
-                                kind: LapceWorkspaceType::RemoteWSL(host.clone()),
+                            workspace: UmideWorkspace {
+                                kind: UmideWorkspaceType::RemoteWSL(host.clone()),
                                 path: None,
                                 last_open: 0,
                             },
@@ -1291,7 +1291,7 @@ impl PaletteData {
                     if name.is_empty() || name.to_lowercase().eq("plain text") {
                         doc.set_syntax(Syntax::plaintext())
                     } else {
-                        let lang = match LapceLanguage::from_name(name) {
+                        let lang = match UmideLanguage::from_name(name) {
                             Some(v) => v,
                             None => return,
                         };
@@ -1313,9 +1313,9 @@ impl PaletteData {
                 PaletteItemContent::SCMReference { name } => {
                     self.common
                         .lapce_command
-                        .send(crate::command::LapceCommand {
+                        .send(crate::command::UmideCommand {
                         kind: CommandKind::Workbench(
-                            crate::command::LapceWorkbenchCommand::CheckoutReference,
+                            crate::command::UmideWorkbenchCommand::CheckoutReference,
                         ),
                         data: Some(serde_json::json!(name.to_owned())),
                     });
@@ -1332,8 +1332,8 @@ impl PaletteData {
             let ssh = SshHost::from_string(&input);
             self.common.window_common.window_command.send(
                 WindowCommand::SetWorkspace {
-                    workspace: LapceWorkspace {
-                        kind: LapceWorkspaceType::RemoteSSH(ssh),
+                    workspace: UmideWorkspace {
+                        kind: UmideWorkspaceType::RemoteSSH(ssh),
                         path: None,
                         last_open: 0,
                     },
@@ -1671,7 +1671,7 @@ impl KeyPressFocus for PaletteData {
 
     fn run_command(
         &self,
-        command: &crate::command::LapceCommand,
+        command: &crate::command::UmideCommand,
         count: Option<usize>,
         mods: Modifiers,
     ) -> CommandExecuted {

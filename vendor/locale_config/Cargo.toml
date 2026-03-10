@@ -1,0 +1,37 @@
+[package]
+name = "locale_config"
+version = "0.3.1-alpha.0"
+edition = "2021"
+description = """
+Maintains locale preferences for process and thread and initialises them by
+inspecting the system for user preference.
+"""
+authors = [
+    "Jan Hudec <bulb@ucw.cz>",
+]
+license = "MIT"
+
+documentation = "https://docs.rs/locale_config/"
+repository = "https://github.com/rust-locale/locale_config/"
+readme = "README.md"
+keywords = ["i18n"]
+categories = ["os"]
+exclude = ["/ci/*", "/.travis.yml", "/appveyor.yml"]
+
+[package.metadata.release]
+upload-doc = true
+
+[badges]
+travis-ci = { repository = "rust-locale/locale_config" }
+appveyor = { repository = "rust-locale/locale_config" }
+
+[dependencies]
+lazy_static = "1"
+regex = "1"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winnls"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5.1"
+objc2-foundation = { version = "0.2", features = ["NSLocale", "NSString"] }

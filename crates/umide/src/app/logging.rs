@@ -18,7 +18,7 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
             tracing_appender::rolling::Builder::new()
                 .max_log_files(10)
                 .rotation(tracing_appender::rolling::Rotation::DAILY)
-                .filename_prefix("lapce")
+                .filename_prefix("umide")
                 .filename_suffix("log")
                 .build(dir)
                 .ok()
@@ -45,7 +45,7 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
 
     // Filters
     let log_file_filter_targets = filter::Targets::new()
-        .with_target("lapce_app", LevelFilter::DEBUG)
+        .with_target("umide_app", LevelFilter::DEBUG)
         .with_target("umide_proxy", LevelFilter::DEBUG)
         .with_target("umide_core", LevelFilter::DEBUG)
         .with_target("umide_emulator", LevelFilter::TRACE) // Added emulator trace

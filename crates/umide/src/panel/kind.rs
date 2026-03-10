@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
 use super::{data::PanelOrder, position::PanelPosition};
-use crate::config::icon::LapceIcons;
+use crate::config::icon::UmideIcons;
 
 #[derive(
     Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Eq, Debug, EnumIter,
@@ -26,19 +26,19 @@ pub enum PanelKind {
 impl PanelKind {
     pub fn svg_name(&self) -> &'static str {
         match &self {
-            PanelKind::Terminal => LapceIcons::TERMINAL,
-            PanelKind::FileExplorer => LapceIcons::FILE_EXPLORER,
-            PanelKind::SourceControl => LapceIcons::SCM,
-            PanelKind::Plugin => LapceIcons::EXTENSIONS,
-            PanelKind::Search => LapceIcons::SEARCH,
-            PanelKind::Problem => LapceIcons::PROBLEM,
-            PanelKind::Debug => LapceIcons::DEBUG,
-            PanelKind::CallHierarchy => LapceIcons::TYPE_HIERARCHY,
-            PanelKind::DocumentSymbol => LapceIcons::DOCUMENT_SYMBOL,
-            PanelKind::References => LapceIcons::REFERENCES,
-            PanelKind::Implementation => LapceIcons::IMPLEMENTATION,
-            PanelKind::Emulator => LapceIcons::EMULATOR,
-            PanelKind::Video => LapceIcons::DEBUG_CONSOLE,
+            PanelKind::Terminal => UmideIcons::TERMINAL,
+            PanelKind::FileExplorer => UmideIcons::FILE_EXPLORER,
+            PanelKind::SourceControl => UmideIcons::SCM,
+            PanelKind::Plugin => UmideIcons::EXTENSIONS,
+            PanelKind::Search => UmideIcons::SEARCH,
+            PanelKind::Problem => UmideIcons::PROBLEM,
+            PanelKind::Debug => UmideIcons::DEBUG,
+            PanelKind::CallHierarchy => UmideIcons::TYPE_HIERARCHY,
+            PanelKind::DocumentSymbol => UmideIcons::DOCUMENT_SYMBOL,
+            PanelKind::References => UmideIcons::REFERENCES,
+            PanelKind::Implementation => UmideIcons::IMPLEMENTATION,
+            PanelKind::Emulator => UmideIcons::EMULATOR,
+            PanelKind::Video => UmideIcons::DEBUG_CONSOLE,
         }
     }
 

@@ -603,6 +603,30 @@ pub fn emulator_panel(
     window_tab_data: Rc<WindowTabData>,
     position: PanelPosition,
 ) -> impl View {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let config = window_tab_data.common.config;
+        return PanelBuilder::new(config, position)
+            .add(
+                "Emulators",
+                Stack::new((
+                    Label::new("Emulator embedding is currently macOS only.".to_string())
+                        .style(|s| s.padding(12.0).font_size(13.0)),
+                    Label::new("Windows and Linux support coming soon.".to_string())
+                        .style(move |s| {
+                            s.padding_horiz(12.0)
+                                .padding_bottom(12.0)
+                                .font_size(12.0)
+                                .color(config.get().color(UmideColor::EDITOR_DIM))
+                        }),
+                ))
+                .style(|s| s.flex_col().width_full()),
+                window_tab_data.panel.section_open(crate::panel::data::PanelSection::Process),
+            )
+            .build();
+    }
+
+    #[cfg(target_os = "macos")]
     let config = window_tab_data.common.config;
     let devices = RwSignal::new(Vec::<DeviceInfo>::new());
     

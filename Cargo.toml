@@ -10,7 +10,7 @@ default-run  = "umide"
 [dependencies]
 umide-app = { path = "./crates/umide" }
 umide-proxy = { path = "./umide-proxy" }
-floem_renderer = "0.2.0"
+floem_renderer = "0.1.0"
 
 [[bin]]
 name = "umide"
@@ -24,7 +24,7 @@ path = "umide-proxy/src/bin/umide-proxy.rs"
 members = ["crates/umide", "umide-proxy", "umide-rpc", "umide-core", "crates/umide_emulator", "crates/umide_native"]
 
 [workspace.package]
-version      = "0.4.6"
+version      = "0.1.0"
 edition      = "2024"
 rust-version = "1.87.0"
 license      = "Apache-2.0"

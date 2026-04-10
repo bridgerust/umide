@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>dev.umide.umide</id>
+    <name>UMIDE</name>
+    <developer_name>UMIDE contributors</developer_name>
+    <summary>Unified IDE for Cross-Platform Mobile Development</summary>
+    <metadata_license>MIT</metadata_license>
+    <project_license>Apache-2.0</project_license>
+    <url type="homepage">https://github.com/bridgerust/umide</url>
+    <url type="bugtracker">https://github.com/bridgerust/umide/issues</url>
+    <categories>
+        <category>IDE</category>
+        <category>Development</category>
+    </categories>
+    <description>
+        <p>
+            UMIDE is a unified IDE for cross-platform mobile development (React Native + Flutter), built in Rust. It embeds Android Emulator and iOS Simulator directly as panels, eliminating context-switching for mobile developers.
+        </p>
+        <p>Features:</p>
+        <ul>
+            <li>Android Emulator and iOS Simulator embedded directly in the IDE</li>
+            <li>First-class support for React Native and Flutter</li>
+            <li>Modal Editing (Vim like) support as first class citizen (can be turned off as well)</li>
+            <li>Built-in LSP (Language Server Protocol) support to give you code intelligence like code completion, diagnostics and code actions etc.</li>
+            <li>Built-in remote development support for a seamless "local" experience</li>
+            <li>Plugins can be written in programming languages that can compile to the WASI format (C, Rust, AssemblyScript)</li>
+            <li>Built-in terminal, so you can execute commands in your workspace, without leaving UMIDE.</li>
+        </ul>
+    </description>
+    <content_rating type="oars-1.1" />
+    <launchable type="desktop-id">dev.umide.umide.desktop</launchable>
+    <releases>
+        <release version="0.4.6" date="2026-01-21">
+            <url type="details">https://github.com/bridgerust/umide/releases/tag/v0.4.6</url>
+        </release>
+    </releases>
+</component>

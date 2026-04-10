@@ -10,7 +10,7 @@ use crate::config::LOGO;
 
 const CODICONS_ICONS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../../icons/codicons");
-const LAPCE_ICONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../icons/lapce");
+const UMIDE_ICONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../icons/umide");
 
 #[derive(Debug, Clone)]
 pub struct SvgStore {
@@ -27,7 +27,7 @@ impl Default for SvgStore {
 impl SvgStore {
     fn new() -> Self {
         let mut svgs = HashMap::new();
-        svgs.insert("lapce_logo".to_string(), LOGO.to_string());
+        svgs.insert("umide_logo".to_string(), LOGO.to_string());
 
         Self {
             svgs,
@@ -36,13 +36,13 @@ impl SvgStore {
     }
 
     pub fn logo_svg(&self) -> String {
-        self.svgs.get("lapce_logo").unwrap().clone()
+        self.svgs.get("umide_logo").unwrap().clone()
     }
 
     pub fn get_default_svg(&mut self, name: &str) -> String {
         if !self.svgs.contains_key(name) {
-            let file = if name == "lapce_remote.svg" || name == "lapce_logo.svg" {
-                LAPCE_ICONS_DIR.get_file(name).unwrap()
+            let file = if name == "umide_remote.svg" || name == "umide_logo.svg" {
+                UMIDE_ICONS_DIR.get_file(name).unwrap()
             } else {
                 CODICONS_ICONS_DIR
                     .get_file(name)

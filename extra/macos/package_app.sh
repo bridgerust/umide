@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="${APP_NAME:-UMIDE}"
-TEMPLATE_APP="${TEMPLATE_APP:-extra/macos/Lapce.app}"
+TEMPLATE_APP="${TEMPLATE_APP:-extra/macos/UMIDE.app}"
 ENTITLEMENTS_PLIST="${ENTITLEMENTS_PLIST:-extra/entitlements.plist}"
 OUTPUT_DIR="${OUTPUT_DIR:-dist/macos}"
 VERSION="${VERSION:-}"

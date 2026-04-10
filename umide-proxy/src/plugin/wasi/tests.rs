@@ -97,7 +97,7 @@ fn test_load_volt() {
     };
 
     let wasm_path = parent_path
-        .join("lapce.wasm")
+        .join("umide.wasm")
         .canonicalize()
         .ok()
         .as_ref()
@@ -157,7 +157,7 @@ fn test_load_volt() {
     };
 
     let wasm_path = parent_path
-        .join("lapce.wasm")
+        .join("umide.wasm")
         .canonicalize()
         .ok()
         .as_ref()

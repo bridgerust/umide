@@ -6,6 +6,8 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use flate2::read::GzDecoder;
+use thiserror::Error;
+use tracing::{debug, error};
 use umide_core::{
     directory::Directory,
     meta::{self, ReleaseType},
@@ -16,8 +18,6 @@ use umide_rpc::{
     proxy::{ProxyRpc, ProxyRpcHandler},
     stdio_transport,
 };
-use thiserror::Error;
-use tracing::{debug, error};
 
 const UNIX_PROXY_SCRIPT: &[u8] = include_bytes!("../../../../extra/proxy.sh");
 const WINDOWS_PROXY_SCRIPT: &[u8] = include_bytes!("../../../../extra/proxy.ps1");

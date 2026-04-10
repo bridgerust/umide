@@ -13,6 +13,14 @@ use floem::{
     views::editor::id::EditorId,
 };
 use itertools::Itertools;
+use lapce_xi_rope::{Rope, spans::SpansBuilder};
+use lsp_types::{
+    CodeAction, CodeActionOrCommand, DiagnosticSeverity, DocumentChangeOperation,
+    DocumentChanges, OneOf, Position, TextEdit, Url, WorkspaceEdit,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use tracing::{Level, event};
 use umide_core::{
     buffer::rope_text::RopeText, command::FocusCommand, cursor::Cursor,
     rope_text_pos::RopeTextPosition, selection::Selection, syntax::Syntax,
@@ -23,14 +31,6 @@ use umide_rpc::{
     plugin::{PluginId, VoltID},
     proxy::ProxyResponse,
 };
-use lapce_xi_rope::{Rope, spans::SpansBuilder};
-use lsp_types::{
-    CodeAction, CodeActionOrCommand, DiagnosticSeverity, DocumentChangeOperation,
-    DocumentChanges, OneOf, Position, TextEdit, Url, WorkspaceEdit,
-};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tracing::{Level, event};
 
 use crate::{
     alert::AlertButton,
@@ -2025,31 +2025,34 @@ impl MainSplitData {
                             let main_split = main_split.clone();
                             let doc = doc.clone();
                             internal_command.send(InternalCommand::HideAlert);
-                            crate::file_dialog::save_file(None, move |file: Option<FileInfo>| {
-                                let main_split = main_split.clone();
-                                let child = child.clone();
-                                let local_main_split = main_split.clone();
-                                if let Some(mut file) = file {
-                                    main_split.save_as(
-                                        doc.clone(),
-                                        if let Some(path) = file.path.pop() {
-                                            path
-                                        } else {
-                                            tracing::error!("No path");
-                                            return;
-                                        },
-                                        move || {
-                                            local_main_split
-                                                .clone()
-                                                .editor_tab_child_close(
-                                                    editor_tab_id,
-                                                    child.clone(),
-                                                    false,
-                                                );
-                                        },
-                                    );
-                                }
-                            });
+                            crate::file_dialog::save_file(
+                                None,
+                                move |file: Option<FileInfo>| {
+                                    let main_split = main_split.clone();
+                                    let child = child.clone();
+                                    let local_main_split = main_split.clone();
+                                    if let Some(mut file) = file {
+                                        main_split.save_as(
+                                            doc.clone(),
+                                            if let Some(path) = file.path.pop() {
+                                                path
+                                            } else {
+                                                tracing::error!("No path");
+                                                return;
+                                            },
+                                            move || {
+                                                local_main_split
+                                                    .clone()
+                                                    .editor_tab_child_close(
+                                                        editor_tab_id,
+                                                        child.clone(),
+                                                        false,
+                                                    );
+                                            },
+                                        );
+                                    }
+                                },
+                            );
                         });
                         Some(AlertButton {
                             text: "Save".to_string(),

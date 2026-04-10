@@ -1,7 +1,7 @@
-use umide_core::directory::Directory;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{filter::Targets, reload::Handle};
+use umide_core::directory::Directory;
 
 use crate::tracing::*;
 
@@ -28,7 +28,7 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
         Some((writer, guard)) => {
             guards.push(guard);
             Some(writer)
-        },
+        }
         None => None,
     };
 
@@ -39,7 +39,7 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
             .create(true)
             .truncate(true)
             .open("/tmp/umide_debug.log")
-            .unwrap_or_else(|_| std::fs::File::create("/dev/null").unwrap())
+            .unwrap_or_else(|_| std::fs::File::create("/dev/null").unwrap()),
     );
     guards.push(debug_guard);
 
@@ -50,7 +50,7 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
         .with_target("umide_core", LevelFilter::DEBUG)
         .with_target("umide_emulator", LevelFilter::TRACE) // Added emulator trace
         .with_default(LevelFilter::from_level(TraceLevel::INFO));
-    
+
     let (log_file_filter, reload_handle) =
         reload::Subscriber::new(log_file_filter_targets);
 
@@ -65,11 +65,12 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
         .with_writer(debug_writer)
         .with_filter(filter::Targets::new().with_default(LevelFilter::DEBUG));
 
-    let rolling_layer = log_file_writer.map(|writer|
+    let rolling_layer = log_file_writer.map(|writer| {
         tracing_subscriber::fmt::subscriber()
-        .with_ansi(false)
-        .with_writer(writer)
-        .with_filter(log_file_filter));
+            .with_ansi(false)
+            .with_writer(writer)
+            .with_filter(log_file_filter)
+    });
 
     let console_layer = fmt::Subscriber::default()
         .with_line_number(true)

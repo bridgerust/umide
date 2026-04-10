@@ -15,17 +15,17 @@ use floem::{
         Color,
         kurbo::{Point, Rect, Size},
     },
-    ui_events::pointer::{PointerButton, PointerButtonEvent, PointerEvent},
     prelude::SignalTrack,
-    reactive::{ReadSignal, RwSignal, SignalGet, SignalWith, Effect},
+    reactive::{Effect, ReadSignal, RwSignal, SignalGet, SignalWith},
     text::{Attrs, AttrsList, FamilyOwned, TextLayout, Weight},
+    ui_events::pointer::{PointerButton, PointerButtonEvent, PointerEvent},
     views::editor::{core::register::Clipboard, text::SystemClipboard},
 };
-use umide_core::mode::Mode;
-use umide_rpc::{proxy::ProxyRpcHandler, terminal::TermId};
 use lsp_types::Position;
 use parking_lot::RwLock;
 use regex::Regex;
+use umide_core::mode::Mode;
+use umide_rpc::{proxy::ProxyRpcHandler, terminal::TermId};
 use unicode_width::UnicodeWidthChar;
 
 use super::{panel::TerminalPanelData, raw::RawTerminal};
@@ -221,9 +221,13 @@ impl TerminalView {
             | MouseAction::LeftSelect { .. }
             | MouseAction::RightOnce { .. } => {
                 if mouse.button == Some(PointerButton::Primary) {
-                    next_action = MouseAction::LeftDown { pos: mouse.state.logical_point() };
+                    next_action = MouseAction::LeftDown {
+                        pos: mouse.state.logical_point(),
+                    };
                 } else if mouse.button == Some(PointerButton::Secondary) {
-                    next_action = MouseAction::RightDown { pos: mouse.state.logical_point() };
+                    next_action = MouseAction::RightDown {
+                        pos: mouse.state.logical_point(),
+                    };
                 }
             }
             MouseAction::LeftOnce { pos, time } => {
@@ -238,7 +242,9 @@ impl TerminalView {
                         next_action = MouseAction::LeftOnceAndDown { pos, time };
                     }
                     (true, _, _) => {
-                        next_action = MouseAction::LeftDown { pos: mouse.state.logical_point() };
+                        next_action = MouseAction::LeftDown {
+                            pos: mouse.state.logical_point(),
+                        };
                     }
                     _ => {}
                 }
@@ -255,7 +261,10 @@ impl TerminalView {
         match self.current_mouse_action {
             MouseAction::None => {}
             MouseAction::LeftDown { pos } => {
-                match (mouse.button == Some(PointerButton::Primary), mouse.state.logical_point() == pos) {
+                match (
+                    mouse.button == Some(PointerButton::Primary),
+                    mouse.state.logical_point() == pos,
+                ) {
                     (true, true) => {
                         next_action = MouseAction::LeftOnce {
                             pos,
@@ -301,7 +310,9 @@ impl TerminalView {
             }
             MouseAction::LeftDouble { .. } => {}
             MouseAction::RightDown { pos } => {
-                if mouse.button == Some(PointerButton::Secondary) && mouse.state.logical_point() == pos {
+                if mouse.button == Some(PointerButton::Secondary)
+                    && mouse.state.logical_point() == pos
+                {
                     next_action = MouseAction::RightOnce { pos };
                 }
             }

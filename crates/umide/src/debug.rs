@@ -11,6 +11,7 @@ use floem::{
     reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::VirtualVector,
 };
+use serde::{Deserialize, Serialize};
 use umide_rpc::{
     dap_types::{
         self, DapId, RunDebugConfig, SourceBreakpoint, StackFrame, Stopped,
@@ -19,7 +20,6 @@ use umide_rpc::{
     proxy::ProxyResponse,
     terminal::TermId,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     command::InternalCommand,

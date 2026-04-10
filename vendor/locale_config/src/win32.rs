@@ -4,7 +4,10 @@ use super::{LanguageRange, Locale};
 
 use std::fmt::Write;
 
-fn if_locale_info_differs<F: FnOnce(&str)>(lc_type: winapi::ctypes::c_ulong, func: F) {
+fn if_locale_info_differs<F: FnOnce(&str)>(
+    lc_type: winapi::ctypes::c_ulong,
+    func: F,
+) {
     #[allow(non_snake_case)]
     // would be const if it wasn't for the fact const functions are still unstable
     let LOCALE_NAME_USER_DEFAULT: *mut u16 = ::std::ptr::null_mut();
@@ -192,8 +195,12 @@ use self::consts::*;
 
 fn get_user_default_locale() -> super::Result<LanguageRange<'static>> {
     let mut buf = [0u16; 85];
-    let len =
-        unsafe { winapi::um::winnls::GetUserDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32) };
+    let len = unsafe {
+        winapi::um::winnls::GetUserDefaultLocaleName(
+            buf.as_mut_ptr(),
+            buf.len() as i32,
+        )
+    };
     if len > 0 {
         let mut s = String::from_utf16_lossy(&buf[..(len as usize - 1)]);
 
@@ -442,7 +449,10 @@ fn get_user_default_locale() -> super::Result<LanguageRange<'static>> {
 fn get_system_default_locale() -> super::Result<LanguageRange<'static>> {
     let mut buf = [0u16; 85];
     let len = unsafe {
-        winapi::um::winnls::GetSystemDefaultLocaleName(buf.as_mut_ptr(), buf.len() as i32)
+        winapi::um::winnls::GetSystemDefaultLocaleName(
+            buf.as_mut_ptr(),
+            buf.len() as i32,
+        )
     };
     if len > 0 {
         let s = String::from_utf16_lossy(&buf[..(len as usize - 1)]);

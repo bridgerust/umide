@@ -4,27 +4,27 @@ use floem::{
     IntoView, View,
     action::{TimerToken, add_overlay, exec_after, remove_overlay},
     event::EventListener,
-    prelude::Modifiers,
     peniko::kurbo::{Point, Rect, Size},
+    prelude::Modifiers,
     reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        Effect,
+        Effect, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate,
+        SignalWith,
     },
     style::CursorStyle,
     text::{Attrs, AttrsList, FamilyOwned, TextLayout},
     views::{
-        Container, Decorators, VirtualVector, dyn_stack, Empty, Label,
+        Container, Decorators, Empty, Label, Stack, VirtualVector, dyn_stack,
         scroll::{PropagatePointerWheel, Scroll},
-        Stack, svg, virtual_stack,
+        svg, virtual_stack,
     },
 };
 use indexmap::IndexMap;
 use inflector::Inflector;
-use umide_core::{buffer::rope_text::RopeText, mode::Mode};
-use umide_rpc::plugin::VoltID;
 use lapce_xi_rope::Rope;
 use serde::Serialize;
 use serde_json::Value;
+use umide_core::{buffer::rope_text::RopeText, mode::Mode};
+use umide_rpc::plugin::VoltID;
 
 use crate::{
     command::CommandExecuted,
@@ -941,15 +941,17 @@ fn color_section_list(
                     Label::new(&key).style(move |s| {
                         s.width(max_width.get()).margin_left(20).margin_right(10)
                     }),
-                    text_input_view.style(|s| s.focusable(true)).style(move |s| {
-                        s.width(150.0)
-                            .margin_vert(6)
-                            .border(1)
-                            .border_radius(6)
-                            .border_color(
-                                config.get().color(UmideColor::LAPCE_BORDER),
-                            )
-                    }),
+                    text_input_view
+                        .style(|s| s.focusable(true))
+                        .style(move |s| {
+                            s.width(150.0)
+                                .margin_vert(6)
+                                .border(1)
+                                .border_radius(6)
+                                .border_color(
+                                    config.get().color(UmideColor::LAPCE_BORDER),
+                                )
+                        }),
                     Empty::new().style(move |s| {
                         let size = text_height.get() + 12.0;
                         let config = config.get();
@@ -1199,20 +1201,18 @@ fn dropdown_view(
             if expanded.get() {
                 let item = item.clone();
                 let dropdown = dropdown.clone();
-                let id = add_overlay(
-                    dropdown_scroll_view(
-                        &item.clone(),
-                        current_value,
-                        &dropdown.clone(),
-                        expanded,
-                        dropdown_scroll_focus,
-                        dropdown_input_focus,
-                        window_origin,
-                        size,
-                        window_size,
-                        config,
-                    )
-                );
+                let id = add_overlay(dropdown_scroll_view(
+                    &item.clone(),
+                    current_value,
+                    &dropdown.clone(),
+                    expanded,
+                    dropdown_scroll_focus,
+                    dropdown_input_focus,
+                    window_origin,
+                    size,
+                    window_size,
+                    config,
+                ));
                 overlay_id.set(Some(id));
             } else if let Some(id) = overlay_id.get_untracked() {
                 remove_overlay(id);

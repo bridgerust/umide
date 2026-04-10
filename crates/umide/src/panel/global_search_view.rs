@@ -1,4 +1,4 @@
-use std::{path::PathBuf, rc::Rc, sync::Arc, ops::Range};
+use std::{ops::Range, path::PathBuf, rc::Rc, sync::Arc};
 use umide_rpc::proxy::SearchMatch;
 
 use floem::{
@@ -6,7 +6,10 @@ use floem::{
     event::EventListener,
     reactive::{ReadSignal, SignalGet, SignalUpdate},
     style::{CursorStyle, Style},
-    views::{Container, Decorators, Scroll, Stack, Label, svg, virtual_stack, VirtualVector},
+    views::{
+        Container, Decorators, Label, Scroll, Stack, VirtualVector, svg,
+        virtual_stack,
+    },
 };
 use lapce_xi_rope::find::CaseMatching;
 
@@ -32,7 +35,11 @@ impl VirtualVector<SearchMatch> for SearchMatchList {
     }
 
     fn slice(&mut self, range: Range<usize>) -> impl Iterator<Item = SearchMatch> {
-        self.0.iter().skip(range.start).take(range.end - range.start).cloned()
+        self.0
+            .iter()
+            .skip(range.start)
+            .take(range.end - range.start)
+            .cloned()
     }
 }
 

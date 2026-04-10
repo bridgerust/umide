@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use crate::decoder::{VideoDecoder, DecodedFrame, DecodeError};
-use openh264::decoder::{Decoder, DecodedYUV};
+use crate::decoder::{DecodeError, DecodedFrame, VideoDecoder};
+use openh264::decoder::{DecodedYUV, Decoder};
 use openh264::formats::YUVSource;
+use std::sync::Arc;
 
 pub struct OpenH264Decoder {
     decoder: Decoder,
@@ -21,15 +21,18 @@ impl Default for OpenH264Decoder {
 }
 
 impl VideoDecoder for OpenH264Decoder {
-    fn decode_frame(&mut self, data: &[u8]) -> Result<Vec<DecodedFrame>, DecodeError> {
+    fn decode_frame(
+        &mut self,
+        data: &[u8],
+    ) -> Result<Vec<DecodedFrame>, DecodeError> {
         let mut frames = Vec::new();
-        
+
         match self.decoder.decode(data) {
             Ok(Some(yuv_frame)) => {
                 let (width, height) = yuv_frame.dimensions();
                 let width = width as u32;
                 let height = height as u32;
-                
+
                 // Convert YUV to RGBA
                 let mut rgba_raw = vec![0u8; (width * height * 4) as usize];
                 yuv_to_rgba(&yuv_frame, &mut rgba_raw, width, height);
@@ -39,12 +42,19 @@ impl VideoDecoder for OpenH264Decoder {
                 frames.push(DecodedFrame {
                     width,
                     height,
-                    frame: crate::decoder::GpuFrame::Software(rgba_data, width * 4, height), // stride = width * 4
+                    frame: crate::decoder::GpuFrame::Software(
+                        rgba_data,
+                        width * 4,
+                        height,
+                    ), // stride = width * 4
                 });
             }
-            Ok(None) => {},
+            Ok(None) => {}
             Err(e) => {
-                return Err(DecodeError::DecodeFailed(format!("OpenH264 error: {:?}", e)));
+                return Err(DecodeError::DecodeFailed(format!(
+                    "OpenH264 error: {:?}",
+                    e
+                )));
             }
         }
 
@@ -58,7 +68,12 @@ impl VideoDecoder for OpenH264Decoder {
     fn reset(&mut self) -> Result<(), DecodeError> {
         match Decoder::new() {
             Ok(d) => self.decoder = d,
-            Err(e) => return Err(DecodeError::DecodeFailed(format!("Failed to reset decoder: {:?}", e))),
+            Err(e) => {
+                return Err(DecodeError::DecodeFailed(format!(
+                    "Failed to reset decoder: {:?}",
+                    e
+                )))
+            }
         }
         Ok(())
     }
@@ -70,7 +85,7 @@ fn yuv_to_rgba(yuv: &DecodedYUV<'_>, rgba: &mut [u8], width: u32, height: u32) {
     let y_stride = strides.0;
     let u_stride = strides.1;
     let v_stride = strides.2;
-    
+
     // YUVSource returns slices for the whole plane
     let y_plane = yuv.y();
     let u_plane = yuv.u();
@@ -82,7 +97,12 @@ fn yuv_to_rgba(yuv: &DecodedYUV<'_>, rgba: &mut [u8], width: u32, height: u32) {
             let uv_idx = ((y as usize / 2) * u_stride) + (x as usize / 2);
             let v_idx = ((y as usize / 2) * v_stride) + (x as usize / 2);
 
-            if y_idx >= y_plane.len() || uv_idx >= u_plane.len() || v_idx >= v_plane.len() { continue; }
+            if y_idx >= y_plane.len()
+                || uv_idx >= u_plane.len()
+                || v_idx >= v_plane.len()
+            {
+                continue;
+            }
 
             let y_val = y_plane[y_idx] as f32;
             let u_val = u_plane[uv_idx] as f32 - 128.0;

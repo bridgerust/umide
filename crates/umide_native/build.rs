@@ -3,7 +3,7 @@ fn main() {
     #[cfg(target_os = "macos")]
     {
         println!("cargo:rerun-if-changed=cpp/");
-        
+
         cc::Build::new()
             .cpp(true)
             .file("cpp/macos_surface.mm") // Keep old one for now if needed, or remove if replacing
@@ -15,7 +15,7 @@ fn main() {
             .include("cpp") // Add root cpp dir to include path for "src/emulator.h" resolution
             // Link against required macOS frameworks
             .compile("umide_native_cpp");
-        
+
         // Link macOS frameworks
         println!("cargo:rustc-link-lib=framework=IOSurface");
         println!("cargo:rustc-link-lib=framework=Metal");

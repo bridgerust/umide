@@ -1,9 +1,9 @@
 pub mod call_hierarchy_view;
 pub mod data;
 pub mod debug_view;
-pub mod emulator_view;
-pub mod emulator_native_view;
 pub mod document_symbol;
+pub mod emulator_native_view;
+pub mod emulator_view;
 pub mod global_search_view;
 pub mod implementation_view;
 pub mod kind;
@@ -14,6 +14,5 @@ pub mod references_view;
 pub mod source_control_view;
 pub mod style;
 pub mod terminal_view;
-pub mod view;
 mod video_view;
-
+pub mod view;

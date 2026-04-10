@@ -20,8 +20,11 @@ pub fn list_all_devices() -> Vec<DeviceInfo> {
         // Update states based on actual running status
         let running_serials = AndroidEmulator::get_running_serials();
         for device in &mut android_devices {
-            if AndroidEmulator::is_running(&device.id) || 
-               running_serials.iter().any(|s| s.contains(&device.id) || device.id.contains(s)) {
+            if AndroidEmulator::is_running(&device.id)
+                || running_serials
+                    .iter()
+                    .any(|s| s.contains(&device.id) || device.id.contains(s))
+            {
                 device.state = DeviceState::Running;
             }
         }
@@ -76,4 +79,3 @@ pub fn stop_device(device: &DeviceInfo) -> anyhow::Result<()> {
         DevicePlatform::Ios => IosSimulator::stop(&device.id),
     }
 }
-

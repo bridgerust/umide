@@ -10,10 +10,10 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use floem_editor_core::buffer::rope_text::CharIndicesJoin;
-use umide_core::encoding::offset_utf8_to_utf16;
-use umide_rpc::buffer::BufferId;
 use lapce_xi_rope::{RopeDelta, interval::IntervalBounds, rope::Rope};
 use lsp_types::*;
+use umide_core::encoding::offset_utf8_to_utf16;
+use umide_rpc::buffer::BufferId;
 
 #[derive(Clone)]
 pub struct Buffer {

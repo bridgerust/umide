@@ -13,6 +13,7 @@ use floem::{
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::editor::text::SystemClipboard,
 };
+use parking_lot::RwLock;
 use umide_core::{
     command::{EditCommand, FocusCommand, ScrollCommand},
     mode::{Mode, VisualMode},
@@ -23,7 +24,6 @@ use umide_rpc::{
     dap_types::RunDebugConfig,
     terminal::{TermId, TerminalProfile},
 };
-use parking_lot::RwLock;
 use url::Url;
 
 use super::{

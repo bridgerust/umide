@@ -44,12 +44,10 @@ impl SvgStore {
             let file = if name == "umide_remote.svg" || name == "umide_logo.svg" {
                 UMIDE_ICONS_DIR.get_file(name).unwrap()
             } else {
-                CODICONS_ICONS_DIR
-                    .get_file(name)
-                    .unwrap_or_else(|| {
-                        tracing::error!("Failed to find icon: {}", name);
-                        CODICONS_ICONS_DIR.get_file("error.svg").unwrap()
-                    })
+                CODICONS_ICONS_DIR.get_file(name).unwrap_or_else(|| {
+                    tracing::error!("Failed to find icon: {}", name);
+                    CODICONS_ICONS_DIR.get_file("error.svg").unwrap()
+                })
             };
             let content = file.contents_utf8().unwrap();
             self.svgs.insert(name.to_string(), content.to_string());

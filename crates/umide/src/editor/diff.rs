@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::atomic};
 
 use floem::{
     View,
-    event::{EventListener},
+    event::EventListener,
     ext_event::create_ext_action,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     style::CursorStyle,
@@ -10,13 +10,13 @@ use floem::{
         Clip, Decorators, Empty, Label, Stack, dyn_stack, editor::id::EditorId, svg,
     },
 };
+use lapce_xi_rope::Rope;
+use serde::{Deserialize, Serialize};
 use umide_core::buffer::{
     diff::{DiffExpand, DiffLines, expand_diff_lines, rope_diff},
     rope_text::RopeText,
 };
 use umide_rpc::{buffer::BufferId, proxy::ProxyResponse};
-use lapce_xi_rope::Rope;
-use serde::{Deserialize, Serialize};
 
 use super::{EditorData, EditorViewKind};
 use crate::{

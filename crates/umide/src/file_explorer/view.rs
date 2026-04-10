@@ -1,19 +1,25 @@
 use std::{path::Path, rc::Rc, sync::Arc};
 
 use floem::{
-    View, event::{Event, EventListener}, kurbo::Rect, peniko::Color, prelude::PointerEvent, reactive::{
-        ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith,
-    }, style::{AlignItems, CursorStyle, Position, Style}, text::Style as FontStyle, views::{
-        Container, Decorators, Label, Scroll, Stack, dyn_stack, svg, virtual_stack
-    }
+    View,
+    event::{Event, EventListener},
+    kurbo::Rect,
+    peniko::Color,
+    prelude::PointerEvent,
+    reactive::{ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith},
+    style::{AlignItems, CursorStyle, Position, Style},
+    text::Style as FontStyle,
+    views::{
+        Container, Decorators, Label, Scroll, Stack, dyn_stack, svg, virtual_stack,
+    },
 };
-use umide_core::selection::Selection;
+use lapce_xi_rope::Rope;
 use umide_core::cursor::CursorAffinity;
+use umide_core::selection::Selection;
 use umide_rpc::{
     file::{FileNodeViewData, FileNodeViewKind, Naming},
     source_control::FileDiffKind,
 };
-use lapce_xi_rope::Rope;
 
 use super::{data::FileExplorerData, node::FileNodeVirtualList};
 use crate::{
@@ -108,9 +114,13 @@ fn initialize_naming_editor(
 
     let doc = data.naming_editor_data.doc();
     doc.reload(text, true);
-    data.naming_editor_data
-        .cursor()
-        .update(|cursor| cursor.set_insert(Selection::region(0, selection_end, CursorAffinity::Forward)));
+    data.naming_editor_data.cursor().update(|cursor| {
+        cursor.set_insert(Selection::region(
+            0,
+            selection_end,
+            CursorAffinity::Forward,
+        ))
+    });
 
     data.naming
         .update(|naming| naming.set_editor_needs_reset(false));
@@ -164,7 +174,7 @@ fn file_node_text_view(
                     Label::new(
                         file.file_name()
                             .map(|f| f.to_string_lossy().to_string())
-                            .unwrap_or_default()
+                            .unwrap_or_default(),
                     )
                     .style(move |s| {
                         s.height(ui_line_height.get())
@@ -176,23 +186,21 @@ fn file_node_text_view(
                             .padding_right(5.0)
                             .selectable(false)
                     }),
-                    Label::new(path.to_string_lossy().to_string()).style(
-                        move |s| {
-                            s.height(ui_line_height.get())
-                                .color(
-                                    config
-                                        .get()
-                                        .color(UmideColor::PANEL_FOREGROUND_DIM),
-                                )
-                                .selectable(false)
-                        },
-                    ),
+                    Label::new(path.to_string_lossy().to_string()).style(move |s| {
+                        s.height(ui_line_height.get())
+                            .color(
+                                config.get().color(UmideColor::PANEL_FOREGROUND_DIM),
+                            )
+                            .selectable(false)
+                    }),
                 ))
             } else {
                 Container::new(
-                    Label::new(path.file_name()
+                    Label::new(
+                        path.file_name()
                             .map(|f| f.to_string_lossy().to_string())
-                            .unwrap_or_default())
+                            .unwrap_or_default(),
+                    )
                     .style(move |s| {
                         s.height(ui_line_height.get())
                             .color(file_node_text_color(
@@ -318,7 +326,7 @@ fn file_explorer_view(
                 let click_data = data.clone();
                 let double_click_data = data.clone();
                 let secondary_click_data = data.clone();
-                   let aux_click_data = data.clone();
+                let aux_click_data = data.clone();
                 let kind = node.kind.clone();
                 let open = node.open;
                 let is_dir = node.is_dir;
@@ -442,7 +450,10 @@ fn file_explorer_view(
                     .on_event_stop(
                         EventListener::PointerDown,
                         move |event| {
-                            if let Event::Pointer(PointerEvent::Down(pointer_event)) = event {
+                            if let Event::Pointer(PointerEvent::Down(
+                                pointer_event,
+                            )) = event
+                            {
                                 if pointer_event.button.is_some() {
                                     aux_click_data.middle_click(&aux_click_path);
                                 }
@@ -541,15 +552,17 @@ fn open_editors_view(window_tab_data: Rc<WindowTabData>) -> impl View {
                 },
             ))
             .style(|s| s.padding_horiz(6.0)),
-            Label::derived(move || info.with(|info| info.name.clone())).style(move |s| {
-                s.apply_if(
-                    !info
-                        .with(|info| info.confirmed)
-                        .map(|confirmed| confirmed.get())
-                        .unwrap_or(true),
-                    |s| s.font_style(FontStyle::Italic),
-                )
-            }),
+            Label::derived(move || info.with(|info| info.name.clone())).style(
+                move |s| {
+                    s.apply_if(
+                        !info
+                            .with(|info| info.confirmed)
+                            .map(|confirmed| confirmed.get())
+                            .unwrap_or(true),
+                        |s| s.font_style(FontStyle::Italic),
+                    )
+                },
+            ),
         ))
         .style(move |s| {
             let config = config.get();

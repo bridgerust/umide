@@ -2,14 +2,16 @@ use std::{path::PathBuf, rc::Rc};
 
 use floem::{
     ext_event::create_ext_action,
-    prelude::Modifiers,
     peniko::kurbo::Rect,
+    prelude::Modifiers,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
 };
-use umide_core::{command::FocusCommand, cursor::CursorAffinity, mode::Mode, selection::Selection};
-use umide_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
 use lsp_types::Position;
+use umide_core::{
+    command::FocusCommand, cursor::CursorAffinity, mode::Mode, selection::Selection,
+};
+use umide_rpc::proxy::ProxyResponse;
 
 use crate::{
     command::{CommandExecuted, CommandKind, InternalCommand, UmideCommand},
@@ -94,7 +96,11 @@ impl RenameData {
     ) {
         self.editor.doc().reload(Rope::from(&placeholder), true);
         self.editor.cursor().update(|cursor| {
-            cursor.set_insert(Selection::region(0, placeholder.len(), CursorAffinity::Forward))
+            cursor.set_insert(Selection::region(
+                0,
+                placeholder.len(),
+                CursorAffinity::Forward,
+            ))
         });
         self.path.set(path);
         self.start.set(start);

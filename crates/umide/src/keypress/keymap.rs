@@ -342,23 +342,14 @@ impl Display for KeyMapPress {
 
 impl Display for KeyMapKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-
         match self {
             Self::Physical(code) => {
                 f.write_str("[")?;
                 match code {
-                    Code::Backquote => {
-                        f.write_str("Backquote")
-                    }
-                    Code::Backslash => {
-                        f.write_str("Backslash")
-                    }
-                    Code::BracketLeft => {
-                        f.write_str("BracketLeft")
-                    }
-                    Code::BracketRight => {
-                        f.write_str("BracketRight")
-                    }
+                    Code::Backquote => f.write_str("Backquote"),
+                    Code::Backslash => f.write_str("Backslash"),
+                    Code::BracketLeft => f.write_str("BracketLeft"),
+                    Code::BracketRight => f.write_str("BracketRight"),
                     Code::Comma => f.write_str("Comma"),
                     Code::Digit0 => f.write_str("0"),
                     Code::Digit1 => f.write_str("1"),
@@ -371,9 +362,7 @@ impl Display for KeyMapKey {
                     Code::Digit8 => f.write_str("8"),
                     Code::Digit9 => f.write_str("9"),
                     Code::Equal => f.write_str("Equal"),
-                    Code::IntlBackslash => {
-                        f.write_str("IntlBackslash")
-                    }
+                    Code::IntlBackslash => f.write_str("IntlBackslash"),
                     Code::IntlRo => f.write_str("IntlRo"),
                     Code::IntlYen => f.write_str("IntlYen"),
                     Code::KeyA => f.write_str("A"),
@@ -405,19 +394,13 @@ impl Display for KeyMapKey {
                     Code::Minus => f.write_str("Minus"),
                     Code::Period => f.write_str("Period"),
                     Code::Quote => f.write_str("Quote"),
-                    Code::Semicolon => {
-                        f.write_str("Semicolon")
-                    }
+                    Code::Semicolon => f.write_str("Semicolon"),
                     Code::Slash => f.write_str("Slash"),
                     Code::AltLeft => f.write_str("Alt"),
                     Code::AltRight => f.write_str("Alt"),
-                    Code::Backspace => {
-                        f.write_str("Backspace")
-                    }
+                    Code::Backspace => f.write_str("Backspace"),
                     Code::CapsLock => f.write_str("CapsLock"),
-                    Code::ContextMenu => {
-                        f.write_str("ContextMenu")
-                    }
+                    Code::ContextMenu => f.write_str("ContextMenu"),
                     Code::ControlLeft => f.write_str("Ctrl"),
                     Code::ControlRight => f.write_str("Ctrl"),
                     Code::Enter => f.write_str("Enter"),
@@ -434,9 +417,7 @@ impl Display for KeyMapKey {
                     Code::Lang3 => f.write_str("Lang3"),
                     Code::Lang4 => f.write_str("Lang4"),
                     Code::Lang5 => f.write_str("Lang5"),
-                    Code::NonConvert => {
-                        f.write_str("NonConvert")
-                    }
+                    Code::NonConvert => f.write_str("NonConvert"),
                     Code::Delete => f.write_str("Delete"),
                     Code::End => f.write_str("End"),
                     Code::Help => f.write_str("Help"),
@@ -459,133 +440,55 @@ impl Display for KeyMapKey {
                     Code::Numpad7 => f.write_str("Numpad7"),
                     Code::Numpad8 => f.write_str("Numpad8"),
                     Code::Numpad9 => f.write_str("Numpad9"),
-                    Code::NumpadAdd => {
-                        f.write_str("NumpadAdd")
-                    }
-                    Code::NumpadBackspace => {
-                        f.write_str("NumpadBackspace")
-                    }
-                    Code::NumpadClear => {
-                        f.write_str("NumpadClear")
-                    }
-                    Code::NumpadClearEntry => {
-                        f.write_str("NumpadClearEntry")
-                    }
-                    Code::NumpadComma => {
-                        f.write_str("NumpadComma")
-                    }
-                    Code::NumpadDecimal => {
-                        f.write_str("NumpadDecimal")
-                    }
-                    Code::NumpadDivide => {
-                        f.write_str("NumpadDivide")
-                    }
-                    Code::NumpadEnter => {
-                        f.write_str("NumpadEnter")
-                    }
-                    Code::NumpadEqual => {
-                        f.write_str("NumpadEqual")
-                    }
-                    Code::NumpadHash => {
-                        f.write_str("NumpadHash")
-                    }
-                    Code::NumpadMemoryAdd => {
-                        f.write_str("NumpadMemoryAdd")
-                    }
-                    Code::NumpadMemoryClear => {
-                        f.write_str("NumpadMemoryClear")
-                    }
-                    Code::NumpadMemoryRecall => {
-                        f.write_str("NumpadMemoryRecall")
-                    }
-                    Code::NumpadMemoryStore => {
-                        f.write_str("NumpadMemoryStore")
-                    }
+                    Code::NumpadAdd => f.write_str("NumpadAdd"),
+                    Code::NumpadBackspace => f.write_str("NumpadBackspace"),
+                    Code::NumpadClear => f.write_str("NumpadClear"),
+                    Code::NumpadClearEntry => f.write_str("NumpadClearEntry"),
+                    Code::NumpadComma => f.write_str("NumpadComma"),
+                    Code::NumpadDecimal => f.write_str("NumpadDecimal"),
+                    Code::NumpadDivide => f.write_str("NumpadDivide"),
+                    Code::NumpadEnter => f.write_str("NumpadEnter"),
+                    Code::NumpadEqual => f.write_str("NumpadEqual"),
+                    Code::NumpadHash => f.write_str("NumpadHash"),
+                    Code::NumpadMemoryAdd => f.write_str("NumpadMemoryAdd"),
+                    Code::NumpadMemoryClear => f.write_str("NumpadMemoryClear"),
+                    Code::NumpadMemoryRecall => f.write_str("NumpadMemoryRecall"),
+                    Code::NumpadMemoryStore => f.write_str("NumpadMemoryStore"),
                     Code::NumpadMemorySubtract => {
                         f.write_str("NumpadMemorySubtract")
                     }
-                    Code::NumpadMultiply => {
-                        f.write_str("NumpadMultiply")
-                    }
-                    Code::NumpadParenLeft => {
-                        f.write_str("NumpadParenLeft")
-                    }
-                    Code::NumpadParenRight => {
-                        f.write_str("NumpadParenRight")
-                    }
-                    Code::NumpadStar => {
-                        f.write_str("NumpadStar")
-                    }
-                    Code::NumpadSubtract => {
-                        f.write_str("NumpadSubtract")
-                    }
+                    Code::NumpadMultiply => f.write_str("NumpadMultiply"),
+                    Code::NumpadParenLeft => f.write_str("NumpadParenLeft"),
+                    Code::NumpadParenRight => f.write_str("NumpadParenRight"),
+                    Code::NumpadStar => f.write_str("NumpadStar"),
+                    Code::NumpadSubtract => f.write_str("NumpadSubtract"),
                     Code::Escape => f.write_str("Escape"),
                     Code::Fn => f.write_str("Fn"),
                     Code::FnLock => f.write_str("FnLock"),
-                    Code::PrintScreen => {
-                        f.write_str("PrintScreen")
-                    }
-                    Code::ScrollLock => {
-                        f.write_str("ScrollLock")
-                    }
+                    Code::PrintScreen => f.write_str("PrintScreen"),
+                    Code::ScrollLock => f.write_str("ScrollLock"),
                     Code::Pause => f.write_str("Pause"),
-                    Code::BrowserBack => {
-                        f.write_str("BrowserBack")
-                    }
-                    Code::BrowserFavorites => {
-                        f.write_str("BrowserFavorites")
-                    }
-                    Code::BrowserForward => {
-                        f.write_str("BrowserForward")
-                    }
-                    Code::BrowserHome => {
-                        f.write_str("BrowserHome")
-                    }
-                    Code::BrowserRefresh => {
-                        f.write_str("BrowserRefresh")
-                    }
-                    Code::BrowserSearch => {
-                        f.write_str("BrowserSearch")
-                    }
-                    Code::BrowserStop => {
-                        f.write_str("BrowserStop")
-                    }
+                    Code::BrowserBack => f.write_str("BrowserBack"),
+                    Code::BrowserFavorites => f.write_str("BrowserFavorites"),
+                    Code::BrowserForward => f.write_str("BrowserForward"),
+                    Code::BrowserHome => f.write_str("BrowserHome"),
+                    Code::BrowserRefresh => f.write_str("BrowserRefresh"),
+                    Code::BrowserSearch => f.write_str("BrowserSearch"),
+                    Code::BrowserStop => f.write_str("BrowserStop"),
                     Code::Eject => f.write_str("Eject"),
-                    Code::LaunchApp1 => {
-                        f.write_str("LaunchApp1")
-                    }
-                    Code::LaunchApp2 => {
-                        f.write_str("LaunchApp2")
-                    }
-                    Code::LaunchMail => {
-                        f.write_str("LaunchMail")
-                    }
-                    Code::MediaPlayPause => {
-                        f.write_str("MediaPlayPause")
-                    }
-                    Code::MediaSelect => {
-                        f.write_str("MediaSelect")
-                    }
-                    Code::MediaStop => {
-                        f.write_str("MediaStop")
-                    }
-                    Code::MediaTrackNext => {
-                        f.write_str("MediaTrackNext")
-                    }
-                    Code::MediaTrackPrevious => {
-                        f.write_str("MediaTrackPrevious")
-                    }
+                    Code::LaunchApp1 => f.write_str("LaunchApp1"),
+                    Code::LaunchApp2 => f.write_str("LaunchApp2"),
+                    Code::LaunchMail => f.write_str("LaunchMail"),
+                    Code::MediaPlayPause => f.write_str("MediaPlayPause"),
+                    Code::MediaSelect => f.write_str("MediaSelect"),
+                    Code::MediaStop => f.write_str("MediaStop"),
+                    Code::MediaTrackNext => f.write_str("MediaTrackNext"),
+                    Code::MediaTrackPrevious => f.write_str("MediaTrackPrevious"),
                     Code::Power => f.write_str("Power"),
                     Code::Sleep => f.write_str("Sleep"),
-                    Code::AudioVolumeDown => {
-                        f.write_str("AudioVolumeDown")
-                    }
-                    Code::AudioVolumeMute => {
-                        f.write_str("AudioVolumeMute")
-                    }
-                    Code::AudioVolumeUp => {
-                        f.write_str("AudioVolumeUp")
-                    }
+                    Code::AudioVolumeDown => f.write_str("AudioVolumeDown"),
+                    Code::AudioVolumeMute => f.write_str("AudioVolumeMute"),
+                    Code::AudioVolumeUp => f.write_str("AudioVolumeUp"),
                     Code::WakeUp => f.write_str("WakeUp"),
                     Code::Hyper => f.write_str("Hyper"),
                     Code::Turbo => f.write_str("Turbo"),
@@ -681,13 +584,9 @@ impl Display for KeyMapKey {
                 },
                 Key::Character(s) => f.write_str(s),
             },
-            Self::Pointer(PointerButton::Auxiliary) => {
-                f.write_str("MouseMiddle")
-            }
+            Self::Pointer(PointerButton::Auxiliary) => f.write_str("MouseMiddle"),
             Self::Pointer(PointerButton::X2) => f.write_str("MouseForward"),
-            Self::Pointer(PointerButton::X1) => {
-                f.write_str("MouseBackward")
-            }
+            Self::Pointer(PointerButton::X1) => f.write_str("MouseBackward"),
             Self::Pointer(_) => f.write_str("MouseUnimplemented"),
         }
     }

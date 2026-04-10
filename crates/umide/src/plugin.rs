@@ -9,29 +9,28 @@ use floem::{
     IntoView, View,
     action::show_context_menu,
     ext_event::create_ext_action,
-    prelude::Modifiers,
     kurbo::Rect,
-    menu::{Menu},
+    menu::Menu,
+    prelude::Modifiers,
     reactive::{
-        RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, Effect,
-        Memo, Context,
+        Context, Effect, Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
     },
     style::CursorStyle,
     views::{
-        Decorators, Container, dyn_container, dyn_stack, Empty, img,
-        rich_text, Scroll, Stack, svg, Label,
+        Container, Decorators, Empty, Label, Scroll, Stack, dyn_container,
+        dyn_stack, img, rich_text, svg,
     },
 };
 use indexmap::IndexMap;
+use lsp_types::MessageType;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use umide_core::{command::EditCommand, directory::Directory, mode::Mode};
 use umide_proxy::plugin::{download_volt, volt_icon, wasi::find_all_volts};
 use umide_rpc::{
     core::{CoreNotification, CoreRpcHandler},
     plugin::{VoltID, VoltInfo, VoltMetadata},
 };
-use lsp_types::MessageType;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::{
     command::{CommandExecuted, CommandKind},
@@ -612,26 +611,30 @@ impl PluginData {
         let mut menu = Menu::new();
         if meta.version != latest.version {
             menu = menu
-                .item("Upgrade Plugin", |i| i.action({
-                    let plugin = self.clone();
-                    let info = latest.clone();
-                    move || {
-                        plugin.install_volt(info.clone());
-                    }
-                }))
+                .item("Upgrade Plugin", |i| {
+                    i.action({
+                        let plugin = self.clone();
+                        let info = latest.clone();
+                        move || {
+                            plugin.install_volt(info.clone());
+                        }
+                    })
+                })
                 .separator();
         }
         menu = menu
-            .item("Reload Plugin", |i| i.action({
-                let plugin = self.clone();
-                let meta = meta.clone();
-                move || {
-                    plugin.reload_volt(meta.clone());
-                }
-            }))
+            .item("Reload Plugin", |i| {
+                i.action({
+                    let plugin = self.clone();
+                    let meta = meta.clone();
+                    move || {
+                        plugin.reload_volt(meta.clone());
+                    }
+                })
+            })
             .separator()
-            .item("Enable", |i| i
-                .enabled(
+            .item("Enable", |i| {
+                i.enabled(
                     self.disabled
                         .with_untracked(|disabled| disabled.contains(&volt_id)),
                 )
@@ -642,9 +645,9 @@ impl PluginData {
                         plugin.enable_volt(volt.clone());
                     }
                 })
-            )
-            .item("Disable", |i| i
-                .enabled(
+            })
+            .item("Disable", |i| {
+                i.enabled(
                     self.disabled
                         .with_untracked(|disabled| !disabled.contains(&volt_id)),
                 )
@@ -655,10 +658,10 @@ impl PluginData {
                         plugin.disable_volt(volt.clone());
                     }
                 })
-            )
+            })
             .separator()
-            .item("Enable For Workspace", |i| i
-                .enabled(
+            .item("Enable For Workspace", |i| {
+                i.enabled(
                     self.workspace_disabled
                         .with_untracked(|disabled| disabled.contains(&volt_id)),
                 )
@@ -669,9 +672,9 @@ impl PluginData {
                         plugin.enable_volt_for_ws(volt.clone());
                     }
                 })
-            )
-            .item("Disable For Workspace", |i| i
-                .enabled(
+            })
+            .item("Disable For Workspace", |i| {
+                i.enabled(
                     self.workspace_disabled
                         .with_untracked(|disabled| !disabled.contains(&volt_id)),
                 )
@@ -682,14 +685,16 @@ impl PluginData {
                         plugin.disable_volt_for_ws(volt.clone());
                     }
                 })
-            )
+            })
             .separator()
-            .item("Uninstall", |i| i.action({
-                let plugin = self.clone();
-                move || {
-                    plugin.uninstall_volt(meta.clone());
-                }
-            }));
+            .item("Uninstall", |i| {
+                i.action({
+                    let plugin = self.clone();
+                    move || {
+                        plugin.uninstall_volt(meta.clone());
+                    }
+                })
+            });
         menu
     }
 }
@@ -967,25 +972,27 @@ pub fn plugin_info_view(plugin: PluginData, volt: VoltID) -> impl View {
                                     )
                                 },
                                 move |content| match content {
-                                    MarkdownContent::Text(text_layout) => Container::new(
-                                        rich_text(move || text_layout.clone())
-                                            .style(|s| s.width_full()),
-                                    )
-                                    .style(|s| s.width_full()),
+                                    MarkdownContent::Text(text_layout) => {
+                                        Container::new(
+                                            rich_text(move || text_layout.clone())
+                                                .style(|s| s.width_full()),
+                                        )
+                                        .style(|s| s.width_full())
+                                    }
                                     MarkdownContent::Image { .. } => {
                                         Container::new(Empty::new())
                                     }
                                     MarkdownContent::Separator => {
-                                        Container::new(Empty::new().style(move |s| {
-                                            s.width_full()
-                                                .margin_vert(5.0)
-                                                .height(1.0)
-                                                .background(
-                                                    config.get().color(
+                                        Container::new(Empty::new().style(
+                                            move |s| {
+                                                s.width_full()
+                                                    .margin_vert(5.0)
+                                                    .height(1.0)
+                                                    .background(config.get().color(
                                                         UmideColor::LAPCE_BORDER,
-                                                    ),
-                                                )
-                                        }))
+                                                    ))
+                                            },
+                                        ))
                                     }
                                 },
                             )

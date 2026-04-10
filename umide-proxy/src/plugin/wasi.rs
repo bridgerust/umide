@@ -13,12 +13,6 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use jsonrpc_lite::{Id, Params};
-use umide_core::directory::Directory;
-use umide_rpc::{
-    RpcError,
-    plugin::{PluginId, VoltID, VoltInfo, VoltMetadata},
-    style::LineStyle,
-};
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
     DocumentFilter, InitializeParams, InitializedParams,
@@ -29,6 +23,12 @@ use lsp_types::{
 use parking_lot::Mutex;
 use psp_types::{Notification, Request};
 use serde_json::Value;
+use umide_core::directory::Directory;
+use umide_rpc::{
+    RpcError,
+    plugin::{PluginId, VoltID, VoltInfo, VoltMetadata},
+    style::LineStyle,
+};
 use wasi_experimental_http_wasmtime::{HttpCtx, HttpState};
 use wasmtime_wasi::WasiCtxBuilder;
 

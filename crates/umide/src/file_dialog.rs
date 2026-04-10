@@ -9,7 +9,6 @@
 /// on a background thread with a local tokio runtime so the main thread stays free.
 ///
 /// On non-macOS platforms we delegate to floem's own `open_file` / `save_as`.
-
 use std::path::PathBuf;
 
 #[allow(unused_imports)]
@@ -31,7 +30,8 @@ pub fn pick_folder(
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
             let result = rt.block_on(async move {
-                let mut dialog = rfd::AsyncFileDialog::new().set_title("Choose a folder");
+                let mut dialog =
+                    rfd::AsyncFileDialog::new().set_title("Choose a folder");
                 if let Some(dir) = starting_directory {
                     dialog = dialog.set_directory(&dir);
                 }
@@ -76,7 +76,10 @@ pub fn pick_file(callback: impl Fn(Option<FileInfo>) + 'static) {
         });
     }
     #[cfg(not(target_os = "macos"))]
-    floem::action::open_file(FileDialogOptions::new().title("Choose a file"), callback);
+    floem::action::open_file(
+        FileDialogOptions::new().title("Choose a file"),
+        callback,
+    );
 }
 
 /// Open a save-file dialog. Replaces `floem::action::save_as` on macOS.

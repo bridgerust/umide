@@ -1,11 +1,11 @@
 use std::sync::Arc;
 // use wgpu;
-use floem::{
-    prelude::*,
-    peniko::{Blob, Color},
-    views::{canvas},
-};
 use floem::reactive::Memo;
+use floem::{
+    peniko::{Blob, Color},
+    prelude::*,
+    views::canvas,
+};
 use umide_emulator::decoder::DecodedFrame;
 
 pub fn video_view(
@@ -26,7 +26,11 @@ pub fn video_view(
                 }
                 umide_emulator::decoder::GpuFrame::Hardware(_) => {
                     // TODO: Implement hardware surface rendering
-                     let _blob = Blob::new(Arc::new(vec![0; (frame.width * frame.height * 4) as usize]));
+                    let _blob = Blob::new(Arc::new(vec![
+                        0;
+                        (frame.width * frame.height * 4)
+                            as usize
+                    ]));
                     //  Image::new(
                     //     blob,
                     //     ImageFormat::Rgba8,
@@ -48,11 +52,14 @@ pub fn video_view(
                 cx.fill(&rect, Color::BLACK, 0.0);
             }
         })
-            .on_click_stop(move |event| {
-                if let floem::event::Event::Pointer(PointerEvent::Down(PointerButtonEvent { state, .. })) = event {
-                    on_click(state.logical_point().x, state.logical_point().y);
-                }
-            })
+        .on_click_stop(move |event| {
+            if let floem::event::Event::Pointer(PointerEvent::Down(
+                PointerButtonEvent { state, .. },
+            )) = event
+            {
+                on_click(state.logical_point().x, state.logical_point().y);
+            }
+        }),
     )
-        .style(|s| s.width_full().height_full())
+    .style(|s| s.width_full().height_full())
 }

@@ -1,11 +1,11 @@
 use floem::text::{
     Attrs, AttrsList, FamilyOwned, LineHeightValue, Style, TextLayout, Weight,
 };
-use umide_core::{language::UmideLanguage, syntax::Syntax};
 use lapce_xi_rope::Rope;
 use lsp_types::MarkedString;
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
 use smallvec::SmallVec;
+use umide_core::{language::UmideLanguage, syntax::Syntax};
 
 use crate::config::{UmideConfig, color::UmideColor};
 

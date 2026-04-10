@@ -20,16 +20,6 @@ use anyhow::{Result, anyhow};
 use crossbeam_channel::{Receiver, Sender};
 use dyn_clone::DynClone;
 use flate2::read::GzDecoder;
-use umide_core::directory::Directory;
-use umide_rpc::{
-    RequestId, RpcError,
-    core::CoreRpcHandler,
-    dap_types::{self, DapId, RunDebugConfig, SourceBreakpoint, ThreadId},
-    plugin::{PluginId, VoltInfo, VoltMetadata},
-    proxy::ProxyRpcHandler,
-    style::LineStyle,
-    terminal::TermId,
-};
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
     CallHierarchyClientCapabilities, CallHierarchyIncomingCall,
@@ -76,6 +66,16 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value};
 use tar::Archive;
 use tracing::error;
+use umide_core::directory::Directory;
+use umide_rpc::{
+    RequestId, RpcError,
+    core::CoreRpcHandler,
+    dap_types::{self, DapId, RunDebugConfig, SourceBreakpoint, ThreadId},
+    plugin::{PluginId, VoltInfo, VoltMetadata},
+    proxy::ProxyRpcHandler,
+    style::LineStyle,
+    terminal::TermId,
+};
 
 use self::{
     catalog::PluginCatalog,

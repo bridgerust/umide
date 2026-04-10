@@ -17,6 +17,7 @@ use std::{
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use dispatch::Dispatcher;
+use tracing::error;
 use umide_core::{directory::Directory, meta};
 use umide_rpc::{
     RpcMessage,
@@ -25,7 +26,6 @@ use umide_rpc::{
     proxy::{ProxyMessage, ProxyNotification, ProxyRpcHandler},
     stdio::stdio_transport,
 };
-use tracing::error;
 
 #[derive(Parser)]
 #[clap(name = "Umide-proxy")]

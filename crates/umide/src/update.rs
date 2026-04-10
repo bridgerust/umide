@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
-use umide_core::{directory::Directory, meta};
 use serde::Deserialize;
+use umide_core::{directory::Directory, meta};
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct ReleaseInfo {

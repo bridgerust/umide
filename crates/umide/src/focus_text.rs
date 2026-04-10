@@ -5,7 +5,7 @@ use floem::{
         kurbo::{Point, Rect},
     },
     prop_extractor,
-    reactive::{Effect},
+    reactive::Effect,
     style::{FontFamily, FontSize, LineHeight, Style, TextColor},
     taffy::prelude::NodeId,
     text::{Attrs, AttrsList, FamilyOwned, TextLayout, Weight},

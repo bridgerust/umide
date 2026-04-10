@@ -6,7 +6,7 @@ use floem::{
     prelude::Modifiers,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate},
     style::{CursorStyle, Display, Position},
-    views::{Decorators, Container, Label, Stack, svg},
+    views::{Container, Decorators, Label, Stack, svg},
 };
 use umide_core::{command::FocusCommand, meta::VERSION, mode::Mode};
 

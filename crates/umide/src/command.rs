@@ -2,10 +2,13 @@ use std::{path::PathBuf, rc::Rc};
 
 pub use floem::views::editor::command::CommandExecuted;
 use floem::{
-    ViewId, prelude::Modifiers, peniko::kurbo::Vec2,
-    views::editor::command::Command,
+    ViewId, peniko::kurbo::Vec2, prelude::Modifiers, views::editor::command::Command,
 };
 use indexmap::IndexMap;
+use lsp_types::{CodeActionOrCommand, Position, WorkspaceEdit};
+use serde_json::Value;
+use strum::{EnumMessage, IntoEnumIterator};
+use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 use umide_core::command::{
     EditCommand, FocusCommand, MotionModeCommand, MoveCommand,
     MultiSelectionCommand, ScrollCommand,
@@ -16,10 +19,6 @@ use umide_rpc::{
     proxy::ProxyStatus,
     terminal::{TermId, TerminalProfile},
 };
-use lsp_types::{CodeActionOrCommand, Position, WorkspaceEdit};
-use serde_json::Value;
-use strum::{EnumMessage, IntoEnumIterator};
-use strum_macros::{Display, EnumIter, EnumString, IntoStaticStr};
 
 use crate::{
     alert::AlertButton,

@@ -10,12 +10,12 @@ use floem::{
         kurbo::{Point, Rect},
     },
     reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
+        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
     },
     views::editor::id::EditorId,
 };
-use umide_rpc::plugin::VoltID;
 use serde::{Deserialize, Serialize};
+use umide_rpc::plugin::VoltID;
 
 use crate::{
     config::{UmideConfig, color::UmideColor, icon::UmideIcons},

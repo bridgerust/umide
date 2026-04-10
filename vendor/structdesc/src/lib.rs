@@ -33,7 +33,8 @@ impl ReceiverField {
 impl ToTokens for Receiver {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let ident = &self.ident;
-        let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
+        let (impl_generics, ty_generics, where_clause) =
+            self.generics.split_for_impl();
         let fields = self.fields_to_emit();
         let descs = self.descs();
         let fields_len = fields.len();
@@ -77,7 +78,9 @@ impl Receiver {
 }
 
 #[proc_macro_derive(FieldNames, attributes(field_names))]
-pub fn derive_field_names(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_field_names(
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
     Receiver::from_derive_input(&parse_macro_input!(input as DeriveInput))
         .map(|receiver| quote!(#receiver))
         .unwrap_or_else(|err| err.write_errors())

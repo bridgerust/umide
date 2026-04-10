@@ -20,6 +20,13 @@ use grep_matcher::Matcher;
 use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{SearcherBuilder, sinks::UTF8};
 use indexmap::IndexMap;
+use lapce_xi_rope::Rope;
+use lsp_types::{
+    CancelParams, MessageType, NumberOrString, Position, Range, ShowMessageParams,
+    TextDocumentItem, Url,
+    notification::{Cancel, Notification},
+};
+use parking_lot::Mutex;
 use umide_rpc::{
     RequestId, RpcError,
     buffer::BufferId,
@@ -34,13 +41,6 @@ use umide_rpc::{
     style::{LineStyle, SemanticStyles},
     terminal::TermId,
 };
-use lapce_xi_rope::Rope;
-use lsp_types::{
-    CancelParams, MessageType, NumberOrString, Position, Range, ShowMessageParams,
-    TextDocumentItem, Url,
-    notification::{Cancel, Notification},
-};
-use parking_lot::Mutex;
 
 use crate::{
     buffer::{Buffer, get_mod_time, load_file},

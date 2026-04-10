@@ -11,8 +11,8 @@ use floem::{
 };
 use im::HashMap;
 use itertools::Itertools;
-use umide_rpc::file_line::FileLine;
 use lsp_types::{Location, SymbolKind, request::GotoImplementationResponse};
+use umide_rpc::file_line::FileLine;
 
 use super::position::PanelPosition;
 use crate::{

@@ -8,9 +8,9 @@ use std::{path::PathBuf, rc::Rc, str::FromStr, time::SystemTime};
 
 use anyhow::Result;
 use floem::{
-    prelude::{Key, Modifiers, NamedKey, PointerButtonEvent, KeyboardEvent},
-    ui_events::pointer::PointerButton,
+    prelude::{Key, KeyboardEvent, Modifiers, NamedKey, PointerButtonEvent},
     reactive::{RwSignal, Scope, SignalUpdate, SignalWith},
+    ui_events::pointer::PointerButton,
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -424,7 +424,11 @@ impl KeyPressData {
             mods.set(Modifiers::ALT, false);
         }
         if mods.is_empty() {
-            if let KeyInput::Keyboard { logical: Key::Character(c), .. } = &keypress.key {
+            if let KeyInput::Keyboard {
+                logical: Key::Character(c),
+                ..
+            } = &keypress.key
+            {
                 focus.receive_char(c);
                 self.count.set(None);
                 return KeyPressHandle {

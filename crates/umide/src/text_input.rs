@@ -1,25 +1,39 @@
 use std::{rc::Rc, sync::Arc};
 
 use floem::{
-    Renderer, View, ViewId, action::{set_ime_allowed, set_ime_cursor_area}, context::EventCx, event::{Event, EventListener, EventPropagation}, kurbo::Stroke, peniko::{
+    Renderer, View, ViewId,
+    action::{set_ime_allowed, set_ime_cursor_area},
+    context::EventCx,
+    event::{Event, EventListener, EventPropagation},
+    kurbo::Stroke,
+    peniko::{
         Color,
         kurbo::{Line, Point, Rect, Size, Vec2},
-    }, prop_extractor, reactive::{
-        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
-        Effect
-    }, style::{
-        CursorStyle, FontFamily, FontSize, FontStyle, FontWeight, LineHeight, Style, TextColor
-    }, taffy::prelude::NodeId, text::{Attrs, AttrsList, FamilyOwned, TextLayout}, ui_events::{
+    },
+    prop_extractor,
+    reactive::{
+        Effect, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate,
+        SignalWith,
+    },
+    style::{
+        CursorStyle, FontFamily, FontSize, FontStyle, FontWeight, LineHeight, Style,
+        TextColor,
+    },
+    taffy::prelude::NodeId,
+    text::{Attrs, AttrsList, FamilyOwned, TextLayout},
+    ui_events::{
         keyboard::KeyState,
         pointer::{PointerButton, PointerEvent},
-    }, unit::PxPct, views::Decorators
+    },
+    unit::PxPct,
+    views::Decorators,
 };
+use lapce_xi_rope::Rope;
 use umide_core::{
     buffer::rope_text::RopeText,
     cursor::{Cursor, CursorAffinity, CursorMode},
     selection::Selection,
 };
-use lapce_xi_rope::Rope;
 
 use crate::{
     config::{UmideConfig, color::UmideColor},
@@ -652,20 +666,35 @@ impl View for TextInput {
                 let pos = pointer.state.logical_point();
                 let offset = self.hit_index(cx, pos);
                 self.cursor().update(|cursor| {
-                    cursor.set_insert(Selection::caret(offset, CursorAffinity::Forward));
+                    cursor.set_insert(Selection::caret(
+                        offset,
+                        CursorAffinity::Forward,
+                    ));
                 });
-                if pointer.button == Some(PointerButton::Primary) && pointer.state.count == 2 {
+                if pointer.button == Some(PointerButton::Primary)
+                    && pointer.state.count == 2
+                {
                     let offset = self.hit_index(cx, pos);
                     let (start, end) = self
                         .doc()
                         .buffer
                         .with_untracked(|buffer| buffer.select_word(offset));
                     self.cursor().update(|cursor| {
-                        cursor.set_insert(Selection::region(start, end, CursorAffinity::Forward));
+                        cursor.set_insert(Selection::region(
+                            start,
+                            end,
+                            CursorAffinity::Forward,
+                        ));
                     });
-                } else if pointer.button == Some(PointerButton::Primary) && pointer.state.count == 3 {
+                } else if pointer.button == Some(PointerButton::Primary)
+                    && pointer.state.count == 3
+                {
                     self.cursor().update(|cursor| {
-                        cursor.set_insert(Selection::region(0, self.content.len(), CursorAffinity::Forward));
+                        cursor.set_insert(Selection::region(
+                            0,
+                            self.content.len(),
+                            CursorAffinity::Forward,
+                        ));
                     });
                 }
                 cx.update_active(self.id);
@@ -675,7 +704,12 @@ impl View for TextInput {
                     let pos = pointer.current.logical_point();
                     let offset = self.hit_index(cx, pos);
                     self.cursor().update(|cursor| {
-                        cursor.set_offset(offset, CursorAffinity::Forward, true, false);
+                        cursor.set_offset(
+                            offset,
+                            CursorAffinity::Forward,
+                            true,
+                            false,
+                        );
                     });
                 }
             }

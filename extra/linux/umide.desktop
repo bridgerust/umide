@@ -8,7 +8,7 @@ Categories=Development;IDE;
 GenericName=Code Editor
 StartupWMClass=umide
 
-Icon=dev.lapce.lapce
+Icon=dev.umide.umide
 Exec=umide %F
 Terminal=false
 MimeType=text/plain;inode/directory;
@@ -17,4 +17,4 @@ Actions=new-window;
 [Desktop Action new-window]
 Name=New Window
 Exec=umide --new %F
-Icon=dev.lapce.lapce
+Icon=dev.umide.umide

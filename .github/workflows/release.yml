@@ -265,8 +265,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - meta
-      - linux
-      - windows
       - macos
     permissions:
       contents: write

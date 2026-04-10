@@ -256,7 +256,7 @@
   <section class="hero">
     <div class="badge">v0.1.0 — Now Available for macOS</div>
     <h1>The IDE built for<br><span>mobile developers</span></h1>
-    <p>UMIDE embeds Android Emulator and iOS Simulator directly as panels — no more context switching between tools.</p>
+    <p>A fully-fledged IDE with Android Emulator and iOS Simulator embedded directly as panels — no more context switching between tools.</p>
     <div class="hero-actions">
       <a class="btn btn-primary" href="https://github.com/bridgerust/umide/releases/latest">
         ↓ Download for macOS
@@ -323,12 +323,45 @@
     <p>Built with</p>
     <div class="tech-badges">
       <span class="tech-badge">Rust</span>
+      <span class="tech-badge">C++</span>
+      <span class="tech-badge">Objective-C++</span>
       <span class="tech-badge">Floem</span>
       <span class="tech-badge">WGPU</span>
       <span class="tech-badge">LSP</span>
       <span class="tech-badge">WASI</span>
     </div>
   </div>
+
+  <!-- BUILT ON LAPCE -->
+  <section class="features" style="padding-top: 0;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 40px; display: flex; gap: 32px; align-items: center; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 240px;">
+        <p style="font-size: 12px; font-weight: 600; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px;">Built on Lapce</p>
+        <h3 style="font-size: 22px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.3px;">A fully-fledged IDE, not a viewer</h3>
+        <p style="font-size: 15px; color: var(--text-dim); line-height: 1.7;">UMIDE is built on top of <a href="https://github.com/lapce/lapce">Lapce</a>, a production-grade Rust editor. You get everything Lapce offers — LSP, vim mode, remote development, plugin system, split editors, and a built-in terminal — with Android and iOS emulators embedded directly alongside your code.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; min-width: 200px;">
+        <div style="display:flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-dim);">
+          <span style="color: var(--accent);">✓</span> LSP &amp; code intelligence
+        </div>
+        <div style="display:flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-dim);">
+          <span style="color: var(--accent);">✓</span> Vim mode
+        </div>
+        <div style="display:flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-dim);">
+          <span style="color: var(--accent);">✓</span> Remote development
+        </div>
+        <div style="display:flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-dim);">
+          <span style="color: var(--accent);">✓</span> Split editors &amp; tabs
+        </div>
+        <div style="display:flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-dim);">
+          <span style="color: var(--accent);">✓</span> Built-in terminal
+        </div>
+        <div style="display:flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-dim);">
+          <span style="color: var(--accent);">✓</span> Android &amp; iOS emulators
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- CTA -->
   <section class="cta">
@@ -341,13 +374,13 @@
 
   <!-- FOOTER -->
   <footer>
-    <span>© 2026 UMIDE contributors</span>
+    <span>© 2026 UMIDE contributors · Built on <a href="https://github.com/lapce/lapce">Lapce</a>, © 2023 Lapce contributors</span>
     <div style="display:flex; gap: 20px;">
       <a href="https://github.com/bridgerust/umide">GitHub</a>
       <a href="https://github.com/bridgerust/umide/releases">Releases</a>
       <a href="https://github.com/bridgerust/umide/issues">Issues</a>
     </div>
-    <span>Released under the Apache License 2.0</span>
+    <span>Apache License 2.0</span>
   </footer>
 
   <script>

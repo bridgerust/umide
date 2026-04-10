@@ -30,8 +30,8 @@
     <content_rating type="oars-1.1" />
     <launchable type="desktop-id">dev.umide.umide.desktop</launchable>
     <releases>
-        <release version="0.4.6" date="2026-01-21">
-            <url type="details">https://github.com/bridgerust/umide/releases/tag/v0.4.6</url>
+        <release version="0.1.0" date="2026-01-21">
+            <url type="details">https://github.com/bridgerust/umide/releases/tag/v0.1.0</url>
         </release>
     </releases>
 </component>

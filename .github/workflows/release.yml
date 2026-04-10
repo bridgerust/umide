@@ -3,15 +3,19 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*"
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag (for example: v1.0.0)"
+        description: "Release tag (for example: v0.1.0)"
         required: true
   pull_request:
     paths:
       - ".github/workflows/release.yml"
+      - "extra/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}

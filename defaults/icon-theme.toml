@@ -4,7 +4,7 @@
 name = "Umide Codicons"
 
 [icon-theme.ui]
-"logo" = "lapce_logo.svg"
+"logo" = "umide_logo.svg"
 "menu" = "menu.svg"
 "link" = "link.svg"
 "error" = "error.svg"

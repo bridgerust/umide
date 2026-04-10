@@ -12,7 +12,7 @@ use std::{
 
 use alacritty_terminal::vte::ansi::Handler;
 use floem::{
-    ViewId, action::{TimerToken, open_file, remove_overlay}, ext_event::create_ext_action, file::FileDialogOptions, kurbo::Size, peniko::kurbo::{Point, Rect, Vec2}, prelude::{Modifiers, SignalTrack}, reactive::{
+    ViewId, action::{TimerToken, remove_overlay}, ext_event::create_ext_action, kurbo::Size, peniko::kurbo::{Point, Rect, Vec2}, prelude::{Modifiers, SignalTrack}, reactive::{
         Context, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, WriteSignal
     }, receiver_signal::ChannelSignal, text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout}, views::editor::core::buffer::rope_text::RopeText
 };
@@ -276,7 +276,7 @@ impl WindowTabData {
         window_common: Rc<WindowCommonData>,
     ) -> Self {
         let cx = cx.create_child();
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
 
         let disabled_volts = db.get_disabled_volts().unwrap_or_default();
         let workspace_disabled_volts = db
@@ -648,7 +648,7 @@ impl WindowTabData {
     }
 
     pub fn reload_config(&self) {
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
 
         let disabled_volts = db.get_disabled_volts().unwrap_or_default();
         let workspace_disabled_volts = db
@@ -752,13 +752,13 @@ impl WindowTabData {
             OpenFolder => {
                 if !self.workspace.kind.is_remote() {
                     let window_command = self.common.window_common.window_command;
-                    let mut options = FileDialogOptions::new().title("Choose a folder").select_directories();
-                    options = if let Some(parent) = self.workspace.path.as_ref().and_then(|x| x.parent()) {
-                        options.force_starting_directory(parent)
-                    } else {
-                        options
-                    };
-                    open_file(options, move |file| {
+                    let starting_directory = self
+                        .workspace
+                        .path
+                        .as_ref()
+                        .and_then(|x| x.parent())
+                        .map(|p| p.to_path_buf());
+                    crate::file_dialog::pick_folder(starting_directory, move |file| {
                         if let Some(mut file) = file {
                             let workspace = UmideWorkspace {
                                 kind: UmideWorkspaceType::Local,
@@ -793,8 +793,7 @@ impl WindowTabData {
             OpenFile => {
                 if !self.workspace.kind.is_remote() {
                     let internal_command = self.common.internal_command;
-                    let options = FileDialogOptions::new().title("Choose a file");
-                    open_file(options, move |file| {
+                    crate::file_dialog::pick_file(move |file| {
                         if let Some(mut file) = file {
                             internal_command.send(InternalCommand::OpenFile {
                                 path: if let Some(path) = file.path.pop() {

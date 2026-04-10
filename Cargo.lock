@@ -8281,6 +8281,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest 0.13.1",
+ "rfd",
  "semver",
  "serde",
  "serde_json",

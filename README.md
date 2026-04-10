@@ -6,6 +6,16 @@
 
 UMIDE is a unified IDE for cross-platform mobile development (React Native + Flutter), built in Rust. It embeds Android Emulator and iOS Simulator directly as panels, eliminating context-switching for mobile developers.
 
+## Screenshots
+
+![Android and iOS emulators running side by side](screenshots/emulator-android-ios-running.png)
+
+![Android emulator running](screenshots/emulator-android-running.png)
+
+![Android emulator home screen](screenshots/emulator-android-home.png)
+
+![Emulator device list](screenshots/emulator-device-list.png)
+
 ## Features
 
 - **Unified Mobile Environment**: Android Emulator and iOS Simulator embedded directly in the IDE.

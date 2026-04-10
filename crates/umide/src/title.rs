@@ -1,12 +1,13 @@
 use std::{rc::Rc, sync::Arc};
 
 use floem::{
-    View,
+    AnyView, IntoView, View, ViewId,
+    action::{add_overlay, remove_overlay},
     event::EventListener,
     menu::Menu,
-    peniko::Color,
+    peniko::{Color, kurbo::Rect},
     reactive::{
-        Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith,
+        Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
     },
     style::{AlignItems, CursorStyle, JustifyContent},
     views::{Container, Decorators, Empty, Label, Stack, drag_window_area, svg},
@@ -35,6 +36,173 @@ fn left(
 ) -> impl View {
     let is_local = workspace.kind.is_local();
     let is_macos = cfg!(target_os = "macos");
+
+    // Build the remote button base view.
+    let remote_btn = tooltip_label(
+        config,
+        Container::new(svg(move || config.get().ui_svg(UmideIcons::REMOTE)).style(
+            move |s| {
+                let config = config.get();
+                let size = (config.ui.icon_size() as f32 + 2.0).min(30.0);
+                s.size(size, size).color(if is_local {
+                    config.color(UmideColor::LAPCE_ICON_ACTIVE)
+                } else {
+                    match proxy_status.get() {
+                        Some(_) => Color::WHITE,
+                        None => config.color(UmideColor::LAPCE_ICON_ACTIVE),
+                    }
+                })
+            },
+        )),
+        || "Connect to Remote",
+    );
+
+    // On macOS popout_menu uses NSMenu.popUpMenuPositioningItem which runs a nested
+    // AppKit event loop that conflicts with winit's event loop → clean crash.
+    // Use a floem overlay instead.
+    #[cfg(target_os = "macos")]
+    let remote_btn = {
+        let cx = Scope::current();
+        let icon_rect = cx.create_rw_signal(Rect::ZERO);
+        let overlay_id = cx.create_rw_signal(None::<ViewId>);
+        remote_btn
+            .on_resize(move |rect| { icon_rect.set(rect); })
+            .on_click_stop(move |_| {
+                if let Some(id) = overlay_id.get_untracked() {
+                    remove_overlay(id);
+                    overlay_id.set(None);
+                    return;
+                }
+                let rect = icon_rect.get_untracked();
+                let show_disconnect = !is_local
+                    && proxy_status.get_untracked().is_some_and(|p| {
+                        matches!(p, ProxyStatus::Connecting | ProxyStatus::Connected)
+                    });
+                let vid = add_overlay(
+                    Stack::new((
+                        Label::new("Connect to SSH Host".to_string())
+                            .on_click_stop(move |_| {
+                                if let Some(id) = overlay_id.get_untracked() {
+                                    remove_overlay(id);
+                                    overlay_id.set(None);
+                                }
+                                workbench_command.send(UmideWorkbenchCommand::ConnectSshHost);
+                            })
+                            .style(move |s| {
+                                let config = config.get();
+                                s.padding_horiz(12.0)
+                                    .padding_vert(6.0)
+                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .cursor(CursorStyle::Pointer)
+                                    .hover(|s| s.background(
+                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                                    ))
+                            }),
+                        Label::new("Disconnect remote".to_string())
+                            .on_click_stop(move |_| {
+                                if let Some(id) = overlay_id.get_untracked() {
+                                    remove_overlay(id);
+                                    overlay_id.set(None);
+                                }
+                                workbench_command.send(UmideWorkbenchCommand::DisconnectRemote);
+                            })
+                            .style(move |s| {
+                                let config = config.get();
+                                s.padding_horiz(12.0)
+                                    .padding_vert(6.0)
+                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .cursor(CursorStyle::Pointer)
+                                    .apply_if(!show_disconnect, |s| s.hide())
+                                    .hover(|s| s.background(
+                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                                    ))
+                            }),
+                    ))
+                    .on_event_stop(EventListener::FocusLost, move |_| {
+                        if let Some(id) = overlay_id.get_untracked() {
+                            remove_overlay(id);
+                            overlay_id.set(None);
+                        }
+                    })
+                    .style(move |s| {
+                        let config = config.get();
+                        s.flex_col()
+                            .inset_top(rect.y1)
+                            .inset_left(rect.x0)
+                            .background(config.color(UmideColor::PANEL_BACKGROUND))
+                            .border(1.0)
+                            .border_color(config.color(UmideColor::LAPCE_BORDER))
+                            .border_radius(6.0)
+                            .min_width(180.0)
+                            .focusable(true)
+                    }),
+                );
+                overlay_id.set(Some(vid));
+                vid.request_focus();
+            })
+    };
+    #[cfg(not(target_os = "macos"))]
+    let remote_btn = remote_btn.popout_menu(move || {
+        #[allow(unused_mut)]
+        let mut menu = Menu::new()
+            .item("Connect to SSH Host", |i| i.action(move || {
+                workbench_command.send(UmideWorkbenchCommand::ConnectSshHost);
+            }));
+        if !is_local
+            && proxy_status.get().is_some_and(|p| {
+                matches!(p, ProxyStatus::Connecting | ProxyStatus::Connected)
+            })
+        {
+            menu = menu.item("Disconnect remote", |i| i.action(
+                move || {
+                    workbench_command.send(UmideWorkbenchCommand::DisconnectRemote);
+                },
+            ));
+        }
+        #[cfg(windows)]
+        {
+            menu = menu.item("Connect to WSL Host", |i| i.action(
+                move || {
+                    workbench_command.send(UmideWorkbenchCommand::ConnectWslHost);
+                },
+            ));
+        }
+        menu
+    });
+    let remote_btn = remote_btn.style(move |s| {
+        let config = config.get();
+        let color = if is_local {
+            Color::TRANSPARENT
+        } else {
+            match proxy_status.get() {
+                Some(ProxyStatus::Connected) => {
+                    config.color(UmideColor::LAPCE_REMOTE_CONNECTED)
+                }
+                Some(ProxyStatus::Connecting) => {
+                    config.color(UmideColor::LAPCE_REMOTE_CONNECTING)
+                }
+                Some(ProxyStatus::Disconnected) => {
+                    config.color(UmideColor::LAPCE_REMOTE_DISCONNECTED)
+                }
+                None => Color::TRANSPARENT,
+            }
+        };
+        s.height_pct(100.0)
+            .padding_horiz(10.0)
+            .items_center()
+            .background(color)
+            .hover(|s| {
+                s.cursor(CursorStyle::Pointer).background(
+                    config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                )
+            })
+            .active(|s| {
+                s.cursor(CursorStyle::Pointer).background(
+                    config.color(UmideColor::PANEL_HOVERED_ACTIVE_BACKGROUND),
+                )
+            })
+    });
+
     Stack::new((
         Empty::new().style(move |s| {
             let should_hide = if is_macos {
@@ -65,87 +233,7 @@ fn left(
                 .margin_right(6.0)
                 .apply_if(is_macos, |s| s.hide())
         }),
-        tooltip_label(
-            config,
-            Container::new(svg(move || config.get().ui_svg(UmideIcons::REMOTE)).style(
-                move |s| {
-                    let config = config.get();
-                    let size = (config.ui.icon_size() as f32 + 2.0).min(30.0);
-                    s.size(size, size).color(if is_local {
-                        config.color(UmideColor::LAPCE_ICON_ACTIVE)
-                    } else {
-                        match proxy_status.get() {
-                            Some(_) => Color::WHITE,
-                            None => config.color(UmideColor::LAPCE_ICON_ACTIVE),
-                        }
-                    })
-                },
-            )),
-            || "Connect to Remote",
-        )
-        .popout_menu(move || {
-            #[allow(unused_mut)]
-            let mut menu = Menu::new()
-                .item("Connect to SSH Host", |i| i.action(move || {
-                    workbench_command.send(UmideWorkbenchCommand::ConnectSshHost);
-                }));
-
-            if !is_local
-                && proxy_status.get().is_some_and(|p| {
-                    matches!(p, ProxyStatus::Connecting | ProxyStatus::Connected)
-                })
-            {
-                menu = menu.item("Disconnect remote", |i| i.action(
-                    move || {
-                        workbench_command
-                            .send(UmideWorkbenchCommand::DisconnectRemote);
-                    },
-                ));
-            }
-            #[cfg(windows)]
-            {
-                menu = menu.item("Connect to WSL Host", |i| i.action(
-                    move || {
-                        workbench_command
-                            .send(UmideWorkbenchCommand::ConnectWslHost);
-                    },
-                ));
-            }
-            menu
-        })
-        .style(move |s| {
-            let config = config.get();
-            let color = if is_local {
-                Color::TRANSPARENT
-            } else {
-                match proxy_status.get() {
-                    Some(ProxyStatus::Connected) => {
-                        config.color(UmideColor::LAPCE_REMOTE_CONNECTED)
-                    }
-                    Some(ProxyStatus::Connecting) => {
-                        config.color(UmideColor::LAPCE_REMOTE_CONNECTING)
-                    }
-                    Some(ProxyStatus::Disconnected) => {
-                        config.color(UmideColor::LAPCE_REMOTE_DISCONNECTED)
-                    }
-                    None => Color::TRANSPARENT,
-                }
-            };
-            s.height_pct(100.0)
-                .padding_horiz(10.0)
-                .items_center()
-                .background(color)
-                .hover(|s| {
-                    s.cursor(CursorStyle::Pointer).background(
-                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                    )
-                })
-                .active(|s| {
-                    s.cursor(CursorStyle::Pointer).background(
-                        config.color(UmideColor::PANEL_HOVERED_ACTIVE_BACKGROUND),
-                    )
-                })
-        }),
+        remote_btn,
         drag_window_area(Empty::new())
             .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
     ))
@@ -199,23 +287,113 @@ fn middle(
         .style(move |s| s.margin_right(6.0))
     };
 
-    let open_folder = move || {
-        not_clickable_icon(
-            || UmideIcons::PALETTE_MENU,
-            || false,
-            || false,
-            || "Open Folder / Recent Workspace",
-            config,
-        )
-        .popout_menu(move || {
-            Menu::new()
-                .item("Open Folder", |i| i.action(move || {
-                    workbench_command.send(UmideWorkbenchCommand::OpenFolder);
-                }))
-                .item("Open Recent Workspace", |i| i.action(move || {
-                    workbench_command.send(UmideWorkbenchCommand::PaletteWorkspace);
-                }))
-        })
+    let open_folder = move || -> AnyView {
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, popout_menu uses NSMenu.popUpMenuPositioningItem which runs a
+            // nested AppKit event loop that conflicts with winit's event loop (clean crash).
+            // Use a floem overlay instead.
+            let cx = Scope::current();
+            let icon_rect = cx.create_rw_signal(Rect::ZERO);
+            let overlay_id = cx.create_rw_signal(None::<ViewId>);
+            not_clickable_icon(
+                || UmideIcons::PALETTE_MENU,
+                || false,
+                || false,
+                || "Open Folder / Recent Workspace",
+                config,
+            )
+            .on_resize(move |rect| { icon_rect.set(rect); })
+            .on_click_stop(move |_| {
+                if let Some(id) = overlay_id.get_untracked() {
+                    remove_overlay(id);
+                    overlay_id.set(None);
+                    return;
+                }
+                let rect = icon_rect.get_untracked();
+                let vid = add_overlay(
+                    Stack::new((
+                        Label::new("Open Folder".to_string())
+                            .on_click_stop(move |_| {
+                                if let Some(id) = overlay_id.get_untracked() {
+                                    remove_overlay(id);
+                                    overlay_id.set(None);
+                                }
+                                workbench_command.send(UmideWorkbenchCommand::OpenFolder);
+                            })
+                            .style(move |s| {
+                                let config = config.get();
+                                s.padding_horiz(12.0)
+                                    .padding_vert(6.0)
+                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .cursor(CursorStyle::Pointer)
+                                    .hover(|s| s.background(
+                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                                    ))
+                            }),
+                        Label::new("Open Recent Workspace".to_string())
+                            .on_click_stop(move |_| {
+                                if let Some(id) = overlay_id.get_untracked() {
+                                    remove_overlay(id);
+                                    overlay_id.set(None);
+                                }
+                                workbench_command.send(UmideWorkbenchCommand::PaletteWorkspace);
+                            })
+                            .style(move |s| {
+                                let config = config.get();
+                                s.padding_horiz(12.0)
+                                    .padding_vert(6.0)
+                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .cursor(CursorStyle::Pointer)
+                                    .hover(|s| s.background(
+                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                                    ))
+                            }),
+                    ))
+                    .on_event_stop(EventListener::FocusLost, move |_| {
+                        if let Some(id) = overlay_id.get_untracked() {
+                            remove_overlay(id);
+                            overlay_id.set(None);
+                        }
+                    })
+                    .style(move |s| {
+                        let config = config.get();
+                        s.flex_col()
+                            .inset_top(rect.y1)
+                            .inset_left(rect.x0)
+                            .background(config.color(UmideColor::PANEL_BACKGROUND))
+                            .border(1.0)
+                            .border_color(config.color(UmideColor::LAPCE_BORDER))
+                            .border_radius(6.0)
+                            .min_width(180.0)
+                            .focusable(true)
+                    }),
+                );
+                overlay_id.set(Some(vid));
+                vid.request_focus();
+            })
+            .into_any()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            not_clickable_icon(
+                || UmideIcons::PALETTE_MENU,
+                || false,
+                || false,
+                || "Open Folder / Recent Workspace",
+                config,
+            )
+            .popout_menu(move || {
+                Menu::new()
+                    .item("Open Folder", |i| i.action(move || {
+                        workbench_command.send(UmideWorkbenchCommand::OpenFolder);
+                    }))
+                    .item("Open Recent Workspace", |i| i.action(move || {
+                        workbench_command.send(UmideWorkbenchCommand::PaletteWorkspace);
+                    }))
+            })
+            .into_any()
+        }
     };
 
     Stack::new((
@@ -328,69 +506,193 @@ fn right(
 
     let has_update = move || latest_version.with(|v| v.is_some());
 
+    // Build settings icon; on macOS use overlay to avoid nested event loop crash.
+    let settings_icon = not_clickable_icon(
+        || UmideIcons::SETTINGS,
+        || false,
+        || false,
+        || "Settings",
+        config,
+    );
+    #[cfg(target_os = "macos")]
+    let settings_icon = {
+        let cx = Scope::current();
+        let icon_rect = cx.create_rw_signal(Rect::ZERO);
+        let overlay_id = cx.create_rw_signal(None::<ViewId>);
+        settings_icon
+            .on_resize(move |rect| { icon_rect.set(rect); })
+            .on_click_stop(move |_| {
+                if let Some(id) = overlay_id.get_untracked() {
+                    remove_overlay(id);
+                    overlay_id.set(None);
+                    return;
+                }
+                let rect = icon_rect.get_untracked();
+                // Determine update label/action at open time
+                let update_label = if let Some(v) = latest_version.get_untracked() {
+                    if update_in_progress.get_untracked() {
+                        format!("Update in progress ({v})")
+                    } else {
+                        format!("Restart to update ({v})")
+                    }
+                } else {
+                    "No update available".to_string()
+                };
+                let update_clickable = latest_version.get_untracked().is_some()
+                    && !update_in_progress.get_untracked();
+                let divider = move || Empty::new().style(move |s| {
+                    let config = config.get();
+                    s.height(1.0).width_pct(100.0).margin_vert(2.0)
+                        .background(config.color(UmideColor::LAPCE_BORDER))
+                });
+                let item = move |text: &'static str, action: Box<dyn Fn()>| {
+                    Label::new(text.to_string())
+                        .on_click_stop(move |_| {
+                            if let Some(id) = overlay_id.get_untracked() {
+                                remove_overlay(id);
+                                overlay_id.set(None);
+                            }
+                            action();
+                        })
+                        .style(move |s| {
+                            let config = config.get();
+                            s.padding_horiz(12.0).padding_vert(6.0)
+                                .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                .cursor(CursorStyle::Pointer)
+                                .hover(|s| s.background(
+                                    config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                                ))
+                        })
+                };
+                let vid = add_overlay(
+                    Stack::new((
+                        item("Command Palette", Box::new(move || {
+                            workbench_command.send(UmideWorkbenchCommand::PaletteCommand);
+                        })),
+                        divider(),
+                        item("Open Settings", Box::new(move || {
+                            workbench_command.send(UmideWorkbenchCommand::OpenSettings);
+                        })),
+                        item("Open Keyboard Shortcuts", Box::new(move || {
+                            workbench_command.send(UmideWorkbenchCommand::OpenKeyboardShortcuts);
+                        })),
+                        item("Open Theme Color Settings", Box::new(move || {
+                            workbench_command.send(UmideWorkbenchCommand::OpenThemeColorSettings);
+                        })),
+                        divider(),
+                        Label::new(update_label)
+                            .on_click_stop(move |_| {
+                                if !update_clickable { return; }
+                                if let Some(id) = overlay_id.get_untracked() {
+                                    remove_overlay(id);
+                                    overlay_id.set(None);
+                                }
+                                workbench_command.send(UmideWorkbenchCommand::RestartToUpdate);
+                            })
+                            .style(move |s| {
+                                let config = config.get();
+                                s.padding_horiz(12.0).padding_vert(6.0)
+                                    .color(if update_clickable {
+                                        config.color(UmideColor::EDITOR_FOREGROUND)
+                                    } else {
+                                        config.color(UmideColor::EDITOR_DIM)
+                                    })
+                                    .apply_if(update_clickable, |s| {
+                                        s.cursor(CursorStyle::Pointer).hover(|s| s.background(
+                                            config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                                        ))
+                                    })
+                            }),
+                        divider(),
+                        item("About UMIDE", Box::new(move || {
+                            workbench_command.send(UmideWorkbenchCommand::ShowAbout);
+                        })),
+                    ))
+                    .on_event_stop(EventListener::FocusLost, move |_| {
+                        if let Some(id) = overlay_id.get_untracked() {
+                            remove_overlay(id);
+                            overlay_id.set(None);
+                        }
+                    })
+                    .style(move |s| {
+                        let config = config.get();
+                        // Right-align menu to the icon's right edge
+                        let menu_width = 220.0_f64;
+                        let left = (rect.x1 - menu_width).max(0.0);
+                        s.flex_col()
+                            .inset_top(rect.y1)
+                            .inset_left(left)
+                            .background(config.color(UmideColor::PANEL_BACKGROUND))
+                            .border(1.0)
+                            .border_color(config.color(UmideColor::LAPCE_BORDER))
+                            .border_radius(6.0)
+                            .min_width(menu_width)
+                            .focusable(true)
+                    }),
+                );
+                overlay_id.set(Some(vid));
+                vid.request_focus();
+            })
+    };
+    #[cfg(not(target_os = "macos"))]
+    let settings_icon = settings_icon.popout_menu(move || {
+        Menu::new()
+            .item("Command Palette", |i| i.action(move || {
+                workbench_command.send(UmideWorkbenchCommand::PaletteCommand)
+            }))
+            .separator()
+            .item("Open Settings", |i| i.action(move || {
+                workbench_command.send(UmideWorkbenchCommand::OpenSettings)
+            }))
+            .item("Open Keyboard Shortcuts", |i| i.action(
+                move || {
+                    workbench_command
+                        .send(UmideWorkbenchCommand::OpenKeyboardShortcuts)
+                },
+            ))
+            .item("Open Theme Color Settings", |i| i.action(
+                move || {
+                    workbench_command
+                        .send(UmideWorkbenchCommand::OpenThemeColorSettings)
+                },
+            ))
+            .separator()
+            .item(
+                if let Some(v) = latest_version.get_untracked() {
+                    if update_in_progress.get_untracked() {
+                        format!("Update in progress ({v})")
+                    } else {
+                        format!("Restart to update ({v})")
+                    }
+                } else {
+                    "No update available".to_string()
+                },
+                |i| {
+                    if latest_version.get_untracked().is_some() {
+                        if update_in_progress.get_untracked() {
+                            i.enabled(false)
+                        } else {
+                            i.action(move || {
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::RestartToUpdate)
+                            })
+                        }
+                    } else {
+                        i.enabled(false)
+                    }
+                }
+            )
+            .separator()
+            .item("About UMIDE", |i| i.action(move || {
+                workbench_command.send(UmideWorkbenchCommand::ShowAbout)
+            }))
+    });
+
     Stack::new((
         drag_window_area(Empty::new())
             .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
         Stack::new((
-            not_clickable_icon(
-                || UmideIcons::SETTINGS,
-                || false,
-                || false,
-                || "Settings",
-                config,
-            )
-            .popout_menu(move || {
-                Menu::new()
-                    .item("Command Palette", |i| i.action(move || {
-                        workbench_command.send(UmideWorkbenchCommand::PaletteCommand)
-                    }))
-                    .separator()
-                    .item("Open Settings", |i| i.action(move || {
-                        workbench_command.send(UmideWorkbenchCommand::OpenSettings)
-                    }))
-                    .item("Open Keyboard Shortcuts", |i| i.action(
-                        move || {
-                            workbench_command
-                                .send(UmideWorkbenchCommand::OpenKeyboardShortcuts)
-                        },
-                    ))
-                    .item("Open Theme Color Settings", |i| i.action(
-                        move || {
-                            workbench_command
-                                .send(UmideWorkbenchCommand::OpenThemeColorSettings)
-                        },
-                    ))
-                    .separator()
-                    .item(
-                        if let Some(v) = latest_version.get_untracked() {
-                            if update_in_progress.get_untracked() {
-                                format!("Update in progress ({v})")
-                            } else {
-                                format!("Restart to update ({v})")
-                            }
-                        } else {
-                            "No update available".to_string()
-                        },
-                        |i| {
-                            if latest_version.get_untracked().is_some() {
-                                if update_in_progress.get_untracked() {
-                                    i.enabled(false)
-                                } else {
-                                    i.action(move || {
-                                        workbench_command
-                                            .send(UmideWorkbenchCommand::RestartToUpdate)
-                                    })
-                                }
-                            } else {
-                                i.enabled(false)
-                            }
-                        }
-                    )
-                    .separator()
-                    .item("About UMIDE", |i| i.action(move || {
-                        workbench_command.send(UmideWorkbenchCommand::ShowAbout)
-                    }))
-            }),
+            settings_icon,
             Container::new(Label::new("1".to_string()).style(move |s| {
                 let config = config.get();
                 s.font_size(10.0)

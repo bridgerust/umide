@@ -92,7 +92,7 @@ impl WindowData {
         extra_plugin_paths: Arc<Vec<PathBuf>>,
         app_command: Listener<AppCommand>,
     ) -> Self {
-        let cx = Scope::new();
+        let cx = Scope::current().create_child();
         let config =
             UmideConfig::load(&UmideWorkspace::default(), &[], &extra_plugin_paths);
         let config = cx.create_rw_signal(Arc::new(config));
@@ -201,7 +201,7 @@ impl WindowData {
     pub fn run_window_command(&self, cmd: WindowCommand) {
         match cmd {
             WindowCommand::SetWorkspace { workspace } => {
-                let db: Arc<UmideDb> = Context::get().unwrap();
+                let db = crate::app::get_db();
                 if let Err(err) = db.update_recent_workspace(&workspace) {
                     tracing::error!("{:?}", err);
                 }
@@ -238,7 +238,7 @@ impl WindowData {
                 })
             }
             WindowCommand::NewWorkspaceTab { workspace, end } => {
-                let db: Arc<UmideDb> = Context::get().unwrap();
+                let db = crate::app::get_db();
                 if let Err(err) = db.update_recent_workspace(&workspace) {
                     tracing::error!("{:?}", err);
                 }
@@ -281,7 +281,7 @@ impl WindowData {
                     if index < window_tabs.len() {
                         let (_, old_window_tab) = window_tabs.remove(index);
                         old_window_tab.proxy.shutdown();
-                        let db: Arc<UmideDb> = Context::get().unwrap();
+                        let db = crate::app::get_db();
                         if let Err(err) = db.save_window_tab(old_window_tab) {
                             tracing::error!("{:?}", err);
                         }

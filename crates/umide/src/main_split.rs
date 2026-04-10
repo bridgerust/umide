@@ -5,9 +5,8 @@ use std::{
 };
 
 use floem::{
-    action::save_as,
     ext_event::create_ext_action,
-    file::{FileDialogOptions, FileInfo},
+    file::FileInfo,
     peniko::kurbo::{Point, Rect, Vec2},
     prelude::Modifiers,
     reactive::{Memo, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
@@ -2026,34 +2025,31 @@ impl MainSplitData {
                             let main_split = main_split.clone();
                             let doc = doc.clone();
                             internal_command.send(InternalCommand::HideAlert);
-                            save_as(
-                                FileDialogOptions::new().title("Save File"),
-                                move |file: Option<FileInfo>| {
-                                    let main_split = main_split.clone();
-                                    let child = child.clone();
-                                    let local_main_split = main_split.clone();
-                                    if let Some(mut file) = file {
-                                        main_split.save_as(
-                                            doc.clone(),
-                                            if let Some(path) = file.path.pop() {
-                                                path
-                                            } else {
-                                                tracing::error!("No path");
-                                                return;
-                                            },
-                                            move || {
-                                                local_main_split
-                                                    .clone()
-                                                    .editor_tab_child_close(
-                                                        editor_tab_id,
-                                                        child.clone(),
-                                                        false,
-                                                    );
-                                            },
-                                        );
-                                    }
-                                },
-                            );
+                            crate::file_dialog::save_file(None, move |file: Option<FileInfo>| {
+                                let main_split = main_split.clone();
+                                let child = child.clone();
+                                let local_main_split = main_split.clone();
+                                if let Some(mut file) = file {
+                                    main_split.save_as(
+                                        doc.clone(),
+                                        if let Some(path) = file.path.pop() {
+                                            path
+                                        } else {
+                                            tracing::error!("No path");
+                                            return;
+                                        },
+                                        move || {
+                                            local_main_split
+                                                .clone()
+                                                .editor_tab_child_close(
+                                                    editor_tab_id,
+                                                    child.clone(),
+                                                    false,
+                                                );
+                                        },
+                                    );
+                                }
+                            });
                         });
                         Some(AlertButton {
                             text: "Save".to_string(),
@@ -2593,44 +2589,38 @@ impl MainSplitData {
 
     pub fn save_scratch_doc(&self, doc: Rc<Doc>) {
         let main_split = self.clone();
-        save_as(
-            FileDialogOptions::new().title("Save File"),
-            move |file: Option<FileInfo>| {
-                if let Some(mut file) = file {
-                    main_split.save_as(
-                        doc.clone(),
-                        if let Some(path) = file.path.pop() {
-                            path
-                        } else {
-                            tracing::error!("No path");
-                            return;
-                        },
-                        move || {},
-                    );
-                }
-            },
-        );
+        crate::file_dialog::save_file(None, move |file: Option<FileInfo>| {
+            if let Some(mut file) = file {
+                main_split.save_as(
+                    doc.clone(),
+                    if let Some(path) = file.path.pop() {
+                        path
+                    } else {
+                        tracing::error!("No path");
+                        return;
+                    },
+                    move || {},
+                );
+            }
+        });
     }
 
     pub fn save_scratch_doc2(&self, doc: Rc<Doc>) {
         let main_split = self.clone();
-        save_as(
-            FileDialogOptions::new().title("Save File"),
-            move |file: Option<FileInfo>| {
-                if let Some(mut file) = file {
-                    main_split.save_as2(
-                        doc.clone(),
-                        if let Some(path) = file.path.pop() {
-                            path
-                        } else {
-                            tracing::error!("No path");
-                            return;
-                        },
-                        move || {},
-                    );
-                }
-            },
-        );
+        crate::file_dialog::save_file(None, move |file: Option<FileInfo>| {
+            if let Some(mut file) = file {
+                main_split.save_as2(
+                    doc.clone(),
+                    if let Some(path) = file.path.pop() {
+                        path
+                    } else {
+                        tracing::error!("No path");
+                        return;
+                    },
+                    move || {},
+                );
+            }
+        });
     }
 
     pub fn move_editor_tab_child(

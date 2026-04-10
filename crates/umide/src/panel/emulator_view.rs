@@ -431,7 +431,7 @@ fn platform_panel(
                 (
                     // Emulator display
                     native_widget
-                        .style(|s| s.flex_grow(1.0).width_full().height_full()),
+                        .style(|s| s.flex_grow(1.0).width_full().min_height(0.0)),
                     // Emulator sidebar controls
                     emulator_sidebar(platform, running_device, is_visible, frame_signal, current_device_id, config),
                 )
@@ -441,13 +441,12 @@ fn platform_panel(
                 let has_running = running_device.get().is_some();
                 s.flex_grow(1.0)
                     .width_full()
-                    .height_full()
                     .min_width(0.0)
                     .min_height(0.0)
                     .apply_if(!has_running || !visible, |s| s.hide())
             })
         ))
-        .style(|s| s.flex_col().flex_grow(1.0).width_full().height_full().min_width(0.0).min_height(0.0)),
+        .style(|s| s.flex_col().flex_grow(1.0).width_full().min_width(0.0).min_height(0.0)),
     ))
     .style(move |s| {
         let config = config.get();
@@ -456,7 +455,6 @@ fn platform_panel(
             .flex_basis(0.0)
             .min_width(0.0)
             .min_height(0.0)
-            .height_full()
             .border(1.0)
             .border_color(config.color(UmideColor::LAPCE_BORDER))
     })
@@ -717,12 +715,15 @@ pub fn emulator_panel(
                 ))
                 .style(|s| {
                     s.flex_row()
-                        .size_full()
+                        .flex_grow(1.0)
+                        .width_full()
+                        .min_height(0.0)
+                        .items_stretch()
                         .gap(5.0)
                         .padding(5.0)
                 }),
             ))
-            .style(|s| s.flex_col().size_full()),
+            .style(|s| s.flex_col().flex_grow(1.0).width_full().min_height(0.0)),
             window_tab_data.panel.section_open(crate::panel::data::PanelSection::Process),
         )
         .build()

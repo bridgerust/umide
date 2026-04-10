@@ -389,7 +389,7 @@ impl PanelData {
             style.shown = true;
         });
 
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         db.save_panel_orders(self.panels.get_untracked());
     }
 

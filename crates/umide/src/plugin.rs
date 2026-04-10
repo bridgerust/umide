@@ -313,7 +313,7 @@ impl PluginData {
             self.disabled.update(|d| {
                 d.remove(&id);
             });
-            let db: Arc<UmideDb> = Context::get().unwrap();
+            let db = crate::app::get_db();
             db.save_disabled_volts(
                 self.disabled.get_untracked().into_iter().collect(),
             );
@@ -323,7 +323,7 @@ impl PluginData {
             self.workspace_disabled.update(|d| {
                 d.remove(&id);
             });
-            let db: Arc<UmideDb> = Context::get().unwrap();
+            let db = crate::app::get_db();
             db.save_workspace_disabled_volts(
                 self.common.workspace.clone(),
                 self.workspace_disabled
@@ -535,7 +535,7 @@ impl PluginData {
         if !self.plugin_disabled(&id) {
             self.common.proxy.enable_volt(volt);
         }
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         db.save_disabled_volts(self.disabled.get_untracked().into_iter().collect());
     }
 
@@ -545,7 +545,7 @@ impl PluginData {
             d.insert(id);
         });
         self.common.proxy.disable_volt(volt);
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         db.save_disabled_volts(self.disabled.get_untracked().into_iter().collect());
     }
 
@@ -557,7 +557,7 @@ impl PluginData {
         if !self.plugin_disabled(&id) {
             self.common.proxy.enable_volt(volt);
         }
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         db.save_workspace_disabled_volts(
             self.common.workspace.clone(),
             self.disabled.get_untracked().into_iter().collect(),
@@ -570,7 +570,7 @@ impl PluginData {
             d.insert(id);
         });
         self.common.proxy.disable_volt(volt);
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         db.save_workspace_disabled_volts(
             self.common.workspace.clone(),
             self.disabled.get_untracked().into_iter().collect(),

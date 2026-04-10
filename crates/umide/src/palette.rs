@@ -597,7 +597,7 @@ impl PaletteData {
 
     /// Initialize the palette with all the available workspaces, local and remote.
     fn get_workspaces(&self) {
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         let workspaces = db.recent_workspaces().unwrap_or_default();
 
         let items = workspaces
@@ -796,7 +796,7 @@ impl PaletteData {
     }
 
     fn get_ssh_hosts(&self) {
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         let workspaces = db.recent_workspaces().unwrap_or_default();
         let mut hosts = HashSet::new();
         for workspace in workspaces.iter() {
@@ -849,7 +849,7 @@ impl PaletteData {
             vec![]
         };
 
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         let workspaces = db.recent_workspaces().unwrap_or_default();
         let mut hosts = HashSet::new();
         for distro in distros {

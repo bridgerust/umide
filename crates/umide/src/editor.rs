@@ -2157,7 +2157,7 @@ impl EditorData {
         } else if let Some(edits) = edits.as_ref() {
             self.do_text_edit(edits);
         } else {
-            let db: Arc<UmideDb> = Context::get().unwrap();
+            let db = crate::app::get_db();
             if let Ok(info) = db.get_doc_info(&self.common.workspace, &location.path)
             {
                 self.go_to_position(
@@ -2507,7 +2507,7 @@ impl EditorData {
         let cursor_offset = self.cursor().with_untracked(|c| c.offset());
         let scroll_offset = self.viewport().with_untracked(|v| v.origin().to_vec2());
 
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         db.save_doc_position(
             &self.common.workspace,
             path,

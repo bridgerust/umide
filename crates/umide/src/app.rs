@@ -98,6 +98,14 @@ use crate::{
 mod grammars;
 mod logging;
 
+/// Global database handle — initialized once at startup, accessible from any thread/scope.
+static GLOBAL_DB: std::sync::OnceLock<Arc<UmideDb>> = std::sync::OnceLock::new();
+
+/// Retrieve the global `UmideDb`. Panics if called before `launch()` initializes it.
+pub fn get_db() -> Arc<UmideDb> {
+    GLOBAL_DB.get().expect("UmideDb not initialized").clone()
+}
+
 #[derive(Parser)]
 #[clap(name = "UMIDE")]
 #[clap(version=meta::VERSION)]
@@ -201,7 +209,7 @@ impl AppData {
                     .position(window.position.get_untracked() + (50.0, 50.0))
             })
             .or_else(|| {
-                let db: Arc<UmideDb> = Context::get().unwrap();
+                let db = crate::app::get_db();
                 db.get_window().ok().map(|info| {
                     self.default_window_config()
                         .size(info.size)
@@ -223,7 +231,7 @@ impl AppData {
             ..Default::default()
         };
         let app_data = self.clone();
-        let db: Arc<UmideDb> = Context::get().unwrap();
+        let db = crate::app::get_db();
         floem::new_window(
             move |window_id| {
                 app_data.app_view(
@@ -248,7 +256,7 @@ impl AppData {
     pub fn run_app_command(&self, cmd: AppCommand) {
         match cmd {
             AppCommand::SaveApp => {
-                let db: Arc<UmideDb> = Context::get().unwrap();
+                let db = crate::app::get_db();
                 if let Err(err) = db.save_app(self) {
                     tracing::error!("{:?}", err);
                 }
@@ -257,7 +265,7 @@ impl AppData {
                 if self.app_terminated.get_untracked() {
                     return;
                 }
-                let db: Arc<UmideDb> = Context::get().unwrap();
+                let db = crate::app::get_db();
                 if self.windows.with_untracked(|w| w.len()) == 1 {
                     if let Err(err) = db.insert_app(self.clone()) {
                         tracing::error!("{:?}", err);
@@ -3828,6 +3836,7 @@ pub fn launch() {
             std::process::exit(1);
         }
     };
+    GLOBAL_DB.set(db.clone()).ok();
     let scope = Scope::new();
     Context::provide(db.clone());
 

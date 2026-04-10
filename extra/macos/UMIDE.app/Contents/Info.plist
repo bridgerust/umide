@@ -33,7 +33,7 @@
   <key>CFBundleDisplayName</key>
   <string>UMIDE</string>
   <key>NSRequiresAquaSystemAppearance</key>
-  <string>NO</string>
+  <false/>
     <key>NSAppleEventsUsageDescription</key>
     <string>An application in UMIDE would like to access AppleScript.</string>
     <key>NSCalendarsUsageDescription</key>

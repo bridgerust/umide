@@ -7,7 +7,7 @@ use std::process::Command;
 use tracing::info;
 
 /// Find the CGWindowID for an iOS Simulator by its device UDID
-/// 
+///
 /// This uses AppleScript to find the Simulator window.
 pub fn find_simulator_window(device_name: &str) -> Option<u32> {
     // First, try to find using the window list approach via osascript
@@ -31,14 +31,20 @@ pub fn find_simulator_window(device_name: &str) -> Option<u32> {
         ])
         .output()
         .ok()?;
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     info!("AppleScript result: {}", stdout);
-    
+
     // Try to parse as window ID
-    stdout.parse::<i64>().ok().and_then(|id| {
-        if id > 0 { Some(id as u32) } else { None }
-    })
+    stdout.parse::<i64>().ok().and_then(
+        |id| {
+            if id > 0 {
+                Some(id as u32)
+            } else {
+                None
+            }
+        },
+    )
 }
 
 /// List all Simulator windows
@@ -60,7 +66,7 @@ pub fn list_simulator_windows() -> Vec<(u32, String)> {
         ])
         .output()
         .ok();
-    
+
     let mut windows = Vec::new();
     if let Some(output) = output {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -78,7 +84,7 @@ pub fn list_simulator_windows() -> Vec<(u32, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_list_simulator_windows() {
         let windows = list_simulator_windows();

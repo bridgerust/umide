@@ -1,15 +1,8 @@
 use std::{rc::Rc, sync::Arc};
 
-use floem::{
-    AnyView, IntoView, View, event::{Event, EventListener, EventPropagation}, kurbo::{Point, Size}, reactive::{
-        ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith
-    }, style::{CursorStyle, Style}, taffy::AlignItems, ui_events::pointer::PointerUpdate, unit::PxPctAuto, views::{
-        Container, Decorators, Empty, Label, Stack, dyn_stack, tab
-    }
-};
-use floem::prelude::{PointerButtonEvent, PointerEvent};
 use super::{
     debug_view::debug_panel,
+    emulator_view::emulator_panel,
     global_search_view::global_search_panel,
     kind::PanelKind,
     plugin_view::plugin_panel,
@@ -17,7 +10,6 @@ use super::{
     problem_view::problem_panel,
     source_control_view::source_control_panel,
     terminal_view::terminal_panel,
-    emulator_view::emulator_panel,
     video_view::video_view,
 };
 use crate::{
@@ -30,6 +22,18 @@ use crate::{
         references_view::references_panel,
     },
     window_tab::{DragContent, WindowTabData},
+};
+use floem::prelude::{PointerButtonEvent, PointerEvent};
+use floem::{
+    AnyView, IntoView, View,
+    event::{Event, EventListener, EventPropagation},
+    kurbo::{Point, Size},
+    reactive::{ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith},
+    style::{CursorStyle, Style},
+    taffy::AlignItems,
+    ui_events::pointer::PointerUpdate,
+    unit::PxPctAuto,
+    views::{Container, Decorators, Empty, Label, Stack, dyn_stack, tab},
 };
 
 pub fn foldable_panel_section(
@@ -269,12 +273,20 @@ pub fn panel_container_view(
             let drag_start: RwSignal<Option<Point>> = RwSignal::new(None);
             view.on_event_stop(EventListener::PointerDown, move |event| {
                 view_id.request_active();
-                if let Event::Pointer(PointerEvent::Down(PointerButtonEvent { state, ..})) = event {
+                if let Event::Pointer(PointerEvent::Down(PointerButtonEvent {
+                    state,
+                    ..
+                })) = event
+                {
                     drag_start.set(Some(state.logical_point()));
                 }
             })
             .on_event_stop(EventListener::PointerMove, move |event| {
-                if let Event::Pointer(PointerEvent::Move(PointerUpdate { current, ..})) = event {
+                if let Event::Pointer(PointerEvent::Move(PointerUpdate {
+                    current,
+                    ..
+                })) = event
+                {
                     if let Some(drag_start_point) = drag_start.get_untracked() {
                         let current_size = current_size.get_untracked();
                         let available_size = available_size.get_untracked();
@@ -298,7 +310,8 @@ pub fn panel_container_view(
                             }
                             PanelContainerPosition::Bottom => {
                                 let new_size = current_size.height
-                                    - (current.logical_point().y - drag_start_point.y);
+                                    - (current.logical_point().y
+                                        - drag_start_point.y);
                                 let maximized = panel.panel_bottom_maximized(false);
                                 if (maximized
                                     && new_size < available_size.height - 50.0)
@@ -321,7 +334,8 @@ pub fn panel_container_view(
                             }
                             PanelContainerPosition::Right => {
                                 let new_size = current_size.width
-                                    - (current.logical_point().x - drag_start_point.x);
+                                    - (current.logical_point().x
+                                        - drag_start_point.x);
                                 let current_panel_size = panel_size.get_untracked();
                                 let new_size = new_size
                                     .max(150.0)
@@ -393,15 +407,14 @@ pub fn panel_container_view(
         panel_view(window_tab_data.clone(), position.second()),
         panel_picker(window_tab_data.clone(), position.second()),
         resize_drag_view(position),
-        Stack::new((drop_view(position.first()), drop_view(position.second()))).style(
-            move |s| {
+        Stack::new((drop_view(position.first()), drop_view(position.second())))
+            .style(move |s| {
                 let is_dragging_panel = is_dragging_panel();
                 s.absolute()
                     .size_pct(100.0, 100.0)
                     .apply_if(!is_bottom, |s| s.flex_col())
                     .apply_if(!is_dragging_panel, |s| s.pointer_events_none())
-            },
-        ),
+            }),
     ))
     .on_resize(move |rect| {
         let size = rect.size();
@@ -454,11 +467,8 @@ fn panel_view(
             .panels
             .with(|p| p.get(&position).cloned().unwrap_or_default())
     };
-    let active_fn = move || {
-        panel
-            .styles
-            .with(|s| s.get(&position).map(|s| s.active))
-    };
+    let active_fn =
+        move || panel.styles.with(|s| s.get(&position).map(|s| s.active));
     tab(
         active_fn,
         panels,

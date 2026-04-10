@@ -269,10 +269,17 @@ impl<'a> LanguageRange<'a> {
             let script = canon_script(caps.name("script").map(|m| m.as_str()));
             let region = canon_upper(caps.name("region").map(|m| m.as_str()));
             let rest = canon_lower(caps.name("rest").map(|m| m.as_str()));
-            if is_owned(&language) || is_owned(&script) || is_owned(&region) || is_owned(&rest) {
+            if is_owned(&language)
+                || is_owned(&script)
+                || is_owned(&region)
+                || is_owned(&rest)
+            {
                 return Ok(LanguageRange {
                     language: Cow::Owned(
-                        language.into_owned() + script.borrow() + region.borrow() + rest.borrow(),
+                        language.into_owned()
+                            + script.borrow()
+                            + region.borrow()
+                            + rest.borrow(),
                     ),
                 });
             }
@@ -533,7 +540,9 @@ impl Locale {
                         .ok_or(Error::NotWellFormed)?,
                 )?;
                 match caps.name("category").map(|m| m.as_str()) {
-                    Some(cat) => res.add_category(cat.to_ascii_lowercase().as_ref(), &tag),
+                    Some(cat) => {
+                        res.add_category(cat.to_ascii_lowercase().as_ref(), &tag)
+                    }
                     None => res.add(&tag),
                 }
             } else {
@@ -805,7 +814,9 @@ impl ::std::error::Error for Error {
             Error::NotWellFormed => "Language tag is not well-formed.",
             // this is exception: here we do want exhaustive match so we don't publish version with
             // missing descriptions by mistake.
-            Error::__NonExhaustive => panic!("Placeholder error must not be instantiated!"),
+            Error::__NonExhaustive => {
+                panic!("Placeholder error must not be instantiated!")
+            }
         }
     }
 }
@@ -865,9 +876,11 @@ mod test {
         );
         assert_eq!(
             "sl-Cyrl-YU-rozaj-solba-1994-b-1234-a-foobar-x-b-1234-a-foobar",
-            LanguageRange::new("sl-Cyrl-YU-rozaj-solba-1994-b-1234-a-Foobar-x-b-1234-a-Foobar")
-                .unwrap()
-                .as_ref()
+            LanguageRange::new(
+                "sl-Cyrl-YU-rozaj-solba-1994-b-1234-a-Foobar-x-b-1234-a-Foobar"
+            )
+            .unwrap()
+            .as_ref()
         );
     }
 
@@ -1051,7 +1064,8 @@ mod test {
 
     #[test]
     fn tag_list_for() {
-        let locale = Locale::new("cs-CZ,messages=en-GB,time=de-DE,sk-SK,pl-PL").unwrap();
+        let locale =
+            Locale::new("cs-CZ,messages=en-GB,time=de-DE,sk-SK,pl-PL").unwrap();
         assert_eq!(
             Vec::from_iter(locale.tags_for("messages")),
             &[

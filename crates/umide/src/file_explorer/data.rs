@@ -8,7 +8,13 @@ use std::{
 };
 
 use floem::{
-    action::show_context_menu, event::EventPropagation, ext_event::create_ext_action, menu::Menu, prelude::Modifiers, reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith}, views::editor::text::SystemClipboard
+    action::show_context_menu,
+    event::EventPropagation,
+    ext_event::create_ext_action,
+    menu::Menu,
+    prelude::Modifiers,
+    reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
+    views::editor::text::SystemClipboard,
 };
 use globset::Glob;
 use umide_core::{
@@ -499,11 +505,11 @@ impl FileExplorerData {
         let base_path = base_path_a.clone();
         let data = self.clone();
         let naming = self.naming;
-        menu = menu.item("New File", |i|
+        menu = menu.item("New File", |i| {
             i.action(move || {
-            let base_path_b = &base_path;
-            let base_path = base_path.clone();
-            data.read_dir_cb(base_path_b, move |was_read| {
+                let base_path_b = &base_path;
+                let base_path = base_path.clone();
+                data.read_dir_cb(base_path_b, move |was_read| {
                 if !was_read {
                     tracing::warn!(
                         "Failed to read directory, avoiding creating node in: {:?}",
@@ -519,16 +525,17 @@ impl FileExplorerData {
                     editor_needs_reset: true,
                 }));
             });
-        }));
+            })
+        });
 
         let base_path = base_path_a.clone();
         let data = self.clone();
         let naming = self.naming;
-        menu = menu.item("New Directory", |i|
+        menu = menu.item("New Directory", |i| {
             i.action(move || {
-            let base_path_b = &base_path;
-            let base_path = base_path.clone();
-            data.read_dir_cb(base_path_b, move |was_read| {
+                let base_path_b = &base_path;
+                let base_path = base_path.clone();
+                data.read_dir_cb(base_path_b, move |was_read| {
                 if !was_read {
                     tracing::warn!(
                         "Failed to read directory, avoiding creating node in: {:?}",
@@ -544,7 +551,8 @@ impl FileExplorerData {
                     editor_needs_reset: true,
                 }));
             })
-        }));
+            })
+        });
 
         menu = menu.separator();
 
@@ -555,42 +563,45 @@ impl FileExplorerData {
             let title = "Reveal in system file explorer";
             #[cfg(target_os = "macos")]
             let title = "Reveal in Finder";
-            menu = menu.item(title, |i|
+            menu = menu.item(title, |i| {
                 i.action(move || {
-                let path = path.parent().unwrap_or(&path);
-                if !path.exists() {
-                    return;
-                }
+                    let path = path.parent().unwrap_or(&path);
+                    if !path.exists() {
+                        return;
+                    }
 
-                if let Err(err) = open::that(path) {
-                    tracing::error!(
-                        "Failed to reveal file in system file explorer: {}",
-                        err
-                    );
-                }
-            }));
+                    if let Err(err) = open::that(path) {
+                        tracing::error!(
+                            "Failed to reveal file in system file explorer: {}",
+                            err
+                        );
+                    }
+                })
+            });
         }
 
         if !is_workspace {
             let path = path_a.clone();
-            menu = menu.item("Rename", |i|
+            menu = menu.item("Rename", |i| {
                 i.action(move || {
-                naming.set(Naming::Renaming(Renaming {
-                    state: NamingState::Naming,
-                    path: path.clone(),
-                    editor_needs_reset: true,
-                }));
-            }));
+                    naming.set(Naming::Renaming(Renaming {
+                        state: NamingState::Naming,
+                        path: path.clone(),
+                        editor_needs_reset: true,
+                    }));
+                })
+            });
 
             let path = path_a.clone();
-            menu = menu.item("Duplicate", |i|
+            menu = menu.item("Duplicate", |i| {
                 i.action(move || {
-                naming.set(Naming::Duplicating(Duplicating {
-                    state: NamingState::Naming,
-                    path: path.clone(),
-                    editor_needs_reset: true,
-                }));
-            }));
+                    naming.set(Naming::Duplicating(Duplicating {
+                        state: NamingState::Naming,
+                        path: path.clone(),
+                        editor_needs_reset: true,
+                    }));
+                })
+            });
 
             // TODO: it is common for shift+right click to make 'Move file to trash' an actual
             // Delete, which can be useful for large files.
@@ -601,38 +612,41 @@ impl FileExplorerData {
             } else {
                 "Move File to Trash"
             };
-            menu = menu.item(trash_text, |i|
+            menu = menu.item(trash_text, |i| {
                 i.action(move || {
-                proxy.trash_path(path.clone(), |res| {
-                    if let Err(err) = res {
-                        tracing::warn!("Failed to trash path: {:?}", err);
-                    }
+                    proxy.trash_path(path.clone(), |res| {
+                        if let Err(err) = res {
+                            tracing::warn!("Failed to trash path: {:?}", err);
+                        }
+                    })
                 })
-            }));
+            });
         }
 
         menu = menu.separator();
 
         let path = path_a.clone();
-        menu = menu.item("Copy Path", |i|
+        menu = menu.item("Copy Path", |i| {
             i.action(move || {
-            let mut clipboard = SystemClipboard::new();
-            clipboard.put_string(path.to_string_lossy());
-        }));
+                let mut clipboard = SystemClipboard::new();
+                clipboard.put_string(path.to_string_lossy());
+            })
+        });
 
         let path = path_a.clone();
         let workspace = common.workspace.clone();
-        menu = menu.item("Copy Relative Path", |i|
+        menu = menu.item("Copy Relative Path", |i| {
             i.action(move || {
-            let relative_path = if let Some(workspace_path) = &workspace.path {
-                path.strip_prefix(workspace_path).unwrap_or(&path)
-            } else {
-                path.as_ref()
-            };
+                let relative_path = if let Some(workspace_path) = &workspace.path {
+                    path.strip_prefix(workspace_path).unwrap_or(&path)
+                } else {
+                    path.as_ref()
+                };
 
-            let mut clipboard = SystemClipboard::new();
-            clipboard.put_string(relative_path.to_string_lossy());
-        }));
+                let mut clipboard = SystemClipboard::new();
+                clipboard.put_string(relative_path.to_string_lossy());
+            })
+        });
 
         menu = menu.separator();
 
@@ -645,7 +659,7 @@ impl FileExplorerData {
             let common = self.common.clone();
             let right_path = path_a.to_owned();
 
-            menu = menu.item("Compare with Selected", |i|
+            menu = menu.item("Compare with Selected", |i| {
                 i.action(move || {
                     common
                         .internal_command
@@ -653,17 +667,18 @@ impl FileExplorerData {
                             left_path: left_path.clone(),
                             right_path: right_path.clone(),
                         })
-                },
-            ))
+                })
+            })
         }
 
         menu = menu.separator();
 
         let internal_command = common.internal_command;
-        menu = menu.item("Refresh", |i|
+        menu = menu.item("Refresh", |i| {
             i.action(move || {
-            internal_command.send(InternalCommand::ReloadFileExplorer);
-        }));
+                internal_command.send(InternalCommand::ReloadFileExplorer);
+            })
+        });
 
         show_context_menu(menu, None);
     }

@@ -12,13 +12,29 @@ use std::{
 
 use alacritty_terminal::vte::ansi::Handler;
 use floem::{
-    ViewId, action::{TimerToken, remove_overlay}, ext_event::create_ext_action, kurbo::Size, peniko::kurbo::{Point, Rect, Vec2}, prelude::{Modifiers, SignalTrack}, reactive::{
-        Context, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith, WriteSignal
-    }, receiver_signal::ChannelSignal, text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout}, views::editor::core::buffer::rope_text::RopeText
+    ViewId,
+    action::{TimerToken, remove_overlay},
+    ext_event::create_ext_action,
+    kurbo::Size,
+    peniko::kurbo::{Point, Rect, Vec2},
+    prelude::{Modifiers, SignalTrack},
+    reactive::{
+        Context, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate,
+        SignalWith, WriteSignal,
+    },
+    receiver_signal::ChannelSignal,
+    text::{Attrs, AttrsList, FamilyOwned, LineHeightValue, TextLayout},
+    views::editor::core::buffer::rope_text::RopeText,
 };
 use im::HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
+use lsp_types::{
+    CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
+    ShowMessageParams,
+};
+use serde_json::Value;
+use tracing::{Level, debug, error, event};
 use umide_core::{
     command::FocusCommand, cursor::CursorAffinity, directory::Directory, meta,
     mode::Mode, register::Register,
@@ -33,12 +49,6 @@ use umide_rpc::{
     source_control::FileDiff,
     terminal::TermId,
 };
-use lsp_types::{
-    CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
-    ShowMessageParams,
-};
-use serde_json::Value;
-use tracing::{Level, debug, error, event};
 
 use crate::{
     about::AboutData,
@@ -51,7 +61,7 @@ use crate::{
     completion::{CompletionData, CompletionStatus},
     config::UmideConfig,
     db::UmideDb,
-    debug::{DapData, UmideBreakpoint, RunDebugMode, RunDebugProcess},
+    debug::{DapData, RunDebugMode, RunDebugProcess, UmideBreakpoint},
     doc::DocContent,
     editor::location::{EditorLocation, EditorPosition},
     editor_tab::EditorTabChild,
@@ -445,8 +455,14 @@ impl WindowTabData {
                 let mut panel_order = db
                     .get_panel_orders()
                     .unwrap_or_else(|_| default_panel_order());
-                if super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_none() {
-                    let panels = panel_order.entry(PanelPosition::RightTop).or_default();
+                if super::panel::data::panel_position(
+                    &panel_order,
+                    &PanelKind::Emulator,
+                )
+                .is_none()
+                {
+                    let panels =
+                        panel_order.entry(PanelPosition::RightTop).or_default();
                     panels.push_back(PanelKind::Emulator);
                 }
                 PanelData::new(
@@ -455,7 +471,8 @@ impl WindowTabData {
                         panels: panel_order,
                         styles: i.panel.styles.clone(),
                         size: i.panel.size.clone(),
-                        sections: i.panel
+                        sections: i
+                            .panel
                             .sections
                             .iter()
                             .map(|(k, v)| (*k, *v))
@@ -469,18 +486,66 @@ impl WindowTabData {
                 let mut panel_order = db
                     .get_panel_orders()
                     .unwrap_or_else(|_| default_panel_order());
-                if super::panel::data::panel_position(&panel_order, &PanelKind::Emulator).is_none() {
-                    let panels = panel_order.entry(PanelPosition::RightTop).or_default();
+                if super::panel::data::panel_position(
+                    &panel_order,
+                    &PanelKind::Emulator,
+                )
+                .is_none()
+                {
+                    let panels =
+                        panel_order.entry(PanelPosition::RightTop).or_default();
                     panels.push_back(PanelKind::Emulator);
                 }
 
                 let mut styles = im::HashMap::new();
-                styles.insert(PanelPosition::LeftTop, super::panel::style::PanelStyle { active: 0, shown: true, maximized: false });
-                styles.insert(PanelPosition::LeftBottom, super::panel::style::PanelStyle { active: 0, shown: false, maximized: false });
-                styles.insert(PanelPosition::BottomLeft, super::panel::style::PanelStyle { active: 0, shown: true, maximized: false });
-                styles.insert(PanelPosition::BottomRight, super::panel::style::PanelStyle { active: 0, shown: false, maximized: false });
-                styles.insert(PanelPosition::RightTop, super::panel::style::PanelStyle { active: 0, shown: true, maximized: false });
-                styles.insert(PanelPosition::RightBottom, super::panel::style::PanelStyle { active: 0, shown: false, maximized: false });
+                styles.insert(
+                    PanelPosition::LeftTop,
+                    super::panel::style::PanelStyle {
+                        active: 0,
+                        shown: true,
+                        maximized: false,
+                    },
+                );
+                styles.insert(
+                    PanelPosition::LeftBottom,
+                    super::panel::style::PanelStyle {
+                        active: 0,
+                        shown: false,
+                        maximized: false,
+                    },
+                );
+                styles.insert(
+                    PanelPosition::BottomLeft,
+                    super::panel::style::PanelStyle {
+                        active: 0,
+                        shown: true,
+                        maximized: false,
+                    },
+                );
+                styles.insert(
+                    PanelPosition::BottomRight,
+                    super::panel::style::PanelStyle {
+                        active: 0,
+                        shown: false,
+                        maximized: false,
+                    },
+                );
+                styles.insert(
+                    PanelPosition::RightTop,
+                    super::panel::style::PanelStyle {
+                        active: 0,
+                        shown: true,
+                        maximized: false,
+                    },
+                );
+                styles.insert(
+                    PanelPosition::RightBottom,
+                    super::panel::style::PanelStyle {
+                        active: 0,
+                        shown: false,
+                        maximized: false,
+                    },
+                );
 
                 PanelData::new(
                     cx,
@@ -2293,8 +2358,8 @@ impl WindowTabData {
                 message,
                 target,
             } => {
-                use umide_rpc::core::LogLevel;
                 use tracing_log::log::{Level, log};
+                use umide_rpc::core::LogLevel;
 
                 let target = target.clone().unwrap_or(String::from("unknown"));
 

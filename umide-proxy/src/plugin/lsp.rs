@@ -10,12 +10,6 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use jsonrpc_lite::{Id, Params};
-use umide_core::meta;
-use umide_rpc::{
-    RpcError,
-    plugin::{PluginId, VoltID},
-    style::LineStyle,
-};
 use lapce_xi_rope::Rope;
 use lsp_types::{
     notification::{Initialized, Notification},
@@ -24,6 +18,12 @@ use lsp_types::{
 };
 use parking_lot::Mutex;
 use serde_json::Value;
+use umide_core::meta;
+use umide_rpc::{
+    RpcError,
+    plugin::{PluginId, VoltID},
+    style::LineStyle,
+};
 
 use super::{
     client_capabilities,

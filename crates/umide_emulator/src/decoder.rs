@@ -2,7 +2,10 @@ use std::sync::Arc;
 use thiserror::Error;
 
 pub trait VideoDecoder: Send {
-    fn decode_frame(&mut self, data: &[u8]) -> Result<Vec<DecodedFrame>, DecodeError>;
+    fn decode_frame(
+        &mut self,
+        data: &[u8],
+    ) -> Result<Vec<DecodedFrame>, DecodeError>;
     fn flush(&mut self) -> Result<Vec<DecodedFrame>, DecodeError>;
     fn reset(&mut self) -> Result<(), DecodeError>;
 }
@@ -27,17 +30,17 @@ pub struct HardwareSurfaceHandle {
 impl HardwareSurfaceHandle {
     /// Read pixel data from the hardware surface (CVPixelBuffer on macOS).
     /// Returns RGBA data suitable for uploading to wgpu.
-    /// 
+    ///
     /// # Safety
     /// The handle must be a valid CVPixelBufferRef.
     #[cfg(target_os = "macos")]
     pub fn read_pixels(&self) -> Option<Vec<u8>> {
         use core_video_sys::{
-            CVPixelBufferLockBaseAddress, CVPixelBufferUnlockBaseAddress,
             CVPixelBufferGetBaseAddress, CVPixelBufferGetBytesPerRow,
-            CVPixelBufferGetPixelFormatType,
+            CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress,
+            CVPixelBufferUnlockBaseAddress,
         };
-        
+
         let pixel_buffer = self.ptr as core_video_sys::CVPixelBufferRef;
         if pixel_buffer.is_null() {
             return None;
@@ -54,14 +57,17 @@ impl HardwareSurfaceHandle {
             let base_address = CVPixelBufferGetBaseAddress(pixel_buffer);
             let bytes_per_row = CVPixelBufferGetBytesPerRow(pixel_buffer);
             let pixel_format = CVPixelBufferGetPixelFormatType(pixel_buffer);
-            
+
             // VideoToolbox typically outputs kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange (NV12)
             // or kCVPixelFormatType_32BGRA
-            let rgba_data = if pixel_format == 0x42475241 { // 'BGRA' = kCVPixelFormatType_32BGRA
+            let rgba_data = if pixel_format == 0x42475241 {
+                // 'BGRA' = kCVPixelFormatType_32BGRA
                 // BGRA format - convert to RGBA
-                let mut rgba = Vec::with_capacity((self.width * self.height * 4) as usize);
+                let mut rgba =
+                    Vec::with_capacity((self.width * self.height * 4) as usize);
                 for y in 0..self.height {
-                    let row_ptr = (base_address as *const u8).add((y as usize) * bytes_per_row);
+                    let row_ptr = (base_address as *const u8)
+                        .add((y as usize) * bytes_per_row);
                     for x in 0..self.width {
                         let pixel = row_ptr.add((x * 4) as usize);
                         rgba.push(*pixel.add(2)); // R (from B)
@@ -103,18 +109,18 @@ impl DecodedFrame {
             GpuFrame::Software(data, _, _) => data.as_ref().clone(),
             GpuFrame::Hardware(handle) => handle.read_pixels()?,
         };
-        
+
         // Encode as PNG using the image crate
         use image::RgbaImage;
         use std::io::Cursor;
-        
+
         let img = RgbaImage::from_raw(self.width, self.height, rgba_data)?;
         let mut png_bytes = Vec::new();
         let mut cursor = Cursor::new(&mut png_bytes);
         img.write_to(&mut cursor, image::ImageFormat::Png).ok()?;
         Some(png_bytes)
     }
-    
+
     /// Get RGBA pixel data for direct upload to GPU textures.
     pub fn to_rgba(&self) -> Option<Vec<u8>> {
         match &self.frame {
@@ -138,14 +144,15 @@ pub fn create_decoder() -> Box<dyn VideoDecoder> {
     #[cfg(target_os = "macos")]
     {
         // Try hardware decoder first
-        if let Ok(decoder) = crate::video::macos_hardware::VideoToolboxDecoder::new() {
+        if let Ok(decoder) = crate::video::macos_hardware::VideoToolboxDecoder::new()
+        {
             println!("Using VideoToolbox Hardware Decoder");
             return Box::new(decoder);
         } else {
             println!("VideoToolbox unavailable, falling back to OpenH264");
         }
     }
-    
+
     // Fallback to software decoder
     println!("Using OpenH264 Software Decoder");
     Box::new(crate::video::openh264::OpenH264Decoder::new())

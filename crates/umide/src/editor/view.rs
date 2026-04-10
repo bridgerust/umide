@@ -1,5 +1,10 @@
 use std::{
-    cmp, collections::BTreeMap, ops::DerefMut, path::{Path, PathBuf}, rc::Rc, sync::Arc,
+    cmp,
+    collections::BTreeMap,
+    ops::DerefMut,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::Arc,
 };
 
 use floem::{
@@ -38,6 +43,8 @@ use floem::{
     },
 };
 use itertools::Itertools;
+use lapce_xi_rope::find::CaseMatching;
+use lsp_types::CodeLens;
 use umide_core::{
     buffer::{Buffer, diff::DiffLines, rope_text::RopeText},
     cursor::{CursorAffinity, CursorMode},
@@ -47,8 +54,6 @@ use umide_rpc::{
     dap_types::{DapId, SourceBreakpoint},
     plugin::PluginId,
 };
-use lapce_xi_rope::find::CaseMatching;
-use lsp_types::CodeLens;
 
 use super::{DocSignal, EditorData, gutter::editor_gutter_view};
 use crate::{
@@ -2120,7 +2125,11 @@ fn editor_content(
                 }
             })
             .on_event_stop(EventListener::PointerUp, move |event| {
-                if let Event::Pointer(PointerEvent::Up(PointerButtonEvent { state, .. })) = event {
+                if let Event::Pointer(PointerEvent::Up(PointerButtonEvent {
+                    state,
+                    ..
+                })) = event
+                {
                     e_data.get_untracked().pointer_up(state);
                 }
             })

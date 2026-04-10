@@ -12,6 +12,8 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use crossbeam_channel::{Receiver, Sender};
+use parking_lot::Mutex;
+use serde_json::Value;
 use umide_rpc::{
     RpcError,
     dap_types::{
@@ -28,8 +30,6 @@ use umide_rpc::{
     },
     terminal::TermId,
 };
-use parking_lot::Mutex;
-use serde_json::Value;
 
 use super::{
     PluginCatalogRpcHandler,

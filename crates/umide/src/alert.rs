@@ -9,7 +9,7 @@ use floem::{
     event::EventListener,
     reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate},
     style::CursorStyle,
-    views::{Container, Decorators, dyn_stack, Stack, svg, Label},
+    views::{Container, Decorators, Label, Stack, dyn_stack, svg},
 };
 
 use crate::{

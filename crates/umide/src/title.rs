@@ -66,7 +66,9 @@ fn left(
         let icon_rect = cx.create_rw_signal(Rect::ZERO);
         let overlay_id = cx.create_rw_signal(None::<ViewId>);
         remote_btn
-            .on_resize(move |rect| { icon_rect.set(rect); })
+            .on_resize(move |rect| {
+                icon_rect.set(rect);
+            })
             .on_click_stop(move |_| {
                 if let Some(id) = overlay_id.get_untracked() {
                     remove_overlay(id);
@@ -86,17 +88,22 @@ fn left(
                                     remove_overlay(id);
                                     overlay_id.set(None);
                                 }
-                                workbench_command.send(UmideWorkbenchCommand::ConnectSshHost);
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::ConnectSshHost);
                             })
                             .style(move |s| {
                                 let config = config.get();
                                 s.padding_horiz(12.0)
                                     .padding_vert(6.0)
-                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .color(
+                                        config.color(UmideColor::EDITOR_FOREGROUND),
+                                    )
                                     .cursor(CursorStyle::Pointer)
-                                    .hover(|s| s.background(
-                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                                    ))
+                                    .hover(|s| {
+                                        s.background(config.color(
+                                            UmideColor::PANEL_HOVERED_BACKGROUND,
+                                        ))
+                                    })
                             }),
                         Label::new("Disconnect remote".to_string())
                             .on_click_stop(move |_| {
@@ -104,18 +111,23 @@ fn left(
                                     remove_overlay(id);
                                     overlay_id.set(None);
                                 }
-                                workbench_command.send(UmideWorkbenchCommand::DisconnectRemote);
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::DisconnectRemote);
                             })
                             .style(move |s| {
                                 let config = config.get();
                                 s.padding_horiz(12.0)
                                     .padding_vert(6.0)
-                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .color(
+                                        config.color(UmideColor::EDITOR_FOREGROUND),
+                                    )
                                     .cursor(CursorStyle::Pointer)
                                     .apply_if(!show_disconnect, |s| s.hide())
-                                    .hover(|s| s.background(
-                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                                    ))
+                                    .hover(|s| {
+                                        s.background(config.color(
+                                            UmideColor::PANEL_HOVERED_BACKGROUND,
+                                        ))
+                                    })
                             }),
                     ))
                     .on_event_stop(EventListener::FocusLost, move |_| {
@@ -144,28 +156,29 @@ fn left(
     #[cfg(not(target_os = "macos"))]
     let remote_btn = remote_btn.popout_menu(move || {
         #[allow(unused_mut)]
-        let mut menu = Menu::new()
-            .item("Connect to SSH Host", |i| i.action(move || {
+        let mut menu = Menu::new().item("Connect to SSH Host", |i| {
+            i.action(move || {
                 workbench_command.send(UmideWorkbenchCommand::ConnectSshHost);
-            }));
+            })
+        });
         if !is_local
             && proxy_status.get().is_some_and(|p| {
                 matches!(p, ProxyStatus::Connecting | ProxyStatus::Connected)
             })
         {
-            menu = menu.item("Disconnect remote", |i| i.action(
-                move || {
+            menu = menu.item("Disconnect remote", |i| {
+                i.action(move || {
                     workbench_command.send(UmideWorkbenchCommand::DisconnectRemote);
-                },
-            ));
+                })
+            });
         }
         #[cfg(windows)]
         {
-            menu = menu.item("Connect to WSL Host", |i| i.action(
-                move || {
+            menu = menu.item("Connect to WSL Host", |i| {
+                i.action(move || {
                     workbench_command.send(UmideWorkbenchCommand::ConnectWslHost);
-                },
-            ));
+                })
+            });
         }
         menu
     });
@@ -192,9 +205,8 @@ fn left(
             .items_center()
             .background(color)
             .hover(|s| {
-                s.cursor(CursorStyle::Pointer).background(
-                    config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                )
+                s.cursor(CursorStyle::Pointer)
+                    .background(config.color(UmideColor::PANEL_HOVERED_BACKGROUND))
             })
             .active(|s| {
                 s.cursor(CursorStyle::Pointer).background(
@@ -303,7 +315,9 @@ fn middle(
                 || "Open Folder / Recent Workspace",
                 config,
             )
-            .on_resize(move |rect| { icon_rect.set(rect); })
+            .on_resize(move |rect| {
+                icon_rect.set(rect);
+            })
             .on_click_stop(move |_| {
                 if let Some(id) = overlay_id.get_untracked() {
                     remove_overlay(id);
@@ -319,17 +333,22 @@ fn middle(
                                     remove_overlay(id);
                                     overlay_id.set(None);
                                 }
-                                workbench_command.send(UmideWorkbenchCommand::OpenFolder);
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::OpenFolder);
                             })
                             .style(move |s| {
                                 let config = config.get();
                                 s.padding_horiz(12.0)
                                     .padding_vert(6.0)
-                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .color(
+                                        config.color(UmideColor::EDITOR_FOREGROUND),
+                                    )
                                     .cursor(CursorStyle::Pointer)
-                                    .hover(|s| s.background(
-                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                                    ))
+                                    .hover(|s| {
+                                        s.background(config.color(
+                                            UmideColor::PANEL_HOVERED_BACKGROUND,
+                                        ))
+                                    })
                             }),
                         Label::new("Open Recent Workspace".to_string())
                             .on_click_stop(move |_| {
@@ -337,17 +356,22 @@ fn middle(
                                     remove_overlay(id);
                                     overlay_id.set(None);
                                 }
-                                workbench_command.send(UmideWorkbenchCommand::PaletteWorkspace);
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::PaletteWorkspace);
                             })
                             .style(move |s| {
                                 let config = config.get();
                                 s.padding_horiz(12.0)
                                     .padding_vert(6.0)
-                                    .color(config.color(UmideColor::EDITOR_FOREGROUND))
+                                    .color(
+                                        config.color(UmideColor::EDITOR_FOREGROUND),
+                                    )
                                     .cursor(CursorStyle::Pointer)
-                                    .hover(|s| s.background(
-                                        config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                                    ))
+                                    .hover(|s| {
+                                        s.background(config.color(
+                                            UmideColor::PANEL_HOVERED_BACKGROUND,
+                                        ))
+                                    })
                             }),
                     ))
                     .on_event_stop(EventListener::FocusLost, move |_| {
@@ -385,12 +409,18 @@ fn middle(
             )
             .popout_menu(move || {
                 Menu::new()
-                    .item("Open Folder", |i| i.action(move || {
-                        workbench_command.send(UmideWorkbenchCommand::OpenFolder);
-                    }))
-                    .item("Open Recent Workspace", |i| i.action(move || {
-                        workbench_command.send(UmideWorkbenchCommand::PaletteWorkspace);
-                    }))
+                    .item("Open Folder", |i| {
+                        i.action(move || {
+                            workbench_command
+                                .send(UmideWorkbenchCommand::OpenFolder);
+                        })
+                    })
+                    .item("Open Recent Workspace", |i| {
+                        i.action(move || {
+                            workbench_command
+                                .send(UmideWorkbenchCommand::PaletteWorkspace);
+                        })
+                    })
             })
             .into_any()
         }
@@ -520,7 +550,9 @@ fn right(
         let icon_rect = cx.create_rw_signal(Rect::ZERO);
         let overlay_id = cx.create_rw_signal(None::<ViewId>);
         settings_icon
-            .on_resize(move |rect| { icon_rect.set(rect); })
+            .on_resize(move |rect| {
+                icon_rect.set(rect);
+            })
             .on_click_stop(move |_| {
                 if let Some(id) = overlay_id.get_untracked() {
                     remove_overlay(id);
@@ -540,11 +572,15 @@ fn right(
                 };
                 let update_clickable = latest_version.get_untracked().is_some()
                     && !update_in_progress.get_untracked();
-                let divider = move || Empty::new().style(move |s| {
-                    let config = config.get();
-                    s.height(1.0).width_pct(100.0).margin_vert(2.0)
-                        .background(config.color(UmideColor::LAPCE_BORDER))
-                });
+                let divider = move || {
+                    Empty::new().style(move |s| {
+                        let config = config.get();
+                        s.height(1.0)
+                            .width_pct(100.0)
+                            .margin_vert(2.0)
+                            .background(config.color(UmideColor::LAPCE_BORDER))
+                    })
+                };
                 let item = move |text: &'static str, action: Box<dyn Fn()>| {
                     Label::new(text.to_string())
                         .on_click_stop(move |_| {
@@ -556,57 +592,90 @@ fn right(
                         })
                         .style(move |s| {
                             let config = config.get();
-                            s.padding_horiz(12.0).padding_vert(6.0)
+                            s.padding_horiz(12.0)
+                                .padding_vert(6.0)
                                 .color(config.color(UmideColor::EDITOR_FOREGROUND))
                                 .cursor(CursorStyle::Pointer)
-                                .hover(|s| s.background(
-                                    config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                                ))
+                                .hover(|s| {
+                                    s.background(
+                                        config.color(
+                                            UmideColor::PANEL_HOVERED_BACKGROUND,
+                                        ),
+                                    )
+                                })
                         })
                 };
                 let vid = add_overlay(
                     Stack::new((
-                        item("Command Palette", Box::new(move || {
-                            workbench_command.send(UmideWorkbenchCommand::PaletteCommand);
-                        })),
+                        item(
+                            "Command Palette",
+                            Box::new(move || {
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::PaletteCommand);
+                            }),
+                        ),
                         divider(),
-                        item("Open Settings", Box::new(move || {
-                            workbench_command.send(UmideWorkbenchCommand::OpenSettings);
-                        })),
-                        item("Open Keyboard Shortcuts", Box::new(move || {
-                            workbench_command.send(UmideWorkbenchCommand::OpenKeyboardShortcuts);
-                        })),
-                        item("Open Theme Color Settings", Box::new(move || {
-                            workbench_command.send(UmideWorkbenchCommand::OpenThemeColorSettings);
-                        })),
+                        item(
+                            "Open Settings",
+                            Box::new(move || {
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::OpenSettings);
+                            }),
+                        ),
+                        item(
+                            "Open Keyboard Shortcuts",
+                            Box::new(move || {
+                                workbench_command.send(
+                                    UmideWorkbenchCommand::OpenKeyboardShortcuts,
+                                );
+                            }),
+                        ),
+                        item(
+                            "Open Theme Color Settings",
+                            Box::new(move || {
+                                workbench_command.send(
+                                    UmideWorkbenchCommand::OpenThemeColorSettings,
+                                );
+                            }),
+                        ),
                         divider(),
                         Label::new(update_label)
                             .on_click_stop(move |_| {
-                                if !update_clickable { return; }
+                                if !update_clickable {
+                                    return;
+                                }
                                 if let Some(id) = overlay_id.get_untracked() {
                                     remove_overlay(id);
                                     overlay_id.set(None);
                                 }
-                                workbench_command.send(UmideWorkbenchCommand::RestartToUpdate);
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::RestartToUpdate);
                             })
                             .style(move |s| {
                                 let config = config.get();
-                                s.padding_horiz(12.0).padding_vert(6.0)
+                                s.padding_horiz(12.0)
+                                    .padding_vert(6.0)
                                     .color(if update_clickable {
                                         config.color(UmideColor::EDITOR_FOREGROUND)
                                     } else {
                                         config.color(UmideColor::EDITOR_DIM)
                                     })
                                     .apply_if(update_clickable, |s| {
-                                        s.cursor(CursorStyle::Pointer).hover(|s| s.background(
-                                            config.color(UmideColor::PANEL_HOVERED_BACKGROUND),
-                                        ))
+                                        s.cursor(CursorStyle::Pointer).hover(|s| {
+                                            s.background(config.color(
+                                                UmideColor::PANEL_HOVERED_BACKGROUND,
+                                            ))
+                                        })
                                     })
                             }),
                         divider(),
-                        item("About UMIDE", Box::new(move || {
-                            workbench_command.send(UmideWorkbenchCommand::ShowAbout);
-                        })),
+                        item(
+                            "About UMIDE",
+                            Box::new(move || {
+                                workbench_command
+                                    .send(UmideWorkbenchCommand::ShowAbout);
+                            }),
+                        ),
                     ))
                     .on_event_stop(EventListener::FocusLost, move |_| {
                         if let Some(id) = overlay_id.get_untracked() {
@@ -637,25 +706,29 @@ fn right(
     #[cfg(not(target_os = "macos"))]
     let settings_icon = settings_icon.popout_menu(move || {
         Menu::new()
-            .item("Command Palette", |i| i.action(move || {
-                workbench_command.send(UmideWorkbenchCommand::PaletteCommand)
-            }))
+            .item("Command Palette", |i| {
+                i.action(move || {
+                    workbench_command.send(UmideWorkbenchCommand::PaletteCommand)
+                })
+            })
             .separator()
-            .item("Open Settings", |i| i.action(move || {
-                workbench_command.send(UmideWorkbenchCommand::OpenSettings)
-            }))
-            .item("Open Keyboard Shortcuts", |i| i.action(
-                move || {
+            .item("Open Settings", |i| {
+                i.action(move || {
+                    workbench_command.send(UmideWorkbenchCommand::OpenSettings)
+                })
+            })
+            .item("Open Keyboard Shortcuts", |i| {
+                i.action(move || {
                     workbench_command
                         .send(UmideWorkbenchCommand::OpenKeyboardShortcuts)
-                },
-            ))
-            .item("Open Theme Color Settings", |i| i.action(
-                move || {
+                })
+            })
+            .item("Open Theme Color Settings", |i| {
+                i.action(move || {
                     workbench_command
                         .send(UmideWorkbenchCommand::OpenThemeColorSettings)
-                },
-            ))
+                })
+            })
             .separator()
             .item(
                 if let Some(v) = latest_version.get_untracked() {
@@ -680,12 +753,14 @@ fn right(
                     } else {
                         i.enabled(false)
                     }
-                }
+                },
             )
             .separator()
-            .item("About UMIDE", |i| i.action(move || {
-                workbench_command.send(UmideWorkbenchCommand::ShowAbout)
-            }))
+            .item("About UMIDE", |i| {
+                i.action(move || {
+                    workbench_command.send(UmideWorkbenchCommand::ShowAbout)
+                })
+            })
     });
 
     Stack::new((

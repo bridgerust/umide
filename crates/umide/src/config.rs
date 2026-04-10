@@ -7,15 +7,15 @@ use std::{
 use ::core::slice;
 use floem::{peniko::Color, prelude::palette::css};
 use itertools::Itertools;
-use umide_core::directory::Directory;
-use umide_proxy::plugin::wasi::find_all_volts;
-use umide_rpc::plugin::VoltID;
 use lsp_types::{CompletionItemKind, SymbolKind};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use serde::Deserialize;
 use strum::VariantNames;
 use tracing::error;
+use umide_core::directory::Directory;
+use umide_proxy::plugin::wasi::find_all_volts;
+use umide_rpc::plugin::VoltID;
 
 use self::{
     color::UmideColor,

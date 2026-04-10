@@ -13,9 +13,16 @@ use std::{
 };
 
 use floem::{
-    ViewId, action::exec_after, ext_event::create_ext_action, peniko::Color, prelude::Modifiers, reactive::{
-        Effect, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
-    }, text::{Attrs, AttrsList, FamilyOwned, TextLayout}, views::editor::{
+    ViewId,
+    action::exec_after,
+    ext_event::create_ext_action,
+    peniko::Color,
+    prelude::Modifiers,
+    reactive::{
+        Effect, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
+    },
+    text::{Attrs, AttrsList, FamilyOwned, TextLayout},
+    views::editor::{
         CursorInfo, Editor, EditorStyle,
         actions::CommonAction,
         command::{Command, CommandExecuted},
@@ -24,9 +31,19 @@ use floem::{
         phantom_text::{PhantomText, PhantomTextKind, PhantomTextLine},
         text::{Document, DocumentPhantom, PreeditData, Styling, SystemClipboard},
         view::{ScreenLines, ScreenLinesBase},
-    }
+    },
 };
 use itertools::Itertools;
+use lapce_xi_rope::{
+    Interval, Rope, RopeDelta, Transformer,
+    spans::{Spans, SpansBuilder},
+};
+use lsp_types::{
+    CodeActionOrCommand, CodeLens, Diagnostic, DiagnosticSeverity,
+    DocumentSymbolResponse, InlayHint, InlayHintLabel, TextEdit,
+};
+use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use umide_core::{
     buffer::{
         Buffer, InvalLines,
@@ -54,16 +71,6 @@ use umide_rpc::{
     proxy::ProxyResponse,
     style::{LineStyle, LineStyles, Style},
 };
-use lapce_xi_rope::{
-    Interval, Rope, RopeDelta, Transformer,
-    spans::{Spans, SpansBuilder},
-};
-use lsp_types::{
-    CodeActionOrCommand, CodeLens, Diagnostic, DiagnosticSeverity,
-    DocumentSymbolResponse, InlayHint, InlayHintLabel, TextEdit,
-};
-use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 
 use crate::{
     command::{CommandKind, UmideCommand},
@@ -681,7 +688,7 @@ impl Doc {
                     let selection = umide_core::selection::Selection::region(
                         buffer.offset_of_position(&edit.range.start),
                         buffer.offset_of_position(&edit.range.end),
-                        CursorAffinity::Forward
+                        CursorAffinity::Forward,
                     );
                     (selection, edit.new_text.as_str())
                 })

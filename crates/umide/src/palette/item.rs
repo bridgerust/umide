@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
+use lsp_types::{Range, SymbolKind};
 use umide_core::line_ending::LineEnding;
 use umide_rpc::dap_types::RunDebugConfig;
-use lsp_types::{Range, SymbolKind};
 
 use crate::{
     command::{UmideCommand, UmideWorkbenchCommand},
     debug::RunDebugMode,
     editor::location::EditorLocation,
-    workspace::{UmideWorkspace, SshHost},
+    workspace::{SshHost, UmideWorkspace},
 };
 
 #[derive(Clone, Debug, PartialEq)]

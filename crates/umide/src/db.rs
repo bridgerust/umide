@@ -7,9 +7,9 @@ use std::{
 use anyhow::{Result, anyhow};
 use crossbeam_channel::{Sender, unbounded};
 use floem::{peniko::kurbo::Vec2, reactive::SignalGet};
+use sha2::{Digest, Sha256};
 use umide_core::directory::Directory;
 use umide_rpc::plugin::VoltID;
-use sha2::{Digest, Sha256};
 
 use crate::{
     app::{AppData, AppInfo},

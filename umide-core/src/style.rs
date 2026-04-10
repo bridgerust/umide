@@ -1,7 +1,7 @@
 use std::str;
 
-use umide_rpc::style::{LineStyle, Style};
 use lapce_xi_rope::{LinesMetric, Rope, spans::Spans};
+use umide_rpc::style::{LineStyle, Style};
 
 pub const SCOPES: &[&str] = &[
     "constant",

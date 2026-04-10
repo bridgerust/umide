@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 use floem::{
-    prelude::Modifiers,
     peniko::kurbo::Rect,
+    prelude::Modifiers,
     reactive::{RwSignal, Scope, SignalGet, SignalUpdate},
 };
+use lsp_types::CodeActionOrCommand;
 use umide_core::{command::FocusCommand, mode::Mode, movement::Movement};
 use umide_rpc::plugin::PluginId;
-use lsp_types::CodeActionOrCommand;
 
 use crate::{
     command::{CommandExecuted, CommandKind, InternalCommand},

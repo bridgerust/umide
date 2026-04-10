@@ -36,11 +36,11 @@ impl H264FileSource {
         let mut end = self.data.len();
         let mut i = self.cursor + 3; // Skip minimal start code 00 00 01
         while i < self.data.len() - 3 {
-            if self.data[i] == 0 && self.data[i+1] == 0 {
-                if self.data[i+2] == 1 {
+            if self.data[i] == 0 && self.data[i + 1] == 0 {
+                if self.data[i + 2] == 1 {
                     end = i; // Found 00 00 01
                     break;
-                } else if self.data[i+2] == 0 && self.data[i+3] == 1 {
+                } else if self.data[i + 2] == 0 && self.data[i + 3] == 1 {
                     end = i; // Found 00 00 00 01
                     break;
                 }

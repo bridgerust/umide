@@ -114,7 +114,10 @@ impl HostCalls {
     // TODO (@radu-matei)
     // Fix the clippy warning.
     #[allow(clippy::unnecessary_wraps)]
-    fn close(st: Arc<RwLock<State>>, handle: WasiHttpHandle) -> Result<(), HttpError> {
+    fn close(
+        st: Arc<RwLock<State>>,
+        handle: WasiHttpHandle,
+    ) -> Result<(), HttpError> {
         let mut st = st.write()?;
         st.responses.remove(&handle);
         Ok(())
@@ -179,7 +182,8 @@ impl HostCalls {
         let mut store = store.as_context_mut();
 
         // Read the header key from the module's memory.
-        let key = string_from_memory(&memory, &mut store, name_ptr, name_len)?.to_ascii_lowercase();
+        let key = string_from_memory(&memory, &mut store, name_ptr, name_len)?
+            .to_ascii_lowercase();
         // Attempt to get the corresponding value from the resposne headers.
         let value = headers.get(key).ok_or(HttpError::HeaderNotFound)?;
         if value.len() > value_len as _ {
@@ -272,12 +276,20 @@ impl HostCalls {
         }
 
         let method = Method::from_str(
-            string_from_memory(&memory, &mut store, method_ptr, method_len)?.as_str(),
+            string_from_memory(&memory, &mut store, method_ptr, method_len)?
+                .as_str(),
         )
         .map_err(|_| HttpError::InvalidMethod)?;
-        let req_body = slice_from_memory(&memory, &mut store, req_body_ptr, req_body_len)?;
+        let req_body =
+            slice_from_memory(&memory, &mut store, req_body_ptr, req_body_len)?;
         let headers = string_to_header_map(
-            string_from_memory(&memory, &mut store, req_headers_ptr, req_headers_len)?.as_str(),
+            string_from_memory(
+                &memory,
+                &mut store,
+                req_headers_ptr,
+                req_headers_len,
+            )?
+            .as_str(),
         )
         .map_err(|_| HttpError::InvalidEncoding)?;
 
@@ -538,7 +550,9 @@ fn request(
             //
             // This should only be a temporary workaround, until we take
             // advantage of async functions in Wasmtime.
-            tracing::trace!("tokio runtime available, spawning request on tokio thread");
+            tracing::trace!(
+                "tokio runtime available, spawning request on tokio thread"
+            );
             block_on(r.spawn_blocking(move || {
                 let client = Client::builder().build().unwrap();
                 let res = block_on(
@@ -588,7 +602,8 @@ fn slice_from_memory(
     offset: u32,
     len: u32,
 ) -> Result<Vec<u8>, HttpError> {
-    let required_memory_size = offset.checked_add(len).ok_or(HttpError::BufferTooSmall)? as usize;
+    let required_memory_size =
+        offset.checked_add(len).ok_or(HttpError::BufferTooSmall)? as usize;
 
     if required_memory_size > memory.data_size(&mut ctx) {
         return Err(HttpError::BufferTooSmall);
@@ -613,7 +628,10 @@ fn string_from_memory(
 /// Check if guest module is allowed to send request to URL, based on the list of
 /// allowed hosts defined by the runtime.
 /// If `None` is passed, the guest module is not allowed to send the request.
-fn is_allowed(url: &str, allowed_hosts: Option<&[String]>) -> Result<bool, HttpError> {
+fn is_allowed(
+    url: &str,
+    allowed_hosts: Option<&[String]>,
+) -> Result<bool, HttpError> {
     let url_host = Url::parse(url)
         .map_err(|_| HttpError::InvalidUrl)?
         .host_str()
@@ -625,7 +643,8 @@ fn is_allowed(url: &str, allowed_hosts: Option<&[String]>) -> Result<bool, HttpE
             if domains.iter().any(|domain| domain == ALLOW_ALL_HOSTS) {
                 Ok(true)
             } else {
-                let allowed: Result<Vec<_>, _> = domains.iter().map(|d| Url::parse(d)).collect();
+                let allowed: Result<Vec<_>, _> =
+                    domains.iter().map(|d| Url::parse(d)).collect();
                 let allowed = allowed.map_err(|_| HttpError::InvalidUrl)?;
 
                 Ok(allowed
@@ -711,11 +730,13 @@ fn test_allowed_domains() {
     );
     assert_eq!(
         true,
-        is_allowed("http://192.168.0.1/login", Some(allowed_domains.as_ref())).unwrap()
+        is_allowed("http://192.168.0.1/login", Some(allowed_domains.as_ref()))
+            .unwrap()
     );
     assert_eq!(
         false,
-        is_allowed("https://test.brigade.sh", Some(allowed_domains.as_ref())).unwrap()
+        is_allowed("https://test.brigade.sh", Some(allowed_domains.as_ref()))
+            .unwrap()
     );
 }
 
@@ -746,11 +767,13 @@ fn test_allowed_domains_with_wildcard() {
     );
     assert_eq!(
         true,
-        is_allowed("http://192.168.0.1/login", Some(allowed_domains.as_ref())).unwrap()
+        is_allowed("http://192.168.0.1/login", Some(allowed_domains.as_ref()))
+            .unwrap()
     );
     assert_eq!(
         true,
-        is_allowed("https://test.brigade.sh", Some(allowed_domains.as_ref())).unwrap()
+        is_allowed("https://test.brigade.sh", Some(allowed_domains.as_ref()))
+            .unwrap()
     );
 }
 

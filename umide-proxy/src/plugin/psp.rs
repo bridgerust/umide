@@ -14,13 +14,6 @@ use crossbeam_channel::{Receiver, Sender};
 use dyn_clone::DynClone;
 use floem_editor_core::buffer::rope_text::{RopeText, RopeTextRef};
 use jsonrpc_lite::{Id, JsonRpc, Params};
-use umide_core::{encoding::offset_utf16_to_utf8, rope_text_pos::RopeTextPosition};
-use umide_rpc::{
-    RpcError,
-    core::{CoreRpcHandler, ServerStatusParams},
-    plugin::{PluginId, VoltID},
-    style::{LineStyle, Style},
-};
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
     CancelParams, CodeActionProviderCapability, DidChangeTextDocumentParams,
@@ -59,6 +52,13 @@ use psp_types::{
 };
 use serde::Serialize;
 use serde_json::Value;
+use umide_core::{encoding::offset_utf16_to_utf8, rope_text_pos::RopeTextPosition};
+use umide_rpc::{
+    RpcError,
+    core::{CoreRpcHandler, ServerStatusParams},
+    plugin::{PluginId, VoltID},
+    style::{LineStyle, Style},
+};
 
 use super::{
     PluginCatalogRpcHandler,

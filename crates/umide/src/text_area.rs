@@ -1,11 +1,9 @@
 use floem::{
     View,
     peniko::kurbo::Rect,
-    reactive::{
-        SignalGet, SignalUpdate, SignalWith, Effect, RwSignal,
-    },
+    reactive::{Effect, RwSignal, SignalGet, SignalUpdate, SignalWith},
     text::{Attrs, AttrsList, LineHeightValue, TextLayout},
-    views::{Decorators, Container, Label, rich_text, Scroll, Stack},
+    views::{Container, Decorators, Label, Scroll, Stack, rich_text},
 };
 use umide_core::buffer::rope_text::RopeText;
 

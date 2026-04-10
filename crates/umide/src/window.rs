@@ -5,7 +5,8 @@ use floem::{
     action::TimerToken,
     peniko::kurbo::{Point, Size},
     reactive::{
-        Context, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
+        Context, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate,
+        SignalWith,
     },
     window::WindowId,
 };

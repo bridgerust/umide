@@ -1,11 +1,18 @@
-use std::{rc::Rc, sync::Arc, ops::Range};
+use std::{ops::Range, rc::Rc, sync::Arc};
 
 use floem::{
-    View, event::{Event, EventListener}, prelude::PointerEvent, reactive::{
-        Effect, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
-    }, style::CursorStyle, views::{
-        Container, Decorators, Label, Scroll, Stack, dyn_stack, virtual_stack, VirtualVector
-    }
+    View,
+    event::{Event, EventListener},
+    prelude::PointerEvent,
+    reactive::{
+        Effect, Memo, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate,
+        SignalWith,
+    },
+    style::CursorStyle,
+    views::{
+        Container, Decorators, Label, Scroll, Stack, VirtualVector, dyn_stack,
+        virtual_stack,
+    },
 };
 use umide_core::mode::Modes;
 
@@ -526,7 +533,6 @@ fn keyboard_picker_view(
                 .border_radius(6.0)
                 .border_color(config.color(UmideColor::LAPCE_BORDER))
                 .background(config.color(UmideColor::PANEL_BACKGROUND))
-                
         }),
     )
     .on_event_stop(EventListener::KeyDown, move |event| {
@@ -549,7 +555,7 @@ fn keyboard_picker_view(
         }
     })
     .on_event_stop(EventListener::KeyUp, move |event| {
-        if let Event::Pointer(PointerEvent::Up(_key_event))  = event {
+        if let Event::Pointer(PointerEvent::Up(_key_event)) = event {
             picker.keys.update(|keys| {
                 if let Some((_last_key, last_key_confirmed)) = keys.last_mut() {
                     *last_key_confirmed = true;

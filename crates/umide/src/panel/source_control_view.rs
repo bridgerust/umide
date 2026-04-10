@@ -10,7 +10,9 @@ use floem::{
     reactive::{Memo, RwSignal, SignalGet, SignalUpdate, SignalWith},
     style::{CursorStyle, Style},
     views::{
-        Container, Decorators, Label, Scroll, Stack, dyn_stack, editor::view::{LineRegion, cursor_caret}, svg
+        Container, Decorators, Label, Scroll, Stack, dyn_stack,
+        editor::view::{LineRegion, cursor_caret},
+        svg,
     },
 };
 use umide_core::buffer::rope_text::RopeText;
@@ -86,7 +88,9 @@ pub fn source_control_panel(
                     let id = view.id();
                     view.on_event_cont(EventListener::PointerDown, move |event| {
                         let event = event.clone().offset((10.0, 6.0));
-                        if let Event::Pointer(PointerEvent::Down(pointer_event)) = event {
+                        if let Event::Pointer(PointerEvent::Down(pointer_event)) =
+                            event
+                        {
                             id.request_active();
                             editor.get_untracked().pointer_down(&pointer_event);
                         }
@@ -101,7 +105,10 @@ pub fn source_control_panel(
                         EventListener::PointerUp,
                         move |event| {
                             let event = event.clone().offset((10.0, 6.0));
-                            if let Event::Pointer(PointerEvent::Up(PointerButtonEvent { state, .. })) = event {
+                            if let Event::Pointer(PointerEvent::Up(
+                                PointerButtonEvent { state, .. },
+                            )) = event
+                            {
                                 editor.get_untracked().pointer_up(&state);
                             }
                         },
@@ -248,15 +255,8 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
             Label::new(file_name.clone()).style(move |s| {
                 let config = config.get();
                 let size = config.ui.icon_size() as f32;
-                let max_width = panel_width.get()
-                (   - 10.0
-                    - size
-                    - 6.0
-                    - size
-                    - 6.0
-                    - 10.0
-                    - size
-                    - 6.0
+                let max_width = panel_width.get()(
+                    -10.0 - size - 6.0 - size - 6.0 - 10.0 - size - 6.0,
                 );
                 s.text_ellipsis()
                     .margin_right(6.0)
@@ -322,8 +322,8 @@ fn file_diffs_view(source_control: SourceControlData) -> impl View {
             };
 
             if let Event::Pointer(PointerEvent::Down(_pointer_event)) = event {
-                let menu = Menu::new()
-                    .item("Discard Changes", |i| i.action(discard));
+                let menu =
+                    Menu::new().item("Discard Changes", |i| i.action(discard));
                 show_context_menu(menu, None);
             }
         })

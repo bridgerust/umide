@@ -1,12 +1,13 @@
-use std::ffi::{CString, c_void};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use raw_window_handle::RawWindowHandle;
+use std::ffi::{c_void, CString};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use umide_native::emulator::{
-    umide_native_create_emulator, umide_native_destroy_emulator, umide_native_resize_emulator,
-    umide_native_send_input, umide_native_attach_device, umide_native_push_frame,
-    umide_native_show_emulator, umide_native_hide_emulator,
-    umide_native_set_input_callback, NativeEmulator, EmulatorPlatform, EmulatorInputEvent, EmulatorInputType
+    umide_native_attach_device, umide_native_create_emulator,
+    umide_native_destroy_emulator, umide_native_hide_emulator,
+    umide_native_push_frame, umide_native_resize_emulator, umide_native_send_input,
+    umide_native_set_input_callback, umide_native_show_emulator, EmulatorInputEvent,
+    EmulatorInputType, EmulatorPlatform, NativeEmulator,
 };
 
 /// Commands to send to the gRPC command client
@@ -26,10 +27,17 @@ struct CallbackCtx {
     grpc_cmd_tx: Option<std::sync::mpsc::Sender<GrpcCommand>>,
 }
 
-extern "C" fn input_callback(event_type: i32, x: i32, y: i32, user_data: *mut c_void) {
-    if user_data.is_null() { return; }
+extern "C" fn input_callback(
+    event_type: i32,
+    x: i32,
+    y: i32,
+    user_data: *mut c_void,
+) {
+    if user_data.is_null() {
+        return;
+    }
     let ctx = unsafe { &*(user_data as *mut CallbackCtx) };
-    
+
     if ctx.is_android {
         if let Some(tx) = &ctx.grpc_cmd_tx {
             let cmd = match event_type {
@@ -56,7 +64,9 @@ extern "C" fn input_callback(event_type: i32, x: i32, y: i32, user_data: *mut c_
             y,
             key_code: 0,
         };
-        unsafe { umide_native_send_input(ctx.handle, &ev); }
+        unsafe {
+            umide_native_send_input(ctx.handle, &ev);
+        }
     }
 }
 
@@ -75,11 +85,22 @@ unsafe impl Send for NativeEmulatorView {}
 unsafe impl Sync for NativeEmulatorView {}
 
 impl NativeEmulatorView {
-    pub fn new(window_handle: RawWindowHandle, x: i32, y: i32, width: u32, height: u32, platform: EmulatorPlatform) -> Result<Self, String> {
+    pub fn new(
+        window_handle: RawWindowHandle,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        platform: EmulatorPlatform,
+    ) -> Result<Self, String> {
         let parent_ptr = match window_handle {
             #[cfg(target_os = "macos")]
             RawWindowHandle::AppKit(handle) => handle.ns_view.as_ptr(),
-            _ => return Err("Unsupported platform for native emulator embedding".to_string()),
+            _ => {
+                return Err(
+                    "Unsupported platform for native emulator embedding".to_string()
+                )
+            }
         };
 
         let handle = unsafe {
@@ -91,16 +112,20 @@ impl NativeEmulatorView {
         } else {
             let is_android = matches!(platform, EmulatorPlatform::Android);
             let (_grpc_cmd_tx, _) = std::sync::mpsc::channel::<GrpcCommand>(); // placeholder, replaced in start_grpc_stream
-            
+
             let ctx = Box::new(CallbackCtx {
                 is_android,
                 handle,
-                grpc_cmd_tx: None, 
+                grpc_cmd_tx: None,
             });
             let ctx_ptr = Box::into_raw(ctx);
-            
+
             unsafe {
-                umide_native_set_input_callback(handle, Some(input_callback), ctx_ptr as *mut c_void);
+                umide_native_set_input_callback(
+                    handle,
+                    Some(input_callback),
+                    ctx_ptr as *mut c_void,
+                );
             }
 
             Ok(Self {
@@ -135,10 +160,8 @@ impl NativeEmulatorView {
     fn ensure_idb_installed(&self) {
         std::thread::spawn(move || {
             // Check if idb exists
-            let output = std::process::Command::new("which")
-                .arg("idb")
-                .output();
-                
+            let output = std::process::Command::new("which").arg("idb").output();
+
             let needs_install = match output {
                 Ok(out) => !out.status.success() || out.stdout.is_empty(),
                 Err(_) => true,
@@ -146,7 +169,7 @@ impl NativeEmulatorView {
 
             if needs_install {
                 tracing::info!("'idb' not found. Auto-installing iOS interaction dependencies...");
-                
+
                 // 1. Install idb-companion via brew
                 let _ = std::process::Command::new("brew")
                     .args(["tap", "facebook/fb"])
@@ -154,18 +177,16 @@ impl NativeEmulatorView {
                 let _ = std::process::Command::new("brew")
                     .args(["install", "idb-companion"])
                     .output();
-                    
+
                 // 2. Install fb-idb via pip3
                 let _ = std::process::Command::new("pip3")
                     .args(["install", "fb-idb"])
                     .output();
-                    
+
                 tracing::info!("Finished installing iOS idb dependencies.");
             }
         });
     }
-
-
 
     /// Push RGBA frame data for display (used by gRPC streaming for Android)
     pub fn push_frame(&self, rgba_data: &[u8], width: u32, height: u32) {
@@ -242,7 +263,7 @@ impl NativeEmulatorView {
         // Create a sync channel for commands (key presses, touch events)
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<GrpcCommand>();
         self.grpc_cmd_tx = Some(cmd_tx.clone());
-        
+
         // Update the callback context so the C++ callback can send to this channel
         unsafe {
             if !self.callback_ctx.is_null() {
@@ -256,7 +277,10 @@ impl NativeEmulatorView {
             let rt = match tokio::runtime::Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
-                    tracing::error!("Failed to create tokio runtime for gRPC stream: {}", e);
+                    tracing::error!(
+                        "Failed to create tokio runtime for gRPC stream: {}",
+                        e
+                    );
                     return;
                 }
             };
@@ -403,8 +427,6 @@ impl NativeEmulatorView {
     pub fn is_android(&self) -> bool {
         self.is_android
     }
-
-
 }
 
 impl Drop for NativeEmulatorView {

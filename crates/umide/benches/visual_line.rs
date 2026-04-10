@@ -13,11 +13,11 @@ use floem::{
         },
     },
 };
+use lapce_xi_rope::Rope;
 use umide_core::{
     buffer::rope_text::{RopeText, RopeTextRef},
     cursor::CursorAffinity,
 };
-use lapce_xi_rope::Rope;
 
 const FONT_SIZE: usize = 12;
 

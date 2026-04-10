@@ -2,10 +2,14 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     process::Command,
-    sync::{Arc, mpsc::{RecvError, Sender}},
+    sync::{
+        Arc,
+        mpsc::{RecvError, Sender},
+    },
 };
 
-use floem::{receiver_signal::ChannelSignal};
+use floem::receiver_signal::ChannelSignal;
+use tracing::error;
 use umide_proxy::dispatch::Dispatcher;
 use umide_rpc::{
     core::{CoreHandler, CoreNotification, CoreRpcHandler},
@@ -13,7 +17,6 @@ use umide_rpc::{
     proxy::{ProxyRpcHandler, ProxyStatus},
     terminal::TermId,
 };
-use tracing::error;
 
 use self::{remote::start_remote, ssh::SshRemote};
 use crate::{

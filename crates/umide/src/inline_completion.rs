@@ -1,13 +1,18 @@
 use std::{borrow::Cow, ops::Range, path::PathBuf, str::FromStr};
 
-use floem::reactive::{Effect, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith};
+use floem::reactive::{
+    Effect, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
+};
+use lsp_types::InsertTextFormat;
 use umide_core::{
     buffer::{
         Buffer,
         rope_text::{RopeText, RopeTextRef},
-    }, cursor::CursorAffinity, rope_text_pos::RopeTextPosition, selection::Selection
+    },
+    cursor::CursorAffinity,
+    rope_text_pos::RopeTextPosition,
+    selection::Selection,
 };
-use lsp_types::InsertTextFormat;
 
 use crate::{config::UmideConfig, doc::Doc, editor::EditorData, snippet::Snippet};
 

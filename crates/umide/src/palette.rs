@@ -16,20 +16,23 @@ use floem::{
     ext_event::create_ext_action,
     prelude::Modifiers,
     reactive::{
-        Context, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith
-    }, receiver_signal::ChannelSignal,
+        Context, ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith,
+    },
+    receiver_signal::ChannelSignal,
 };
 use im::Vector;
 use itertools::Itertools;
-use umide_core::{
-    buffer::rope_text::RopeText, command::FocusCommand, cursor::CursorAffinity, language::UmideLanguage, line_ending::LineEnding, mode::Mode, movement::Movement, selection::Selection, syntax::Syntax
-};
-use umide_rpc::proxy::ProxyResponse;
 use lapce_xi_rope::Rope;
 use lsp_types::{DocumentSymbol, DocumentSymbolResponse};
 use nucleo::Utf32Str;
 use strum::{EnumMessage, IntoEnumIterator};
 use tracing::error;
+use umide_core::{
+    buffer::rope_text::RopeText, command::FocusCommand, cursor::CursorAffinity,
+    language::UmideLanguage, line_ending::LineEnding, mode::Mode,
+    movement::Movement, selection::Selection, syntax::Syntax,
+};
+use umide_rpc::proxy::ProxyResponse;
 
 use self::{
     item::{PaletteItem, PaletteItemContent},
@@ -50,7 +53,7 @@ use crate::{
     main_split::MainSplitData,
     source_control::SourceControlData,
     window_tab::{CommonData, Focus},
-    workspace::{UmideWorkspace, UmideWorkspaceType, SshHost},
+    workspace::{SshHost, UmideWorkspace, UmideWorkspaceType},
 };
 
 pub mod item;
@@ -333,9 +336,10 @@ impl PaletteData {
         self.kind.set(kind);
         // Refresh the palette input with only the symbol prefix, losing old content.
         self.input_editor.doc().reload(Rope::from(symbol), true);
-        self.input_editor
-            .cursor()
-            .update(|cursor| cursor.set_insert(Selection::caret(symbol.len(), CursorAffinity::Forward)));
+        self.input_editor.cursor().update(|cursor| {
+            cursor
+                .set_insert(Selection::caret(symbol.len(), CursorAffinity::Forward))
+        });
     }
 
     /// Get the placeholder text to use in the palette input field.
@@ -1486,9 +1490,9 @@ impl PaletteData {
         self.has_preview.set(false);
         self.items.update(|items| items.clear());
         self.input_editor.doc().reload(Rope::from(""), true);
-        self.input_editor
-            .cursor()
-            .update(|cursor| cursor.set_insert(Selection::caret(0, CursorAffinity::Forward)));
+        self.input_editor.cursor().update(|cursor| {
+            cursor.set_insert(Selection::caret(0, CursorAffinity::Forward))
+        });
     }
 
     /// Move to the next entry in the palette list, wrapping around if needed.

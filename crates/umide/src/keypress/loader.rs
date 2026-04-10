@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use indexmap::IndexMap;
-use umide_core::mode::Modes;
 use tracing::{debug, error};
+use umide_core::mode::Modes;
 
 use super::keymap::{KeyMap, KeyMapPress};
 
@@ -18,11 +18,7 @@ impl KeyMapLoader {
         }
     }
 
-    pub fn load_from_str(
-        &mut self,
-        s: &str,
-        modal: bool,
-    ) -> Result<&mut Self> {
+    pub fn load_from_str(&mut self, s: &str, modal: bool) -> Result<&mut Self> {
         let toml_keymaps: toml_edit::DocumentMut = s.parse()?;
         let toml_keymaps = toml_keymaps
             .get("keymaps")

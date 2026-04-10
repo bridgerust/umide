@@ -5,15 +5,15 @@ use floem::{
     reactive::{ReadSignal, RwSignal, Scope, SignalGet, SignalUpdate, SignalWith},
     views::editor::{id::EditorId, text::Document},
 };
-use umide_core::{
-    buffer::rope_text::RopeText, movement::Movement, rope_text_pos::RopeTextPosition,
-};
-use umide_rpc::{plugin::PluginId, proxy::ProxyRpcHandler};
 use lsp_types::{
     CompletionItem, CompletionResponse, CompletionTextEdit, InsertTextFormat,
     Position,
 };
 use nucleo::Utf32Str;
+use umide_core::{
+    buffer::rope_text::RopeText, movement::Movement, rope_text_pos::RopeTextPosition,
+};
+use umide_rpc::{plugin::PluginId, proxy::ProxyRpcHandler};
 
 use crate::{config::UmideConfig, editor::EditorData, snippet::Snippet};
 
@@ -402,7 +402,8 @@ fn completion_lens_text(
     // We strip the prefix of the current input from the label.
     // So that, for example, `p` with a completion of `println` only sets the lens text to `rintln`.
     // If the text does not include a prefix in the expected position, then we do not display it.
-    let item = <Cow<'_, str> as AsRef<str>>::as_ref(&item).strip_prefix(&completion.input)?;
+    let item = <Cow<'_, str> as AsRef<str>>::as_ref(&item)
+        .strip_prefix(&completion.input)?;
 
     // Get only the first line of text, because Umide does not currently support
     // multi-line phantom text.

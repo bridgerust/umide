@@ -9,13 +9,6 @@ use std::{
     thread,
 };
 
-use umide_rpc::{
-    RpcError,
-    dap_types::{self, DapId, DapServer, SetBreakpointsResponse},
-    plugin::{PluginId, VoltID, VoltInfo, VoltMetadata},
-    proxy::ProxyResponse,
-    style::LineStyle,
-};
 use lapce_xi_rope::{Rope, RopeDelta};
 use lsp_types::{
     DidOpenTextDocumentParams, MessageType, SemanticTokens, ShowMessageParams,
@@ -25,6 +18,13 @@ use lsp_types::{
 use parking_lot::Mutex;
 use psp_types::Notification;
 use serde_json::Value;
+use umide_rpc::{
+    RpcError,
+    dap_types::{self, DapId, DapServer, SetBreakpointsResponse},
+    plugin::{PluginId, VoltID, VoltInfo, VoltMetadata},
+    proxy::ProxyResponse,
+    style::LineStyle,
+};
 
 use super::{
     PluginCatalogNotification, PluginCatalogRpcHandler,

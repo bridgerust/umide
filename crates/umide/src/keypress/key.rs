@@ -52,9 +52,7 @@ impl KeyInput {
                         if c == " " {
                             KeyMapKey::Logical(Key::Character(" ".to_string()))
                         } else if c.len() == 1 && c.is_ascii() {
-                            KeyMapKey::Logical(Key::Character(
-                                c.to_lowercase(),
-                            ))
+                            KeyMapKey::Logical(Key::Character(c.to_lowercase()))
                         } else {
                             KeyMapKey::Physical(*physical)
                         }

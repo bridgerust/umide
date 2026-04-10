@@ -1,9 +1,19 @@
 use std::rc::Rc;
 
 use floem::{
-    View, ViewId, action::show_context_menu, event::{EventListener, EventPropagation}, kurbo::Size, menu::Menu, prelude::RwSignal, reactive::{SignalGet, SignalUpdate, SignalWith}, style::CursorStyle, views::{
-        Container, Decorators, Empty, Label, Scroll, Stack, dyn_stack, scroll::{Thickness, VerticalScrollAsHorizontal}, svg, tab
-    }
+    View, ViewId,
+    action::show_context_menu,
+    event::{EventListener, EventPropagation},
+    kurbo::Size,
+    menu::Menu,
+    prelude::RwSignal,
+    reactive::{SignalGet, SignalUpdate, SignalWith},
+    style::CursorStyle,
+    views::{
+        Container, Decorators, Empty, Label, Scroll, Stack, dyn_stack,
+        scroll::{Thickness, VerticalScrollAsHorizontal},
+        svg, tab,
+    },
 };
 use umide_rpc::terminal::TermId;
 
@@ -361,18 +371,24 @@ fn tab_secondary_click(
 ) {
     let mut menu = Menu::new();
     menu = menu
-        .item("Stop", |i| i.action(move || {
-            internal_command.send(InternalCommand::StopTerminal { term_id });
-        }))
-        .item("Restart", |i| i.action(move || {
-            internal_command.send(InternalCommand::RestartTerminal { term_id });
-        }))
-        .item("Clear All", |i| i.action(move || {
-            internal_command.send(InternalCommand::ClearTerminalBuffer {
-                view_id,
-                tab_index,
-                terminal_index,
-            });
-        }));
+        .item("Stop", |i| {
+            i.action(move || {
+                internal_command.send(InternalCommand::StopTerminal { term_id });
+            })
+        })
+        .item("Restart", |i| {
+            i.action(move || {
+                internal_command.send(InternalCommand::RestartTerminal { term_id });
+            })
+        })
+        .item("Clear All", |i| {
+            i.action(move || {
+                internal_command.send(InternalCommand::ClearTerminalBuffer {
+                    view_id,
+                    tab_index,
+                    terminal_index,
+                });
+            })
+        });
     show_context_menu(menu, None);
 }

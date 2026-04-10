@@ -1,4 +1,4 @@
-use crate::decoder::{VideoDecoder, DecodedFrame, DecodeError};
+use crate::decoder::{DecodeError, DecodedFrame, VideoDecoder};
 
 #[cfg(target_os = "macos")]
 pub struct VideoToolboxDecoder {
@@ -17,7 +17,10 @@ impl VideoToolboxDecoder {
 
 #[cfg(target_os = "macos")]
 impl VideoDecoder for VideoToolboxDecoder {
-    fn decode_frame(&mut self, _data: &[u8]) -> Result<Vec<DecodedFrame>, DecodeError> {
+    fn decode_frame(
+        &mut self,
+        _data: &[u8],
+    ) -> Result<Vec<DecodedFrame>, DecodeError> {
         // Implement NALU parsing and feeding to VTDecompressionSession
         Err(DecodeError::DecodeFailed("Not implemented".to_string()))
     }

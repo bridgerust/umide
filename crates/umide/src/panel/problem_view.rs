@@ -3,12 +3,9 @@ use std::{path::PathBuf, rc::Rc, sync::Arc};
 use floem::{
     View,
     peniko::Color,
-    reactive::{
-        ReadSignal, SignalGet, SignalUpdate, SignalWith, Effect,
-        RwSignal,
-    },
+    reactive::{Effect, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith},
     style::{CursorStyle, Style},
-    views::{Decorators, Container, dyn_stack, Label, Scroll, Stack, svg},
+    views::{Container, Decorators, Label, Scroll, Stack, dyn_stack, svg},
 };
 use lsp_types::{DiagnosticRelatedInformation, DiagnosticSeverity};
 
@@ -164,13 +161,13 @@ fn file_view(
         Stack::new((
             Container::new(
                 Stack::new((
-                    Label::new( file_name.clone()).style(|s| {
+                    Label::new(file_name.clone()).style(|s| {
                         s.margin_right(6.0)
                             .max_width_pct(100.0)
                             .text_ellipsis()
                             .selectable(false)
                     }),
-                    Label::new( folder.clone()).style(move |s| {
+                    Label::new(folder.clone()).style(move |s| {
                         s.color(config.get().color(UmideColor::EDITOR_DIM))
                             .min_width(0.0)
                             .text_ellipsis()
@@ -276,7 +273,7 @@ fn item_view(
     Stack::new((
         Container::new({
             Stack::new((
-                Label::new( d.diagnostic.message.clone()).style(move |s| {
+                Label::new(d.diagnostic.message.clone()).style(move |s| {
                     s.width_pct(100.0)
                         .min_width(0.0)
                         .padding_left(
@@ -351,7 +348,7 @@ fn related_view(
                 };
                 let message = format!("{path}{}", related.message);
                 Container::new(
-                    Label::new( message.clone())
+                    Label::new(message.clone())
                         .style(move |s| s.width_pct(100.0).min_width(0.0)),
                 )
                 .on_click_stop(move |_| {

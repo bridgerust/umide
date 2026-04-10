@@ -4,13 +4,11 @@ use floem::{
     IntoView, View,
     event::EventListener,
     peniko::kurbo::{Point, Rect, Size},
-    reactive::{
-        RwSignal, SignalGet, SignalUpdate, SignalWith, Memo,
-    },
+    reactive::{Memo, RwSignal, SignalGet, SignalUpdate, SignalWith},
     style::CursorStyle,
     views::{
-        Decorators, VirtualVector, Container, dyn_container, img, Label,
-        Scroll, Stack, svg, virtual_stack,
+        Container, Decorators, Label, Scroll, Stack, VirtualVector, dyn_container,
+        img, svg, virtual_stack,
     },
 };
 use indexmap::IndexMap;
@@ -31,7 +29,8 @@ use crate::{
     window_tab::{Focus, WindowTabData},
 };
 
-pub const VOLT_DEFAULT_PNG: &[u8] = include_bytes!("../../../../extra/images/volt.png");
+pub const VOLT_DEFAULT_PNG: &[u8] =
+    include_bytes!("../../../../extra/images/volt.png");
 
 struct IndexMapItems<K, V>(IndexMap<K, V>);
 
@@ -264,7 +263,7 @@ fn available_view(plugin: PluginData, core_rpc: CoreRpcHandler) -> impl View {
                     .disabled(|s| s.background(config.color(UmideColor::EDITOR_DIM)))
                     .set_disabled({
                         let a: bool = installed.get();
-                        let b: bool= installing.get();
+                        let b: bool = installing.get();
                         a || b
                     })
             })

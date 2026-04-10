@@ -1,10 +1,10 @@
 //! Native GPU surface implementation for UMIDE
-//! 
+//!
 //! This crate provides cross-platform GPU texture sharing for embedding
 //! emulator/simulator output directly into wgpu-rendered views.
 
-pub mod wgpu_texture;
 pub mod emulator;
+pub mod wgpu_texture;
 
 #[cfg(target_os = "macos")]
 pub mod macos;
@@ -27,10 +27,10 @@ use thiserror::Error;
 pub enum NativeSurfaceError {
     #[error("Failed to create native surface: {0}")]
     CreationFailed(String),
-    
+
     #[error("Surface operation failed: {0}")]
     OperationFailed(String),
-    
+
     #[error("Platform not supported")]
     PlatformNotSupported,
 }
@@ -47,10 +47,10 @@ pub enum SurfaceFormat {
 pub trait GpuSurface: Send + Sync {
     /// Get the width of the surface
     fn width(&self) -> u32;
-    
+
     /// Get the height of the surface
     fn height(&self) -> u32;
-    
+
     /// Resize the surface
     fn resize(&mut self, width: u32, height: u32) -> Result<(), NativeSurfaceError>;
 }

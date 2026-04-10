@@ -6,15 +6,13 @@ use std::{
 use floem::{
     View,
     event::EventPropagation,
-    reactive::{
-        Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith,
-    },
+    reactive::{Memo, ReadSignal, RwSignal, SignalGet, SignalUpdate, SignalWith},
     style::{AlignItems, CursorStyle, Display},
     views::{Decorators, Label, Stack, dyn_stack, svg},
 };
 use indexmap::IndexMap;
-use umide_core::mode::{Mode, VisualMode};
 use lsp_types::{DiagnosticSeverity, ProgressToken};
+use umide_core::mode::{Mode, VisualMode};
 
 use crate::{
     app::clickable_icon,
@@ -177,8 +175,8 @@ pub fn status(
                                 .color(config.color(UmideColor::LAPCE_ICON_ACTIVE))
                         },
                     ),
-                    Label::derived(move || diagnostic_count.get().0.to_string()).style(
-                        move |s| {
+                    Label::derived(move || diagnostic_count.get().0.to_string())
+                        .style(move |s| {
                             s.margin_left(5.0)
                                 .color(
                                     config
@@ -186,8 +184,7 @@ pub fn status(
                                         .color(UmideColor::STATUS_FOREGROUND),
                                 )
                                 .selectable(false)
-                        },
-                    ),
+                        }),
                     svg(move || config.get().ui_svg(UmideIcons::WARNING)).style(
                         move |s| {
                             let config = config.get();
@@ -197,8 +194,8 @@ pub fn status(
                                 .color(config.color(UmideColor::LAPCE_ICON_ACTIVE))
                         },
                     ),
-                    Label::derived(move || diagnostic_count.get().1.to_string()).style(
-                        move |s| {
+                    Label::derived(move || diagnostic_count.get().1.to_string())
+                        .style(move |s| {
                             s.margin_left(5.0)
                                 .color(
                                     config
@@ -206,8 +203,7 @@ pub fn status(
                                         .color(UmideColor::STATUS_FOREGROUND),
                                 )
                                 .selectable(false)
-                        },
-                    ),
+                        }),
                 ))
                 .on_click_stop(move |_| {
                     panel.show_panel(&PanelKind::Problem);

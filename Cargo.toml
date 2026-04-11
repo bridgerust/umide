@@ -10,7 +10,7 @@ default-run  = "umide"
 [dependencies]
 umide-app = { path = "./crates/umide" }
 umide-proxy = { path = "./umide-proxy" }
-floem_renderer = "0.1.2"
+floem_renderer = { workspace = true }
 
 [[bin]]
 name = "umide"

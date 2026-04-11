@@ -81,3 +81,11 @@ hdiutil create \
   -ov \
   -format UDZO \
   "${DMG_PATH}"
+
+if [[ -n "${APPLE_DEVELOPER_ID_APPLICATION_IDENTITY:-}" ]]; then
+  codesign \
+    --force \
+    --sign "${APPLE_DEVELOPER_ID_APPLICATION_IDENTITY}" \
+    --timestamp \
+    "${DMG_PATH}"
+fi

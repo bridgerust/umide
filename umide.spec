@@ -1,5 +1,5 @@
 Name:           umide-git
-Version:        0.1.0.{{{ git_dir_version }}}
+Version:        0.1.2.{{{ git_dir_version }}}
 Release:        1
 Summary:        Unified IDE for Cross-Platform Mobile Development written in Rust
 License:        Apache-2.0

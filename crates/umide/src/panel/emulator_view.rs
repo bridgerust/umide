@@ -747,7 +747,7 @@ pub fn emulator_panel(
                 "Emulators",
                 Stack::new((
                     toggle_bar,
-                    Stack::horizontal((
+                    Stack::new((
                         platform_panel(
                             DevicePlatform::Android,
                             devices,
@@ -758,7 +758,10 @@ pub fn emulator_panel(
                             config,
                         )
                         .style(move |s| {
-                            s.apply_if(!android_panel_visible.get(), |s| s.hide())
+                            s.flex_grow(1.0)
+                                .flex_basis(0.0)
+                                .min_height(0.0)
+                                .apply_if(!android_panel_visible.get(), |s| s.hide())
                         }),
                         platform_panel(
                             DevicePlatform::Ios,
@@ -770,11 +773,14 @@ pub fn emulator_panel(
                             config,
                         )
                         .style(move |s| {
-                            s.apply_if(!ios_panel_visible.get(), |s| s.hide())
+                            s.flex_grow(1.0)
+                                .flex_basis(0.0)
+                                .min_height(0.0)
+                                .apply_if(!ios_panel_visible.get(), |s| s.hide())
                         }),
                     ))
                     .style(|s| {
-                        s.flex_row()
+                        s.flex_col()
                             .flex_grow(1.0)
                             .width_full()
                             .min_height(0.0)

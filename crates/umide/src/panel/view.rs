@@ -401,11 +401,42 @@ pub fn panel_container_view(
     };
 
     let is_bottom = position.is_bottom();
+    let is_left = position == PanelContainerPosition::Left;
     Stack::new((
-        panel_picker(window_tab_data.clone(), position.first()),
-        panel_view(window_tab_data.clone(), position.first()),
-        panel_view(window_tab_data.clone(), position.second()),
-        panel_picker(window_tab_data.clone(), position.second()),
+        // VS Code-style activity bar for Left position (vertical icon strip)
+        Stack::new((
+            panel_picker(window_tab_data.clone(), position.first(), true),
+            Empty::new().style(|s| s.flex_grow(1.0)),
+            panel_picker(window_tab_data.clone(), position.second(), true),
+        ))
+        .style(move |s| {
+            let config_val = config.get();
+            s.flex_col()
+                .width(48.0)
+                .height_full()
+                .background(config_val.color(UmideColor::ACTIVITY_BACKGROUND))
+                .border_right(1.0)
+                .border_color(config_val.color(UmideColor::LAPCE_BORDER))
+                .apply_if(!is_left, |s| s.hide())
+        }),
+        // Panel content — for Left: sidebar content only (no pickers, activity bar handles them)
+        // For Bottom/Right: normal pickers + content
+        Stack::new((
+            panel_picker(window_tab_data.clone(), position.first(), false),
+            panel_view(window_tab_data.clone(), position.first()),
+            panel_view(window_tab_data.clone(), position.second()),
+            panel_picker(window_tab_data.clone(), position.second(), false),
+        ))
+        .style(move |s| {
+            s.flex_col()
+                .flex_grow(1.0)
+                .min_width(0.0)
+                .min_height(0.0)
+                // For Left: hide the horizontal pickers since activity bar takes that role
+                .apply_if(is_left, |s| {
+                    s.class(floem::views::scroll::Handle, |s| s)
+                })
+        }),
         resize_drag_view(position),
         Stack::new((drop_view(position.first()), drop_view(position.second())))
             .style(move |s| {
@@ -450,7 +481,9 @@ pub fn panel_container_view(
                     .height_pct(100.0)
                     .background(config.color(UmideColor::PANEL_BACKGROUND))
             })
-            .apply_if(!is_bottom, |s| s.flex_col())
+            // Left uses flex_row so the activity bar is to the left of sidebar content
+            .apply_if(is_left, |s| s.flex_row())
+            .apply_if(!is_bottom && !is_left, |s| s.flex_col())
             .border_color(config.color(UmideColor::LAPCE_BORDER))
             .color(config.color(UmideColor::PANEL_FOREGROUND))
     })
@@ -546,6 +579,7 @@ pub fn panel_header(
 fn panel_picker(
     window_tab_data: Rc<WindowTabData>,
     position: PanelPosition,
+    as_activity_bar: bool,
 ) -> impl View {
     let panel = window_tab_data.panel.clone();
     let panels = panel.panels;
@@ -620,17 +654,25 @@ fn panel_picker(
                                 .multiply_alpha(0.7),
                         )
                 })
-                .style(|s| s.padding(1.0).draggable(true)),
+                .style(move |s| {
+                    let s = s.padding(1.0).draggable(true);
+                    if as_activity_bar {
+                        s.padding(8.0)
+                    } else {
+                        s
+                    }
+                }),
                 Label::new("".to_string()).style(move |s| {
                     s.selectable(false)
                         .pointer_events_none()
                         .absolute()
                         .size_pct(100.0, 100.0)
-                        .apply_if(!is_bottom && is_first, |s| s.margin_top(2.0))
-                        .apply_if(!is_bottom && !is_first, |s| s.margin_top(-2.0))
-                        .apply_if(is_bottom && is_first, |s| s.margin_left(-2.0))
-                        .apply_if(is_bottom && !is_first, |s| s.margin_left(2.0))
-                        .apply_if(is_active(), |s| {
+                        .apply_if(as_activity_bar && is_active(), |s| s.border_right(2.0))
+                        .apply_if(!as_activity_bar && !is_bottom && is_first, |s| s.margin_top(2.0))
+                        .apply_if(!as_activity_bar && !is_bottom && !is_first, |s| s.margin_top(-2.0))
+                        .apply_if(!as_activity_bar && is_bottom && is_first, |s| s.margin_left(-2.0))
+                        .apply_if(!as_activity_bar && is_bottom && !is_first, |s| s.margin_left(2.0))
+                        .apply_if(!as_activity_bar && is_active(), |s| {
                             s.apply_if(!is_bottom && is_first, |s| {
                                 s.border_bottom(2.0)
                             })
@@ -647,7 +689,13 @@ fn panel_picker(
                         )
                 }),
             )))
-            .style(|s| s.padding(6.0))
+            .style(move |s| {
+                if as_activity_bar {
+                    s.width(48.0).height(48.0).items_center().justify_center()
+                } else {
+                    s.padding(6.0)
+                }
+            })
         },
     )
     .style(move |s| {
@@ -658,10 +706,11 @@ fn panel_picker(
                 }),
                 |s| s.hide(),
             )
-            .apply_if(is_bottom, |s| s.flex_col())
-            .apply_if(is_bottom && is_first, |s| s.border_right(1.0))
-            .apply_if(is_bottom && !is_first, |s| s.border_left(1.0))
-            .apply_if(!is_bottom && is_first, |s| s.border_bottom(1.0))
-            .apply_if(!is_bottom && !is_first, |s| s.border_top(1.0))
+            .apply_if(as_activity_bar, |s| s.flex_col())
+            // Hide horizontal pickers for Left — activity bar replaces them
+            .apply_if(!as_activity_bar && !is_bottom, |s| s.hide())
+            .apply_if(!as_activity_bar && is_bottom, |s| s.flex_col())
+            .apply_if(!as_activity_bar && is_bottom && is_first, |s| s.border_right(1.0))
+            .apply_if(!as_activity_bar && is_bottom && !is_first, |s| s.border_left(1.0))
     })
 }

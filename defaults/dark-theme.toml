@@ -14,24 +14,26 @@ scroll-width = 10
 drop-shadow-width = 0
 
 [color-theme.base]
-black = "#282C34"
-blue = "#61AFEF"
-cyan = "#56B6C2"
-green = "#98C379"
-grey = "#3E4451"
-magenta = "#C678DD"
-orange = "#D19A66"
-purple = "#C678DD"
-red = "#E06C75"
-white = "#ABB2BF"
-yellow = "#E5C07B"
+black = "#1E1E1E"
+blue = "#4FC1FF"
+cyan = "#9CDCFE"
+green = "#4EC9B0"
+grey = "#3C3C3C"
+magenta = "#C586C0"
+orange = "#CE9178"
+purple = "#C586C0"
+red = "#F44747"
+white = "#D4D4D4"
+yellow = "#DCDCAA"
 
 primary-background = "$black"
 # Background for 'secondary' elements: panels, palette, status bar, completion, hover
-secondary-background = "#21252B"
-current-background = "#2C313A"
+secondary-background = "#252526"
+current-background = "#37373D"
 text = "$white"
-dim-text = "#5C6370"
+dim-text = "#858585"
+activity-background = "#333333"
+status-blue = "#007ACC"
 
 [color-theme.syntax]
 "comment" = "$dim-text"
@@ -85,7 +87,7 @@ dim-text = "#5C6370"
 "lapce.error" = "$red"
 "lapce.warn" = "$yellow"
 "lapce.dropdown_shadow" = "#000000"
-"lapce.border" = "#000000"
+"lapce.border" = "#454545"
 "lapce.scroll_bar" = "#3E4451BB"
 
 "lapce.button.primary.background" = "#50a14f"
@@ -94,11 +96,11 @@ dim-text = "#5C6370"
 # tab
 "lapce.tab.active.background" = "$primary-background"
 "lapce.tab.active.foreground" = "$text"
-"lapce.tab.active.underline" = "#528BFF"
+"lapce.tab.active.underline" = "$status-blue"
 
-"lapce.tab.inactive.background" = "$secondary-background"
-"lapce.tab.inactive.foreground" = "$text"
-"lapce.tab.inactive.underline" = "#528BFF77"
+"lapce.tab.inactive.background" = "#2D2D2D"
+"lapce.tab.inactive.foreground" = "#969696"
+"lapce.tab.inactive.underline" = ""
 
 "lapce.tab.separator" = ""
 
@@ -159,7 +161,7 @@ dim-text = "#5C6370"
 
 "hover.background" = "$secondary-background"
 
-"activity.background" = "$secondary-background"
+"activity.background" = "$activity-background"
 "activity.current" = "$primary-background"
 
 "debug.breakpoint" = "$red"
@@ -176,8 +178,8 @@ dim-text = "#5C6370"
 "panel.hovered.foreground" = "$text"
 "panel.hovered.foreground.dim" = "$dim-text"
 
-"status.background" = "$secondary-background"
-"status.foreground" = "$text"
+"status.background" = "$status-blue"
+"status.foreground" = "#FFFFFF"
 "status.modal.normal.background" = "$blue"
 "status.modal.normal.foreground" = "$black"
 "status.modal.insert.background" = "$red"

@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: meta
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up protoc
         uses: arduino/setup-protoc@v3
@@ -88,7 +88,7 @@ jobs:
           tar -czf ./umide-linux-x86_64.tar.gz ./umide-linux-x86_64
           gzip -c ./umide-proxy-linux-x86_64 > ./umide-proxy-linux-x86_64.gz
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: |
@@ -104,7 +104,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up protoc
         uses: arduino/setup-protoc@v3
@@ -134,7 +134,7 @@ jobs:
           $inStream.Dispose()
           $outStream.Dispose()
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: |
@@ -154,7 +154,7 @@ jobs:
       APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
       APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up protoc
         uses: arduino/setup-protoc@v3
@@ -252,7 +252,7 @@ jobs:
           xcrun stapler validate ./dist/macos/UMIDE-macos.dmg
           spctl --assess --type open --context context:primary-signature --verbose ./dist/macos/UMIDE-macos.dmg
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-macos
           path: |
@@ -273,7 +273,7 @@ jobs:
       TAG_NAME: ${{ needs.meta.outputs.tag_name }}
       PRERELEASE: ${{ needs.meta.outputs.prerelease }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
 
       - name: Create or update release
         shell: bash

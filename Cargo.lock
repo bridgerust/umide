@@ -1951,8 +1951,8 @@ dependencies = [
  "sha2",
  "slotmap",
  "smallvec",
- "strum",
- "strum_macros",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
  "taffy",
  "ui-events",
  "ui-events-floem-winit",
@@ -1972,8 +1972,8 @@ dependencies = [
  "lapce-xi-rope",
  "memchr",
  "serde",
- "strum",
- "strum_macros",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
  "ui-events",
 ]
 
@@ -6763,14 +6763,32 @@ version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.27.2",
 ]
+
+[[package]]
+name = "strum"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
 
 [[package]]
 name = "strum_macros"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -7257,10 +7275,12 @@ version = "0.9.11+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3afc9a848309fe1aaffaed6e1546a7a14de1f935dc9d89d32afd9a44bab7c46"
 dependencies = [
+ "indexmap 2.13.0",
  "serde_core",
  "serde_spanned 1.0.4",
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 0.7.14",
 ]
 
@@ -7344,6 +7364,12 @@ name = "toml_write"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
+
+[[package]]
+name = "toml_writer"
+version = "1.1.1+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tonic"
@@ -7693,14 +7719,14 @@ dependencies = [
  "sha2",
  "smallvec",
  "structdesc",
- "strum",
- "strum_macros",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
- "toml 0.5.11",
+ "toml 0.9.11+spec-1.1.0",
  "toml_edit 0.22.27",
  "tracing 0.2.0",
  "tracing-appender",
@@ -7714,7 +7740,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "wgpu 28.0.0",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
  "zip",
  "zstd",
 ]
@@ -7739,8 +7765,8 @@ dependencies = [
  "regex",
  "remain",
  "slotmap",
- "strum",
- "strum_macros",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
  "thiserror 2.0.18",
  "tracing 0.2.0",
  "tree-sitter",
@@ -7781,7 +7807,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tar",
- "toml 0.5.11",
+ "toml 0.9.11+spec-1.1.0",
  "tracing 0.2.0",
  "tracing-log",
  "trash",

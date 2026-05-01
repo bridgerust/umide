@@ -64,7 +64,7 @@ tar               = { version = "0.4" }
 tempfile          = { version = "3.10.1" }
 thiserror         = { version = "2.0.18" }
 toml              = { version = "*" }
-toml_edit         = { version = "0.22.20", features = ["serde"] }
+toml_edit         = { version = "0.23.10", features = ["serde"] }
 url               = { version = "2.5.0" }
 zstd              = { version = "0.11.2" }                                                                         # follow same version wasmtime-cache in lockfile
 

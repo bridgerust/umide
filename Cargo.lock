@@ -3848,6 +3848,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "byteorder",
+ "log",
+ "security-framework 2.11.1",
+ "security-framework 3.5.1",
+ "windows-sys 0.60.2",
+ "zeroize",
+]
+
+[[package]]
 name = "khronos-egl"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5972,12 +5986,14 @@ dependencies = [
  "sync_wrapper 1.0.2",
  "tokio",
  "tokio-rustls",
+ "tokio-util",
  "tower 0.5.3",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -7257,10 +7273,12 @@ version = "0.9.11+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3afc9a848309fe1aaffaed6e1546a7a14de1f935dc9d89d32afd9a44bab7c46"
 dependencies = [
+ "indexmap 2.13.0",
  "serde_core",
  "serde_spanned 1.0.4",
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 0.7.14",
 ]
 
@@ -7344,6 +7362,12 @@ name = "toml_write"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
+
+[[package]]
+name = "toml_writer"
+version = "1.1.1+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tonic"
@@ -7652,6 +7676,7 @@ dependencies = [
  "Inflector",
  "alacritty_terminal",
  "anyhow",
+ "async-trait",
  "backtrace",
  "base64 0.22.1",
  "bytemuck",
@@ -7673,6 +7698,7 @@ dependencies = [
  "indexmap 2.13.0",
  "interprocess",
  "itertools 0.14.0",
+ "keyring",
  "lapce-xi-rope",
  "lsp-types",
  "notify",
@@ -7700,7 +7726,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
- "toml 0.5.11",
+ "toml 0.9.11+spec-1.1.0",
  "toml_edit 0.22.27",
  "tracing 0.2.0",
  "tracing-appender",
@@ -7709,12 +7735,13 @@ dependencies = [
  "umide-core",
  "umide-proxy",
  "umide-rpc",
+ "umide_agent",
  "umide_emulator",
  "umide_native",
  "unicode-width 0.2.2",
  "url",
  "wgpu 28.0.0",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
  "zip",
  "zstd",
 ]
@@ -7781,7 +7808,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tar",
- "toml 0.5.11",
+ "toml 0.9.11+spec-1.1.0",
  "tracing 0.2.0",
  "tracing-log",
  "trash",
@@ -7811,6 +7838,22 @@ dependencies = [
  "serde_json",
  "tracing 0.2.0",
  "url",
+]
+
+[[package]]
+name = "umide_agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "futures-util",
+ "reqwest 0.13.1",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing 0.2.0",
 ]
 
 [[package]]
@@ -8254,6 +8297,19 @@ checksum = "990065f2fe63003fe337b932cfb5e3b80e0b4d0f5ff650e6985b1048f62c8319"
 dependencies = [
  "leb128fmt",
  "wasmparser 0.244.0",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

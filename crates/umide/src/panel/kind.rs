@@ -21,6 +21,7 @@ pub enum PanelKind {
     Implementation,
     Emulator,
     Video,
+    AiAssistant,
 }
 
 impl PanelKind {
@@ -39,6 +40,7 @@ impl PanelKind {
             PanelKind::Implementation => UmideIcons::IMPLEMENTATION,
             PanelKind::Emulator => UmideIcons::EMULATOR,
             PanelKind::Video => UmideIcons::DEBUG_CONSOLE,
+            PanelKind::AiAssistant => UmideIcons::AI_ASSISTANT,
         }
     }
 
@@ -67,6 +69,7 @@ impl PanelKind {
             PanelKind::Implementation => PanelPosition::BottomLeft,
             PanelKind::Emulator => PanelPosition::RightTop,
             PanelKind::Video => PanelPosition::RightBottom,
+            PanelKind::AiAssistant => PanelPosition::RightTop,
         }
     }
 }

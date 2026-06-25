@@ -44,7 +44,11 @@ pub fn default_panel_order() -> PanelOrder {
     );
     order.insert(
         PanelPosition::RightTop,
-        im::vector![PanelKind::DocumentSymbol, PanelKind::Emulator],
+        im::vector![
+            PanelKind::DocumentSymbol,
+            PanelKind::Emulator,
+            PanelKind::AiAssistant
+        ],
     );
     order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
     order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);

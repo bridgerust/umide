@@ -21,7 +21,7 @@ name = "umide-proxy"
 path = "umide-proxy/src/bin/umide-proxy.rs"
 
 [workspace]
-members = ["crates/umide", "umide-proxy", "umide-rpc", "umide-core", "crates/umide_emulator", "crates/umide_native"]
+members = ["crates/umide", "umide-proxy", "umide-rpc", "umide-core", "crates/umide_emulator", "crates/umide_native", "crates/umide_agent"]
 
 [workspace.package]
 version      = "0.1.2"
@@ -78,6 +78,7 @@ umide-rpc   = { path = "./umide-rpc" }
 umide-proxy = { path = "./umide-proxy" }
 umide_emulator = { path = "./crates/umide_emulator" }
 umide_native = { path = "./crates/umide_native" }
+umide_agent = { path = "./crates/umide_agent" }
 
 floem = { git = "https://github.com/bridgerust/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", features = ["editor", "serde", "default-image-formats"] }
 floem_renderer = { git = "https://github.com/bridgerust/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", package = "floem_renderer" }

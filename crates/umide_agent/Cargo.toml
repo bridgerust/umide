@@ -1,0 +1,19 @@
+[package]
+name = "umide_agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Agent runs on its own runtime in a worker thread; the editor stays sync.
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "macros", "time"] }
+# Async HTTP + SSE streaming. `stream` adds bytes_stream(); other features unify
+# with the workspace reqwest (blocking/json/socks) via Cargo feature unification.
+reqwest = { version = "0.13", features = ["json", "stream"] }
+futures-util = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+base64 = "0.22"
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true

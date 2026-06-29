@@ -13,7 +13,7 @@ use floem::{
     views::{Decorators, Label, Scroll, Stack, dyn_stack, text_input},
 };
 use tokio::sync::oneshot;
-use umide_agent::{AgentEvent, Message, ProviderConfig};
+use umide_agent::{AgentEvent, Message, ProviderConfig, ProviderKind};
 
 use crate::{
     ai,
@@ -61,12 +61,26 @@ pub fn ai_assistant_panel(
     let streaming = RwSignal::new(false);
     let next_id = RwSignal::new(0u64);
     let key_input = RwSignal::new(String::new());
-    let has_key =
-        RwSignal::new(ProviderConfig::resolve(ai::load_api_key()).is_ok());
+    // Default to the first provider that already has a key (keychain or env).
+    let initial_kind = ProviderKind::all()
+        .into_iter()
+        .find(|&k| ProviderConfig::resolve(k, ai::load_api_key(k)).is_ok())
+        .unwrap_or(ProviderKind::Anthropic);
+    let provider_kind = RwSignal::new(initial_kind);
+    let has_key = RwSignal::new(
+        ProviderConfig::resolve(initial_kind, ai::load_api_key(initial_kind))
+            .is_ok(),
+    );
     let status = RwSignal::new(if has_key.get_untracked() {
-        "Ask about your codebase — read-only, so your editor and emulators stay untouched.".to_string()
+        format!(
+            "{} ready — read-only, so your editor and emulators stay untouched.",
+            initial_kind.label()
+        )
     } else {
-        "Add your Anthropic API key below to enable the assistant.".to_string()
+        format!(
+            "Add your {} API key below to enable it.",
+            initial_kind.label()
+        )
     });
 
     // Lossless cross-thread bridge: the worker pushes AgentEvents into `queue`
@@ -131,8 +145,19 @@ pub fn ai_assistant_panel(
     });
 
     let send = send_handler(
-        trigger, workspace, history, queue, approvals, cancel.clone(), input,
-        messages, active, next_id, streaming, status,
+        trigger,
+        workspace,
+        history,
+        queue,
+        approvals,
+        cancel.clone(),
+        provider_kind,
+        input,
+        messages,
+        active,
+        next_id,
+        streaming,
+        status,
     );
 
     let input_box = text_input(input).style(move |s| {
@@ -178,9 +203,7 @@ pub fn ai_assistant_panel(
         dyn_stack(
             move || pending.get(),
             |c| c.id,
-            move |c| {
-                approval_card(c, wtd.clone(), config, senders.clone(), pending)
-            },
+            move |c| approval_card(c, wtd.clone(), config, senders.clone(), pending),
         )
         .style(|s| s.flex_col().width_full().padding(6.0))
     };
@@ -198,29 +221,104 @@ pub fn ai_assistant_panel(
         if key.is_empty() {
             return;
         }
-        match ai::store_api_key(&key) {
+        let kind = provider_kind.get_untracked();
+        match ai::store_api_key(kind, &key) {
             Ok(()) => {
                 has_key.set(true);
                 key_input.set(String::new());
-                status.set(
-                    "API key saved to your keychain. Ask about your codebase — read-only."
-                        .into(),
-                );
+                status.set(format!(
+                    "{} key saved to your keychain — ask about your codebase.",
+                    kind.label()
+                ));
             }
             Err(e) => status.set(format!("could not save key: {e}")),
         }
     });
     let key_row = Stack::new((key_box, save_key)).style(move |s| {
         let s = s.width_full().items_center().padding(6.0);
-        if has_key.get() {
-            s.hide()
-        } else {
-            s
-        }
+        if has_key.get() { s.hide() } else { s }
     });
 
-    Stack::new((transcript, approvals_view, status_line, key_row, input_row))
-        .style(|s| s.flex_col().size_pct(100.0, 100.0))
+    // Provider selector — Claude / OpenAI / DeepSeek / Gemini (BYO key each).
+    let provider_row = Stack::new((
+        provider_button(
+            ProviderKind::Anthropic,
+            provider_kind,
+            has_key,
+            status,
+            config,
+        ),
+        provider_button(
+            ProviderKind::OpenAi,
+            provider_kind,
+            has_key,
+            status,
+            config,
+        ),
+        provider_button(
+            ProviderKind::DeepSeek,
+            provider_kind,
+            has_key,
+            status,
+            config,
+        ),
+        provider_button(
+            ProviderKind::Gemini,
+            provider_kind,
+            has_key,
+            status,
+            config,
+        ),
+    ))
+    .style(|s| s.width_full().items_center().padding(6.0));
+
+    Stack::new((
+        provider_row,
+        transcript,
+        approvals_view,
+        status_line,
+        key_row,
+        input_row,
+    ))
+    .style(|s| s.flex_col().size_pct(100.0, 100.0))
+}
+
+/// A provider tab in the selector row; highlights when it's the active provider.
+fn provider_button(
+    kind: ProviderKind,
+    provider_kind: RwSignal<ProviderKind>,
+    has_key: RwSignal<bool>,
+    status: RwSignal<String>,
+    config: ReadSignal<Arc<UmideConfig>>,
+) -> impl View {
+    Stack::new((Label::new(kind.label()),))
+        .on_click_stop(move |_| {
+            provider_kind.set(kind);
+            let ok = ProviderConfig::resolve(kind, ai::load_api_key(kind)).is_ok();
+            has_key.set(ok);
+            status.set(if ok {
+                format!("{} ready — read-only.", kind.label())
+            } else {
+                format!("Add your {} API key below to enable it.", kind.label())
+            });
+        })
+        .style(move |s| {
+            let active = provider_kind.get() == kind;
+            let s = s
+                .padding_horiz(10.0)
+                .padding_vert(4.0)
+                .border_radius(6.0)
+                .cursor(floem::style::CursorStyle::Pointer)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND));
+            if active {
+                s.border(1.0)
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+                    .background(floem::peniko::Color::from_rgba8(255, 255, 255, 28))
+            } else {
+                s.border(1.0)
+                    .border_color(floem::peniko::Color::from_rgba8(0, 0, 0, 0))
+            }
+        })
 }
 
 /// Render one approval card with Approve/Reject buttons. Approving an edit
@@ -246,22 +344,22 @@ fn approval_card(
         let wtd = window_tab_data.clone();
         pill_button("Approve", config, move || {
             let outcome = match &kind {
-                ai::ApprovalKind::Command => {
-                    ai::ApprovalOutcome::CommandApproved
-                }
-                ai::ApprovalKind::Edit { path, old_str, new_str } => {
-                    match ai::apply_edit_in_editor(&wtd, path, old_str, new_str)
-                    {
-                        Ok(()) => ai::ApprovalOutcome::EditApplied,
-                        Err(e) => ai::ApprovalOutcome::EditFailed(e),
-                    }
-                }
+                ai::ApprovalKind::Command => ai::ApprovalOutcome::CommandApproved,
+                ai::ApprovalKind::Edit {
+                    path,
+                    old_str,
+                    new_str,
+                } => match ai::apply_edit_in_editor(&wtd, path, old_str, new_str) {
+                    Ok(()) => ai::ApprovalOutcome::EditApplied,
+                    Err(e) => ai::ApprovalOutcome::EditFailed(e),
+                },
             };
             resolve(outcome);
         })
     };
-    let reject =
-        pill_button("Reject", config, move || resolve(ai::ApprovalOutcome::Rejected));
+    let reject = pill_button("Reject", config, move || {
+        resolve(ai::ApprovalOutcome::Rejected)
+    });
 
     Stack::new((
         Label::new(card.title).style(move |s| {
@@ -302,9 +400,7 @@ fn pill_button(
                 .border_color(config.get().color(UmideColor::LAPCE_BORDER))
                 .cursor(floem::style::CursorStyle::Pointer)
                 .hover(|s| {
-                    s.background(floem::peniko::Color::from_rgba8(
-                        255, 255, 255, 20,
-                    ))
+                    s.background(floem::peniko::Color::from_rgba8(255, 255, 255, 20))
                 })
         })
 }
@@ -329,7 +425,9 @@ fn apply_event(
             }
         }
         AgentEvent::ToolCallInput { .. } => {}
-        AgentEvent::ToolResult { name, ok, summary, .. } => {
+        AgentEvent::ToolResult {
+            name, ok, summary, ..
+        } => {
             if let Some(a) = active.get_untracked() {
                 let mark = if ok { "✓" } else { "✗" };
                 a.tools
@@ -385,6 +483,7 @@ fn send_handler(
     queue: ai::EventQueue,
     approvals: ai::ApprovalQueue,
     cancel: Arc<AtomicBool>,
+    provider_kind: RwSignal<ProviderKind>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
     active: RwSignal<Option<ChatMsg>>,
@@ -401,13 +500,14 @@ fn send_handler(
             return;
         }
 
-        let provider = match ProviderConfig::resolve(ai::load_api_key()) {
+        let kind = provider_kind.get_untracked();
+        let provider = match ProviderConfig::resolve(kind, ai::load_api_key(kind)) {
             Ok(p) => p,
             Err(_) => {
-                status.set(
-                    "Add your Anthropic API key below to enable the assistant."
-                        .into(),
-                );
+                status.set(format!(
+                    "Add your {} API key below to enable it.",
+                    kind.label()
+                ));
                 return;
             }
         };

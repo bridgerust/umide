@@ -113,10 +113,16 @@ pub struct Message {
 
 impl Message {
     pub fn user(content: Vec<ContentBlock>) -> Self {
-        Self { role: Role::User, content }
+        Self {
+            role: Role::User,
+            content,
+        }
     }
     pub fn assistant(content: Vec<ContentBlock>) -> Self {
-        Self { role: Role::Assistant, content }
+        Self {
+            role: Role::Assistant,
+            content,
+        }
     }
 }
 
@@ -208,10 +214,20 @@ impl ToolResultContent {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StreamEvent {
-    MessageStart { message: StreamMessage },
-    ContentBlockStart { index: usize, content_block: ContentBlock },
-    ContentBlockDelta { index: usize, delta: ContentDelta },
-    ContentBlockStop { index: usize },
+    MessageStart {
+        message: StreamMessage,
+    },
+    ContentBlockStart {
+        index: usize,
+        content_block: ContentBlock,
+    },
+    ContentBlockDelta {
+        index: usize,
+        delta: ContentDelta,
+    },
+    ContentBlockStop {
+        index: usize,
+    },
     MessageDelta {
         delta: MessageDeltaBody,
         #[serde(default)]
@@ -219,7 +235,9 @@ pub enum StreamEvent {
     },
     MessageStop,
     Ping,
-    Error { error: ApiErrorBody },
+    Error {
+        error: ApiErrorBody,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -271,10 +289,12 @@ impl Usage {
         // message_start. Take the max so repeated merges stay monotonic.
         self.input_tokens = self.input_tokens.max(other.input_tokens);
         self.output_tokens = self.output_tokens.max(other.output_tokens);
-        self.cache_creation_input_tokens =
-            self.cache_creation_input_tokens.max(other.cache_creation_input_tokens);
-        self.cache_read_input_tokens =
-            self.cache_read_input_tokens.max(other.cache_read_input_tokens);
+        self.cache_creation_input_tokens = self
+            .cache_creation_input_tokens
+            .max(other.cache_creation_input_tokens);
+        self.cache_read_input_tokens = self
+            .cache_read_input_tokens
+            .max(other.cache_read_input_tokens);
     }
 }
 
@@ -325,7 +345,9 @@ mod tests {
         match serde_json::from_str::<StreamEvent>(json).unwrap() {
             StreamEvent::ContentBlockDelta { index, delta } => {
                 assert_eq!(index, 0);
-                assert!(matches!(delta, ContentDelta::TextDelta { text } if text == "Hi"));
+                assert!(
+                    matches!(delta, ContentDelta::TextDelta { text } if text == "Hi")
+                );
             }
             other => panic!("unexpected event: {other:?}"),
         }
@@ -336,7 +358,9 @@ mod tests {
         let json = r#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tu1","name":"grep","input":{}}}"#;
         match serde_json::from_str::<StreamEvent>(json).unwrap() {
             StreamEvent::ContentBlockStart { content_block, .. } => {
-                assert!(matches!(content_block, ContentBlock::ToolUse { name, .. } if name == "grep"));
+                assert!(
+                    matches!(content_block, ContentBlock::ToolUse { name, .. } if name == "grep")
+                );
             }
             other => panic!("unexpected event: {other:?}"),
         }
@@ -344,7 +368,11 @@ mod tests {
 
     #[test]
     fn usage_merge_takes_max() {
-        let mut a = Usage { input_tokens: 10, output_tokens: 5, ..Default::default() };
+        let mut a = Usage {
+            input_tokens: 10,
+            output_tokens: 5,
+            ..Default::default()
+        };
         a.merge(&Usage {
             output_tokens: 12,
             cache_read_input_tokens: 7,
@@ -364,7 +392,9 @@ mod tests {
             messages: vec![Message::user(vec![ContentBlock::text("hi")])],
             tools: vec![],
             thinking: Some(Thinking::adaptive()),
-            output_config: Some(OutputConfig { effort: Some("xhigh".into()) }),
+            output_config: Some(OutputConfig {
+                effort: Some("xhigh".into()),
+            }),
             stream: true,
         };
         let v = serde_json::to_value(&req).unwrap();

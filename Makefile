@@ -14,7 +14,7 @@ ASSETS_DIR = extra
 RELEASE_DIR = target/release-lto
 
 APP_NAME = UMIDE.app
-APP_TEMPLATE = $(ASSETS_DIR)/macos/Umide.app
+APP_TEMPLATE = $(ASSETS_DIR)/macos/UMIDE.app
 APP_DIR = $(RELEASE_DIR)/macos
 APP_BINARY = $(RELEASE_DIR)/$(TARGET)
 APP_BINARY_DIR = $(APP_DIR)/$(APP_NAME)/Contents/MacOS
@@ -57,7 +57,7 @@ $(APP_NAME)-%: $(TARGET)-%
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
 	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
 	xattr -c $(APP_DIR)/$(APP_NAME)/Contents/Info.plist
-	xattr -c $(APP_DIR)/$(APP_NAME)/Contents/Resources/lapce.icns
+	xattr -c $(APP_DIR)/$(APP_NAME)/Contents/Resources/umide.icns
 	/usr/bin/codesign -vvv --deep  --entitlements $(ASSETS_DIR)/entitlements.plist --strict --options=runtime --force -s $(CODESIGN_IDENTITY) $(APP_DIR)/$(APP_NAME)
 
 dmg: $(DMG_NAME)-native ## Create a Umide.dmg

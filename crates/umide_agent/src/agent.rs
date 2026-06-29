@@ -1,24 +1,24 @@
 //! The agentic loop: drive the model, run the tools it asks for, repeat until
 //! it produces a final answer.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::client::AnthropicClient;
+use crate::backend::{build_backend, LlmBackend};
 use crate::error::AgentError;
 use crate::event::AgentEvent;
 use crate::provider::ProviderConfig;
 use crate::tools::{ToolExecutor, ToolInvocation};
-use crate::types::*;
+use crate::types::{ContentBlock, Message};
 
 /// Hard cap on tool-use turns per user message, so a misbehaving loop can never
 /// run away with the user's API credits.
 const MAX_ITERATIONS: u32 = 24;
 
 pub struct Agent {
-    client: AnthropicClient,
+    backend: Box<dyn LlmBackend>,
     provider: ProviderConfig,
     system_prompt: String,
     tools: Arc<dyn ToolExecutor>,
@@ -32,9 +32,9 @@ impl Agent {
         tools: Arc<dyn ToolExecutor>,
         system_prompt: impl Into<String>,
     ) -> Result<Self, AgentError> {
-        let client = AnthropicClient::new(provider.api_key.clone(), provider.base_url.clone())?;
+        let backend = build_backend(&provider)?;
         Ok(Self {
-            client,
+            backend,
             provider,
             system_prompt: system_prompt.into(),
             tools,
@@ -91,8 +91,18 @@ impl Agent {
             if cancel.load(Ordering::Relaxed) {
                 return Ok(());
             }
-            let req = self.build_request();
-            let turn = self.client.stream(&req, events, cancel).await?;
+            let tools = self.tools.specs();
+            let turn = self
+                .backend
+                .stream(
+                    &self.system_prompt,
+                    &self.history,
+                    &tools,
+                    &self.provider,
+                    events,
+                    cancel,
+                )
+                .await?;
 
             // Discard a cancelled turn: don't record the partial assistant
             // message (a dangling tool_use would corrupt the next request).
@@ -100,7 +110,9 @@ impl Agent {
                 return Ok(());
             }
 
-            let _ = events.send(AgentEvent::TurnComplete { usage: turn.usage.clone() });
+            let _ = events.send(AgentEvent::TurnComplete {
+                usage: turn.usage.clone(),
+            });
             self.history.push(Message::assistant(turn.blocks.clone()));
 
             // Collect any tool calls the model made this turn.
@@ -108,11 +120,13 @@ impl Agent {
                 .blocks
                 .iter()
                 .filter_map(|b| match b {
-                    ContentBlock::ToolUse { id, name, input } => Some(ToolInvocation {
-                        id: id.clone(),
-                        name: name.clone(),
-                        input: input.clone(),
-                    }),
+                    ContentBlock::ToolUse { id, name, input } => {
+                        Some(ToolInvocation {
+                            id: id.clone(),
+                            name: name.clone(),
+                            input: input.clone(),
+                        })
+                    }
                     _ => None,
                 })
                 .collect();
@@ -149,23 +163,5 @@ impl Agent {
         }
 
         Err(AgentError::MaxIterations(MAX_ITERATIONS))
-    }
-
-    fn build_request(&self) -> MessagesRequest {
-        MessagesRequest {
-            model: self.provider.model.clone(),
-            max_tokens: self.provider.max_tokens,
-            // Single cached system block → tools+system prefix is cache-served.
-            system: vec![SystemBlock::cached(self.system_prompt.clone())],
-            messages: self.history.clone(),
-            tools: self.tools.specs(),
-            thinking: self.provider.thinking.then(Thinking::adaptive),
-            output_config: self
-                .provider
-                .effort
-                .clone()
-                .map(|effort| OutputConfig { effort: Some(effort) }),
-            stream: true,
-        }
     }
 }

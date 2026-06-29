@@ -1,68 +1,119 @@
-//! LLM provider configuration.
-//!
-//! Deliberately abstract: today it resolves a BYO (bring-your-own) Anthropic key
-//! and points at the public API, but a future hosted "UMIDE Pro" tier or a
-//! self-hosted gateway is just a different `base_url`/key here — the agent loop,
-//! tools, and UI never change.
+//! LLM provider configuration (bring-your-own key, multi-provider).
 
 use crate::error::AgentError;
-use crate::types::{DEFAULT_MODEL, FAST_MODEL};
+
+/// The supported providers. OpenAI, DeepSeek, and Gemini all use the
+/// OpenAI-compatible backend; only base URL, model, and key differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderKind {
+    Anthropic,
+    OpenAi,
+    DeepSeek,
+    Gemini,
+}
+
+impl ProviderKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            ProviderKind::Anthropic => "Claude",
+            ProviderKind::OpenAi => "OpenAI",
+            ProviderKind::DeepSeek => "DeepSeek",
+            ProviderKind::Gemini => "Gemini",
+        }
+    }
+
+    pub fn env_var(self) -> &'static str {
+        match self {
+            ProviderKind::Anthropic => "ANTHROPIC_API_KEY",
+            ProviderKind::OpenAi => "OPENAI_API_KEY",
+            ProviderKind::DeepSeek => "DEEPSEEK_API_KEY",
+            ProviderKind::Gemini => "GEMINI_API_KEY",
+        }
+    }
+
+    pub fn default_base_url(self) -> &'static str {
+        match self {
+            ProviderKind::Anthropic => "https://api.anthropic.com",
+            ProviderKind::OpenAi => "https://api.openai.com/v1",
+            ProviderKind::DeepSeek => "https://api.deepseek.com/v1",
+            // Gemini's OpenAI-compatible surface.
+            ProviderKind::Gemini => {
+                "https://generativelanguage.googleapis.com/v1beta/openai"
+            }
+        }
+    }
+
+    pub fn default_model(self) -> &'static str {
+        match self {
+            ProviderKind::Anthropic => "claude-opus-4-8",
+            ProviderKind::OpenAi => "gpt-4o",
+            ProviderKind::DeepSeek => "deepseek-chat",
+            ProviderKind::Gemini => "gemini-2.0-flash",
+        }
+    }
+
+    pub fn all() -> [ProviderKind; 4] {
+        [
+            ProviderKind::Anthropic,
+            ProviderKind::OpenAi,
+            ProviderKind::DeepSeek,
+            ProviderKind::Gemini,
+        ]
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
+    pub kind: ProviderKind,
     pub api_key: String,
     pub base_url: String,
     pub model: String,
-    /// Cheaper model for quick auxiliary calls (vision triage, classification).
-    pub fast_model: String,
     pub max_tokens: u32,
-    /// `output_config.effort`: "low".."xhigh".."max". `xhigh` suits coding/agentic.
+    /// `output_config.effort` — Anthropic only.
     pub effort: Option<String>,
-    /// Whether to request adaptive thinking on the main loop.
+    /// Request adaptive thinking — Anthropic only.
     pub thinking: bool,
 }
 
 impl ProviderConfig {
-    /// Resolve a key from `ANTHROPIC_API_KEY`. Callers that have a key from
-    /// settings/keychain should use [`ProviderConfig::with_key`] instead.
-    pub fn from_env() -> Result<Self, AgentError> {
-        let api_key = std::env::var("ANTHROPIC_API_KEY")
+    pub fn new(kind: ProviderKind, api_key: impl Into<String>) -> Self {
+        let anthropic = kind == ProviderKind::Anthropic;
+        Self {
+            kind,
+            api_key: api_key.into(),
+            base_url: kind.default_base_url().to_string(),
+            model: kind.default_model().to_string(),
+            // Anthropic streams up to 128k; others are smaller. 16k/8k is ample
+            // headroom for a single assistant turn.
+            max_tokens: if anthropic { 16_000 } else { 8_192 },
+            effort: anthropic.then(|| "xhigh".to_string()),
+            thinking: anthropic,
+        }
+    }
+
+    /// Resolve a key for `kind`: an explicit settings/keychain key first, then
+    /// the provider's environment variable. `MissingApiKey` if neither is set.
+    pub fn resolve(
+        kind: ProviderKind,
+        configured_key: Option<String>,
+    ) -> Result<Self, AgentError> {
+        if let Some(key) = configured_key.filter(|k| !k.trim().is_empty()) {
+            return Ok(Self::new(kind, key));
+        }
+        let env = std::env::var(kind.env_var())
             .ok()
             .filter(|k| !k.trim().is_empty())
             .ok_or(AgentError::MissingApiKey)?;
-        Ok(Self::with_key(api_key))
-    }
-
-    /// Resolution order the editor should use: explicit settings/keychain key,
-    /// then `ANTHROPIC_API_KEY`. Returns `MissingApiKey` if neither is present
-    /// so the panel can show the "add your key" empty state.
-    pub fn resolve(configured_key: Option<String>) -> Result<Self, AgentError> {
-        if let Some(key) = configured_key.filter(|k| !k.trim().is_empty()) {
-            return Ok(Self::with_key(key));
-        }
-        Self::from_env()
-    }
-
-    pub fn with_key(api_key: impl Into<String>) -> Self {
-        Self {
-            api_key: api_key.into(),
-            base_url: "https://api.anthropic.com".to_string(),
-            model: DEFAULT_MODEL.to_string(),
-            fast_model: FAST_MODEL.to_string(),
-            // Opus 4.8 supports 128k output with streaming; 64k is ample headroom.
-            max_tokens: 64_000,
-            effort: Some("xhigh".to_string()),
-            thinking: true,
-        }
-    }
-
-    pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
-        self.base_url = base_url.into();
-        self
+        Ok(Self::new(kind, env))
     }
 
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = model.into();
+        self
+    }
+
+    pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.base_url = base_url.into();
         self
     }
 }
@@ -72,28 +123,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn with_key_uses_expected_defaults() {
-        let p = ProviderConfig::with_key("k");
+    fn anthropic_defaults() {
+        let p = ProviderConfig::new(ProviderKind::Anthropic, "k");
         assert_eq!(p.model, "claude-opus-4-8");
-        assert_eq!(p.fast_model, "claude-haiku-4-5");
-        assert_eq!(p.effort.as_deref(), Some("xhigh"));
-        assert_eq!(p.max_tokens, 64_000);
-        assert!(p.thinking);
         assert_eq!(p.base_url, "https://api.anthropic.com");
+        assert_eq!(p.effort.as_deref(), Some("xhigh"));
+        assert!(p.thinking);
+    }
+
+    #[test]
+    fn openai_family_defaults() {
+        let o = ProviderConfig::new(ProviderKind::OpenAi, "k");
+        assert_eq!(o.model, "gpt-4o");
+        assert!(o.base_url.contains("openai.com"));
+        assert!(o.effort.is_none());
+        assert!(!o.thinking);
+
+        let d = ProviderConfig::new(ProviderKind::DeepSeek, "k");
+        assert_eq!(d.model, "deepseek-chat");
+        assert!(d.base_url.contains("deepseek.com"));
+
+        let g = ProviderConfig::new(ProviderKind::Gemini, "k");
+        assert_eq!(g.model, "gemini-2.0-flash");
+        assert!(g.base_url.contains("generativelanguage"));
     }
 
     #[test]
     fn resolve_prefers_configured_key() {
-        let p = ProviderConfig::resolve(Some("explicit".into())).unwrap();
+        let p =
+            ProviderConfig::resolve(ProviderKind::OpenAi, Some("explicit".into()))
+                .unwrap();
         assert_eq!(p.api_key, "explicit");
+        assert_eq!(p.kind, ProviderKind::OpenAi);
     }
 
     #[test]
-    fn resolve_rejects_blank_configured_key_when_no_env() {
-        // Only assert the blank path when the env var isn't providing a fallback.
-        if std::env::var("ANTHROPIC_API_KEY").is_err() {
+    fn resolve_rejects_blank_key_when_no_env() {
+        if std::env::var("DEEPSEEK_API_KEY").is_err() {
             assert!(matches!(
-                ProviderConfig::resolve(Some("   ".into())),
+                ProviderConfig::resolve(ProviderKind::DeepSeek, Some("  ".into())),
                 Err(AgentError::MissingApiKey)
             ));
         }

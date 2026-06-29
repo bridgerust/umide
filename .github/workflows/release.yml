@@ -88,12 +88,20 @@ jobs:
           tar -czf ./umide-linux-x86_64.tar.gz ./umide-linux-x86_64
           gzip -c ./umide-proxy-linux-x86_64 > ./umide-proxy-linux-x86_64.gz
 
+      - name: Build .deb package
+        shell: bash
+        run: |
+          cargo install cargo-deb --locked
+          cargo deb --no-build --profile release-lto -p umide --output ./umide-linux-x86_64.deb
+          ls -lh ./umide-linux-x86_64.deb
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-linux
           path: |
             ./umide-linux-x86_64.tar.gz
             ./umide-proxy-linux-x86_64.gz
+            ./umide-linux-x86_64.deb
           retention-days: 7
 
   windows:
@@ -134,12 +142,27 @@ jobs:
           $inStream.Dispose()
           $outStream.Dispose()
 
+      - name: Build MSI installer
+        run: |
+          $wixBin = if ($env:WIX) { Join-Path $env:WIX 'bin' } else { '' }
+          if (-not ($wixBin -and (Test-Path (Join-Path $wixBin 'candle.exe')))) {
+            choco install wixtoolset --no-progress -y
+            $wixBin = 'C:\Program Files (x86)\WiX Toolset v3.14\bin'
+          }
+          $ver = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([0-9][0-9.]*)"' | Select-Object -First 1).Matches.Groups[1].Value
+          if (-not $ver) { $ver = '0.1.2' }
+          Write-Host "Building MSI version $ver using WiX at $wixBin"
+          & (Join-Path $wixBin 'candle.exe') -arch x64 -ext WixUtilExtension -dVersion=$ver extra\windows\wix\umide.wxs -o umide.wixobj
+          & (Join-Path $wixBin 'light.exe') -ext WixUtilExtension -ext WixUIExtension umide.wixobj -o UMIDE-windows.msi
+          Get-Item UMIDE-windows.msi
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows
           path: |
             ./umide-windows-x86_64.zip
             ./umide-proxy-windows-x86_64.gz
+            ./UMIDE-windows.msi
           retention-days: 7
 
   macos:
@@ -265,6 +288,8 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - meta
+      - linux
+      - windows
       - macos
     permissions:
       contents: write

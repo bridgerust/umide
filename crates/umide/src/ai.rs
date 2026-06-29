@@ -22,7 +22,7 @@ use lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
 use tokio::sync::oneshot;
 use umide_agent::tools::{ToolExecutor, ToolInvocation, ToolOutput};
 use umide_agent::{
-    Agent, AgentEvent, ContentBlock, Message, ProviderConfig, ToolDef,
+    Agent, AgentEvent, ContentBlock, Message, ProviderConfig, ProviderKind, ToolDef,
 };
 
 use crate::window_tab::WindowTabData;
@@ -67,21 +67,30 @@ emulator at any time — keep your interactions purposeful.";
 // ---------------------------------------------------------------------------
 
 const KEYCHAIN_SERVICE: &str = "dev.umide.app";
-const KEYCHAIN_USER: &str = "anthropic-api-key";
 
-/// Load the stored Anthropic API key from the OS keychain, if present and
-/// non-empty. Resolution order in the panel is keychain → `ANTHROPIC_API_KEY`.
-pub fn load_api_key() -> Option<String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
+/// Per-provider keychain account, so each provider's key is stored separately.
+fn keychain_user(kind: ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::Anthropic => "anthropic-api-key",
+        ProviderKind::OpenAi => "openai-api-key",
+        ProviderKind::DeepSeek => "deepseek-api-key",
+        ProviderKind::Gemini => "gemini-api-key",
+    }
+}
+
+/// Load a stored API key for `kind` from the OS keychain, if present and
+/// non-empty. The panel resolves keychain → provider env var.
+pub fn load_api_key(kind: ProviderKind) -> Option<String> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, keychain_user(kind))
         .ok()?
         .get_password()
         .ok()
         .filter(|k| !k.trim().is_empty())
 }
 
-/// Store an Anthropic API key in the OS keychain.
-pub fn store_api_key(key: &str) -> Result<(), String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
+/// Store an API key for `kind` in the OS keychain.
+pub fn store_api_key(kind: ProviderKind, key: &str) -> Result<(), String> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, keychain_user(kind))
         .map_err(|e| e.to_string())?
         .set_password(key.trim())
         .map_err(|e| e.to_string())
@@ -279,7 +288,11 @@ impl ReadOnlyTools {
             })
             .collect();
         entries.sort();
-        ToolOutput::ok(format!("{} entries in {rel}\n{}", entries.len(), entries.join("\n")))
+        ToolOutput::ok(format!(
+            "{} entries in {rel}\n{}",
+            entries.len(),
+            entries.join("\n")
+        ))
     }
 
     fn grep(&self, input: &serde_json::Value) -> ToolOutput {
@@ -301,7 +314,9 @@ impl ReadOnlyTools {
         let mut hit_limit = false;
         let mut stack = vec![base];
         while let Some(dir) = stack.pop() {
-            let Ok(read) = std::fs::read_dir(&dir) else { continue };
+            let Ok(read) = std::fs::read_dir(&dir) else {
+                continue;
+            };
             for entry in read.filter_map(|e| e.ok()) {
                 let path = entry.path();
                 let name = entry.file_name();
@@ -312,7 +327,9 @@ impl ReadOnlyTools {
                     }
                     continue;
                 }
-                let Ok(content) = std::fs::read_to_string(&path) else { continue };
+                let Ok(content) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
                 let rel_path = path
                     .strip_prefix(&root)
                     .unwrap_or(&path)
@@ -431,7 +448,11 @@ impl EditorTools {
         approvals: ApprovalQueue,
         trigger: ExtSendTrigger,
     ) -> Self {
-        Self { reader: ReadOnlyTools::new(root), approvals, trigger }
+        Self {
+            reader: ReadOnlyTools::new(root),
+            approvals,
+            trigger,
+        }
     }
 
     /// Surface an approval card to the UI and block until the user decides.
@@ -585,10 +606,7 @@ impl EditorTools {
         match resolve_target(input) {
             Ok(Target::Android(serial)) => adb_input(
                 &serial,
-                &format!(
-                    "input swipe {} {} {} {} {dur}",
-                    c[0], c[1], c[2], c[3]
-                ),
+                &format!("input swipe {} {} {} {} {dur}", c[0], c[1], c[2], c[3]),
                 summary,
             ),
             Ok(Target::Ios(udid)) => {
@@ -623,9 +641,7 @@ impl EditorTools {
                 let escaped = text.replace('\'', "'\\''").replace(' ', "%s");
                 adb_input(&serial, &format!("input text '{escaped}'"), summary)
             }
-            Ok(Target::Ios(udid)) => {
-                idb_run(&udid, &["ui", "text", text], summary)
-            }
+            Ok(Target::Ios(udid)) => idb_run(&udid, &["ui", "text", text], summary),
             Err(e) => ToolOutput::error(e),
         }
     }
@@ -851,9 +867,9 @@ fn resolve_target(input: &serde_json::Value) -> Result<Target, String> {
     match input.get("platform").and_then(|v| v.as_str()) {
         Some("android") => android_serial().map(Target::Android),
         Some("ios") => ios_udid().map(Target::Ios),
-        Some(other) => {
-            Err(format!("unknown platform '{other}' (use 'android' or 'ios')"))
-        }
+        Some(other) => Err(format!(
+            "unknown platform '{other}' (use 'android' or 'ios')"
+        )),
         None => {
             if let Ok(s) = android_serial() {
                 return Ok(Target::Android(s));
@@ -861,9 +877,11 @@ fn resolve_target(input: &serde_json::Value) -> Result<Target, String> {
             if let Ok(u) = ios_udid() {
                 return Ok(Target::Ios(u));
             }
-            Err("no running Android emulator or booted iOS simulator — start \
+            Err(
+                "no running Android emulator or booted iOS simulator — start \
                  one in the Emulator panel"
-                .to_string())
+                    .to_string(),
+            )
         }
     }
 }
@@ -880,12 +898,27 @@ fn tool_path_env() -> String {
     )
 }
 
+/// Build a Command that runs `cmd` through the platform shell
+/// (`cmd /C` on Windows, `sh -c` elsewhere), with tool paths on PATH.
+fn shell_command(cmd: &str) -> std::process::Command {
+    #[cfg(windows)]
+    let mut command = {
+        let mut c = std::process::Command::new("cmd");
+        c.arg("/C").arg(cmd);
+        c
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut c = std::process::Command::new("sh");
+        c.arg("-c").arg(cmd);
+        c
+    };
+    command.env("PATH", tool_path_env());
+    command
+}
+
 fn adb_sh(cmd: &str) -> std::io::Result<std::process::Output> {
-    std::process::Command::new("sh")
-        .env("PATH", tool_path_env())
-        .arg("-c")
-        .arg(cmd)
-        .output()
+    shell_command(cmd).output()
 }
 
 /// Single-quote a value for safe inclusion in a `sh -c` command.
@@ -895,8 +928,9 @@ fn shq(s: &str) -> String {
 
 /// Serial of the first running Android device (e.g. `emulator-5554`).
 fn android_serial() -> Result<String, String> {
-    let out = adb_sh("adb devices")
-        .map_err(|e| format!("could not run adb ({e}); is the Android SDK installed?"))?;
+    let out = adb_sh("adb devices").map_err(|e| {
+        format!("could not run adb ({e}); is the Android SDK installed?")
+    })?;
     let text = String::from_utf8_lossy(&out.stdout);
     for line in text.lines().skip(1) {
         let mut parts = line.split_whitespace();
@@ -941,8 +975,7 @@ fn adb_input(serial: &str, shell_cmd: &str, summary: String) -> ToolOutput {
 
 /// Run `idb <args...> --udid <udid>` for iOS input.
 fn idb_run(udid: &str, args: &[&str], summary: String) -> ToolOutput {
-    let joined: String =
-        args.iter().map(|a| shq(a)).collect::<Vec<_>>().join(" ");
+    let joined: String = args.iter().map(|a| shq(a)).collect::<Vec<_>>().join(" ");
     match adb_sh(&format!("idb {joined} --udid {udid}")) {
         Ok(out) if out.status.success() => ToolOutput::ok(summary),
         Ok(out) => ToolOutput::error(format!(
@@ -1078,12 +1111,15 @@ pub fn apply_edit_in_editor(
     let offset = content.find(old).unwrap();
     let start = lsp_position(&content, offset);
     let end = lsp_position(&content, offset + old.len());
-    let url = Url::from_file_path(path)
-        .map_err(|_| "invalid file path".to_string())?;
+    let url =
+        Url::from_file_path(path).map_err(|_| "invalid file path".to_string())?;
     let mut changes = HashMap::new();
     changes.insert(
         url,
-        vec![TextEdit { range: Range { start, end }, new_text: new.to_string() }],
+        vec![TextEdit {
+            range: Range { start, end },
+            new_text: new.to_string(),
+        }],
     );
     let edit = WorkspaceEdit {
         changes: Some(changes),
@@ -1234,16 +1270,11 @@ fn diff_preview(old: &str, new: &str) -> String {
 }
 
 fn run_shell(cmd: &str, cwd: Option<&Path>) -> ToolOutput {
-    let env_path = std::env::var("PATH").unwrap_or_default();
-    let mut command = std::process::Command::new("sh");
-    command
-        .env("PATH", format!("/opt/homebrew/bin:/usr/local/bin:{env_path}"))
-        .arg("-c")
-        .arg(cmd);
+    let mut command = shell_command(cmd);
     if let Some(dir) = cwd {
         command.current_dir(dir);
     }
-    match command.output() {
+    match output_with_timeout(command, std::time::Duration::from_secs(300)) {
         Ok(out) => {
             let code = out.status.code().unwrap_or(-1);
             let mut body = format!("exit: {code}\n");
@@ -1266,6 +1297,60 @@ fn run_shell(cmd: &str, cwd: Option<&Path>) -> ToolOutput {
         }
         Err(e) => ToolOutput::error(format!("failed to run `{cmd}`: {e}")),
     }
+}
+
+/// Like `Command::output()` but kills the child after `timeout` and drains
+/// stdout/stderr concurrently to avoid pipe-buffer deadlock.
+fn output_with_timeout(
+    mut command: std::process::Command,
+    timeout: std::time::Duration,
+) -> std::io::Result<std::process::Output> {
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::Instant;
+
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let mut out_pipe = child.stdout.take().unwrap();
+    let mut err_pipe = child.stderr.take().unwrap();
+    let out_reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = out_pipe.read_to_end(&mut buf);
+        buf
+    });
+    let err_reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = err_pipe.read_to_end(&mut buf);
+        buf
+    });
+
+    let start = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("command timed out after {}s", timeout.as_secs()),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+
+    let stdout = out_reader.join().unwrap_or_default();
+    let stderr = err_reader.join().unwrap_or_default();
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 /// Truncate on a UTF-8 boundary, appending a marker when clipped.

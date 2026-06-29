@@ -19,9 +19,11 @@
 //! emulators exactly as before; the agent is just another optional panel.
 
 pub mod agent;
+pub mod backend;
 pub mod client;
 pub mod error;
 pub mod event;
+pub mod openai;
 pub mod provider;
 pub mod tools;
 pub mod types;
@@ -29,6 +31,6 @@ pub mod types;
 pub use agent::Agent;
 pub use error::AgentError;
 pub use event::AgentEvent;
-pub use provider::ProviderConfig;
+pub use provider::{ProviderConfig, ProviderKind};
 pub use tools::{ToolExecutor, ToolInvocation, ToolOutput};
 pub use types::{ContentBlock, Message, Role, ToolDef, ToolResultContent, Usage};

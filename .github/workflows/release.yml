@@ -152,7 +152,9 @@ jobs:
           $ver = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([0-9][0-9.]*)"' | Select-Object -First 1).Matches.Groups[1].Value
           if (-not $ver) { $ver = '0.1.2' }
           Write-Host "Building MSI version $ver using WiX at $wixBin"
-          & (Join-Path $wixBin 'candle.exe') -arch x64 -ext WixUtilExtension -dVersion=$ver extra\windows\wix\umide.wxs -o umide.wixobj
+          $wxs = 'extra\windows\wix\umide.wxs'
+          (Get-Content $wxs -Raw).Replace('Version="0.0.0"', 'Version="' + $ver + '"') | Set-Content $wxs
+          & (Join-Path $wixBin 'candle.exe') -arch x64 -ext WixUtilExtension $wxs -o umide.wixobj
           & (Join-Path $wixBin 'light.exe') -ext WixUtilExtension -ext WixUIExtension umide.wixobj -o UMIDE-windows.msi
           Get-Item UMIDE-windows.msi
 
@@ -259,6 +261,9 @@ jobs:
           UMIDE_ARM64: ./target/aarch64-apple-darwin/release-lto/umide
           PROXY_X64: ./target/x86_64-apple-darwin/release-lto/umide-proxy
           PROXY_ARM64: ./target/aarch64-apple-darwin/release-lto/umide-proxy
+          # On PR dry-runs the cert isn't imported, so don't attempt signing
+          # (package_app.sh skips codesign when this is empty).
+          APPLE_DEVELOPER_ID_APPLICATION_IDENTITY: ${{ github.event_name != 'pull_request' && secrets.APPLE_DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
 
       - name: Notarize and staple DMG
         if: github.event_name != 'pull_request'

@@ -2103,7 +2103,7 @@ checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
 [[package]]
 name = "floem"
 version = "0.2.0"
-source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+source = "git+https://github.com/bridgerust/floem?rev=37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399#37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399"
 dependencies = [
  "bitflags 2.10.0",
  "clipboard-win",
@@ -2149,7 +2149,7 @@ dependencies = [
 [[package]]
 name = "floem-editor-core"
 version = "0.2.0"
-source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+source = "git+https://github.com/bridgerust/floem?rev=37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399#37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399"
 dependencies = [
  "bitflags 2.10.0",
  "itertools 0.14.0",
@@ -2393,7 +2393,7 @@ dependencies = [
 [[package]]
 name = "floem_reactive"
 version = "0.2.0"
-source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+source = "git+https://github.com/bridgerust/floem?rev=37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399#37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399"
 dependencies = [
  "parking_lot",
  "smallvec",
@@ -2402,7 +2402,7 @@ dependencies = [
 [[package]]
 name = "floem_renderer"
 version = "0.2.0"
-source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+source = "git+https://github.com/bridgerust/floem?rev=37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399#37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399"
 dependencies = [
  "cosmic-text",
  "floem-winit",
@@ -2419,7 +2419,7 @@ dependencies = [
 [[package]]
 name = "floem_tiny_skia_renderer"
 version = "0.2.0"
-source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+source = "git+https://github.com/bridgerust/floem?rev=37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399#37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399"
 dependencies = [
  "anyhow",
  "floem_renderer",
@@ -2432,7 +2432,7 @@ dependencies = [
 [[package]]
 name = "floem_vger_renderer"
 version = "0.2.0"
-source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+source = "git+https://github.com/bridgerust/floem?rev=37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399#37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399"
 dependencies = [
  "anyhow",
  "floem-vger",
@@ -7983,11 +7983,12 @@ dependencies = [
 [[package]]
 name = "ui-events-floem-winit"
 version = "0.2.0"
-source = "git+https://github.com/bridgerust/floem?rev=e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3#e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3"
+source = "git+https://github.com/bridgerust/floem?rev=37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399#37f48b8bcd3bf6d0c5c8ec5eb1cc9ba0dc57c399"
 dependencies = [
  "dpi 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "floem-winit",
  "ui-events",
+ "web-time",
 ]
 
 [[package]]

@@ -41,14 +41,15 @@ impl SvgStore {
 
     pub fn get_default_svg(&mut self, name: &str) -> String {
         if !self.svgs.contains_key(name) {
-            let file = if name == "umide_remote.svg" || name == "umide_logo.svg" {
-                UMIDE_ICONS_DIR.get_file(name).unwrap()
-            } else {
-                CODICONS_ICONS_DIR.get_file(name).unwrap_or_else(|| {
+            // Prefer a bundled UMIDE-specific icon (e.g. ai-assistant.svg,
+            // umide_logo.svg, umide_remote.svg), then fall back to codicons.
+            let file = UMIDE_ICONS_DIR
+                .get_file(name)
+                .or_else(|| CODICONS_ICONS_DIR.get_file(name))
+                .unwrap_or_else(|| {
                     tracing::error!("Failed to find icon: {}", name);
                     CODICONS_ICONS_DIR.get_file("error.svg").unwrap()
-                })
-            };
+                });
             let content = file.contents_utf8().unwrap();
             self.svgs.insert(name.to_string(), content.to_string());
         }

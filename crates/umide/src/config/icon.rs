@@ -26,6 +26,8 @@ impl UmideIcons {
     pub const DEBUG_PAUSE: &'static str = "debug_pause";
     pub const DEBUG_STOP: &'static str = "debug_stop";
     pub const DEBUG_CONSOLE: &'static str = "debug_console";
+    // AI assistant panel — dedicated sparkle glyph (icons/umide/ai-assistant.svg).
+    pub const AI_ASSISTANT: &'static str = "ai_assistant";
     pub const DEBUG_DISCONNECT: &'static str = "debug_disconnect";
     pub const START: &'static str = "start";
     pub const RUN_ERRORS: &'static str = "run_errors";

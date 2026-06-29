@@ -1,6 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
 use super::{
+    ai_assistant_view::ai_assistant_panel,
     debug_view::debug_panel,
     emulator_view::emulator_panel,
     global_search_view::global_search_panel,
@@ -518,6 +519,9 @@ fn panel_view(
                     let frame = window_tab_data.panel.android_frame;
                     video_view(frame, |_x, _y| {}).into_any()
                 }
+                PanelKind::AiAssistant => {
+                    ai_assistant_panel(window_tab_data.clone(), position).into_any()
+                }
             };
             view.style(|s| s.size_pct(100.0, 100.0))
         },
@@ -576,6 +580,7 @@ fn panel_picker(
                 PanelKind::Implementation => "Implementation",
                 PanelKind::Emulator => "Emulator",
                 PanelKind::Video => "Video",
+                PanelKind::AiAssistant => "AI Assistant",
             };
             let icon = p.svg_name();
             let is_active = {

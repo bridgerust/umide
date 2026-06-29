@@ -21,7 +21,7 @@ name = "umide-proxy"
 path = "umide-proxy/src/bin/umide-proxy.rs"
 
 [workspace]
-members = ["crates/umide", "umide-proxy", "umide-rpc", "umide-core", "crates/umide_emulator", "crates/umide_native"]
+members = ["crates/umide", "umide-proxy", "umide-rpc", "umide-core", "crates/umide_emulator", "crates/umide_native", "crates/umide_agent"]
 
 [workspace.package]
 version      = "0.1.2"
@@ -78,6 +78,7 @@ umide-rpc   = { path = "./umide-rpc" }
 umide-proxy = { path = "./umide-proxy" }
 umide_emulator = { path = "./crates/umide_emulator" }
 umide_native = { path = "./crates/umide_native" }
+umide_agent = { path = "./crates/umide_agent" }
 
 floem = { git = "https://github.com/bridgerust/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", features = ["editor", "serde", "default-image-formats"] }
 floem_renderer = { git = "https://github.com/bridgerust/floem", rev = "e880fd3e921215b1f8e31cb78a85f4c6b3aaa9e3", package = "floem_renderer" }
@@ -133,3 +134,24 @@ opt-level = 3
 
 [profile.fastdev]
 inherits = "dev"
+
+# Debian package metadata for `cargo deb` (used by the Linux release job).
+# Build with: cargo deb --no-build --profile release-lto -p umide
+[package.metadata.deb]
+maintainer = "KOLOGO JOSIAS <kologojosias@gmail.com>"
+copyright = "2026, UMIDE contributors"
+license-file = ["LICENSE", "0"]
+section = "devel"
+priority = "optional"
+extended-description = """
+UMIDE is a unified IDE for cross-platform mobile development (React Native +
+Flutter), built in Rust. It embeds the Android Emulator and iOS Simulator as
+panels and includes an AI coding assistant."""
+assets = [
+    ["target/release-lto/umide", "usr/bin/", "755"],
+    ["target/release-lto/umide-proxy", "usr/bin/", "755"],
+    ["extra/linux/dev.umide.umide.desktop", "usr/share/applications/", "644"],
+    ["extra/linux/dev.umide.umide.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["extra/images/logo.png", "usr/share/pixmaps/dev.umide.umide.png", "644"],
+    ["README.md", "usr/share/doc/umide/README.md", "644"],
+]

@@ -25,9 +25,9 @@ pub fn get_latest_release() -> Result<ReleaseInfo> {
             return Err(anyhow!("no release for debug"));
         }
         meta::ReleaseType::Nightly => {
-            "https://api.github.com/repos/lapce/lapce/releases/tags/nightly"
+            "https://api.github.com/repos/bridgerust/umide/releases/tags/nightly"
         }
-        _ => "https://api.github.com/repos/lapce/lapce/releases/latest",
+        _ => "https://api.github.com/repos/bridgerust/umide/releases/latest",
     };
 
     let resp = umide_proxy::get_url(url, Some("Umide"))?;
@@ -58,8 +58,7 @@ pub fn download_release(release: &ReleaseInfo) -> Result<PathBuf> {
     let name = match std::env::consts::OS {
         "macos" => "UMIDE-macos.dmg",
         "linux" => match std::env::consts::ARCH {
-            "aarch64" => "lapce-linux-arm64.tar.gz",
-            "x86_64" => "lapce-linux-amd64.tar.gz",
+            "x86_64" => "umide-linux-x86_64.tar.gz",
             _ => return Err(anyhow!("arch not supported")),
         },
         #[cfg(feature = "portable")]

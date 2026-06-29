@@ -1,0 +1,15 @@
+UMIDE
+Copyright 2026 UMIDE contributors
+
+This product is a fork of the Lapce editor and includes software developed
+by the Lapce project:
+
+    Lapce (https://github.com/lapce/lapce)
+    Copyright 2023 Lapce contributors
+    Licensed under the Apache License, Version 2.0.
+
+UMIDE extends Lapce with embedded Android Emulator / iOS Simulator panels
+and an AI coding assistant.
+
+This product is licensed under the Apache License, Version 2.0. A copy of
+the license is available in the LICENSE file.

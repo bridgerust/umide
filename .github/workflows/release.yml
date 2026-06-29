@@ -10,12 +10,16 @@ on:
         description: "Release tag (for example: v0.1.0)"
         required: true
   pull_request:
+    # Only re-run the (slow) release build+packaging when the release PIPELINE
+    # or packaging inputs change. Code/dependency correctness is already covered
+    # by the CI workflow (ci.yml), which builds on all three OSes. For other
+    # changes, dry-run the release manually via the workflow_dispatch button.
     paths:
       - ".github/workflows/release.yml"
       - "extra/**"
-      - "crates/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
+      - "umide.spec"
+      - "docker-bake.hcl"
+      - "Makefile"
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}

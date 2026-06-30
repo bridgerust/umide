@@ -19,14 +19,16 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use floem::ext_event::{ExtSendTrigger, register_ext_trigger};
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use umide_agent::AgentEvent;
 
 use super::claude::ClaudeParser;
 use super::framer::CliFramer;
+use super::permission_server::PermissionServer;
 use super::{CliKind, proc_group};
-use crate::ai::{AgentRunner, CancelHandle, Push};
+use crate::ai::{AgentRunner, ApprovalQueue, CancelHandle, Push};
 
 /// Per-CLI event parser: translate one JSON record into [`AgentEvent`]s and
 /// expose the captured session id for multi-turn resume.
@@ -51,12 +53,20 @@ const DEFAULT_IDLE: Duration = Duration::from_secs(360);
 /// separated; `--disallowedTools` takes precedence over any saved allow-grant.
 const READ_ONLY_DENY: &str = "Bash Edit Write MultiEdit NotebookEdit";
 
-/// Appended to Claude's system prompt in the read-only P1a phase, so it advises
-/// instead of attempting edits/commands that the headless default mode denies.
+/// Appended to Claude's system prompt in the read-only fallback (used only when
+/// the approval bridge can't start), so it advises instead of attempting
+/// edits/commands that the headless default mode then denies.
 const READ_ONLY_NOTE: &str = "You are running inside the UMIDE editor in \
 read-only mode: you can read and search the project to answer questions and \
 explain code, but you must NOT edit files or run shell commands. If a change is \
 needed, describe it (show the diff or commands) for the developer to apply.";
+
+/// Appended to Claude's system prompt in the normal (write) mode, so it knows
+/// its edits/commands are surfaced to the developer for approval.
+const WRITE_NOTE: &str = "You are running inside the UMIDE editor. You can read \
+the project, edit files, and run commands — but every edit and command is shown \
+to the developer for approval before it takes effect, so act normally and they \
+will confirm. Reads are automatic.";
 
 /// Why the read loop stopped.
 enum Stop {
@@ -78,6 +88,10 @@ pub struct CliRunner {
     workspace: PathBuf,
     /// Shared across turns so we can `--resume` the same conversation.
     session: Arc<Mutex<Option<String>>>,
+    /// Approval cards for the CLI permission bridge (mutating tools).
+    approvals: ApprovalQueue,
+    /// Wakes the UI when an approval card is pushed.
+    trigger: ExtSendTrigger,
     idle_timeout: Duration,
 }
 
@@ -86,11 +100,15 @@ impl CliRunner {
         kind: CliKind,
         workspace: PathBuf,
         session: Arc<Mutex<Option<String>>>,
+        approvals: ApprovalQueue,
+        trigger: ExtSendTrigger,
     ) -> Self {
         Self {
             kind,
             workspace,
             session,
+            approvals,
+            trigger,
             idle_timeout: DEFAULT_IDLE,
         }
     }
@@ -104,34 +122,50 @@ impl CliRunner {
         }
     }
 
-    /// argv (the prompt is fed on stdin, not as an arg).
-    fn build_args(&self, resume: Option<&str>) -> Vec<String> {
+    /// argv (the prompt is fed on stdin, not as an arg). `perm` is the running
+    /// permission bridge; when present, Claude runs in normal mode and routes
+    /// every mutating tool through UMIDE's approval queue. When it's `None`
+    /// (the server couldn't bind), we fall back to a hard read-only mode so the
+    /// agent can still read and advise but cannot mutate.
+    fn build_args(
+        &self,
+        resume: Option<&str>,
+        perm: Option<&PermissionServer>,
+    ) -> Vec<String> {
         match self.kind {
             CliKind::ClaudeCode => {
-                // P1a is read-only: the default headless permission mode (no
-                // approver attached) denies Edit/Write/Bash, while Read/Grep/Glob
-                // stay available — so the agent reads and advises but cannot
-                // mutate. The system-prompt note makes that graceful (it won't
-                // attempt edits only to be denied). Writes with per-action
-                // approval arrive in P1b via the --permission-prompt-tool bridge
-                // into UMIDE's ApprovalQueue. (Plan mode is avoided: it refuses
-                // anything that isn't a planning task.)
                 let mut a = vec![
                     "--print".into(),
                     "--output-format".into(),
                     "stream-json".into(),
                     "--verbose".into(),
-                    // Hard read-only guarantee: deny the execution + mutation
-                    // tools. `--disallowedTools` overrides any saved "always
-                    // allow" grant in the project's settings, so behavior is the
-                    // same on every machine (default mode alone is NOT read-only:
-                    // a dev box with prior grants will auto-run Bash). Read/Grep/
-                    // Glob/Web stay available.
-                    "--disallowedTools".into(),
-                    READ_ONLY_DENY.into(),
-                    "--append-system-prompt".into(),
-                    READ_ONLY_NOTE.into(),
                 ];
+                match perm {
+                    Some(p) => {
+                        // Force default mode so every tool falls through to our
+                        // prompt tool (acceptEdits/bypass in a user's config
+                        // would otherwise skip the gate); --strict-mcp-config so
+                        // only UMIDE's server is loaded.
+                        a.push("--permission-mode".into());
+                        a.push("default".into());
+                        a.push("--mcp-config".into());
+                        a.push(p.mcp_config_json());
+                        a.push("--strict-mcp-config".into());
+                        a.push("--permission-prompt-tool".into());
+                        a.push(p.tool_ref());
+                        a.push("--append-system-prompt".into());
+                        a.push(WRITE_NOTE.into());
+                    }
+                    None => {
+                        // Read-only fallback: deny execution + mutation. Deny
+                        // overrides any saved allow-grant, so behavior is the
+                        // same on every machine.
+                        a.push("--disallowedTools".into());
+                        a.push(READ_ONLY_DENY.into());
+                        a.push("--append-system-prompt".into());
+                        a.push(READ_ONLY_NOTE.into());
+                    }
+                }
                 if let Some(id) = resume {
                     a.push("--resume".into());
                     a.push(id.into());
@@ -147,7 +181,27 @@ impl CliRunner {
 impl AgentRunner for CliRunner {
     async fn run(&mut self, user_text: String, push: Push, cancel: CancelHandle) {
         let resume = self.session.lock().unwrap().clone();
-        let args = self.build_args(resume.as_deref());
+
+        // Start the in-process approval bridge for Claude. Held for the whole
+        // turn (Claude calls back into it); dropped at the end, which shuts it
+        // down. If it can't bind, we fall back to read-only mode.
+        let perm = if matches!(self.kind, CliKind::ClaudeCode) {
+            let trigger = self.trigger;
+            let notify: super::permission_server::Notify =
+                Arc::new(move || register_ext_trigger(trigger));
+            match PermissionServer::start(self.approvals.clone(), notify) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    tracing::warn!(
+                        "permission bridge unavailable ({e}); read-only fallback"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let args = self.build_args(resume.as_deref(), perm.as_ref());
 
         // Resolve the absolute path when possible (a GUI app's PATH may be
         // minimal); fall back to the bare name.

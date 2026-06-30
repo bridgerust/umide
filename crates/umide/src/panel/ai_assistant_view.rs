@@ -399,8 +399,8 @@ fn cli_button(
             if available {
                 backend.set(AssistantBackend::Cli(kind));
                 status.set(format!(
-                    "{} — read-only: runs in your project folder, reads and \
-                     explains your code; it can't edit files or run commands yet.",
+                    "{} — runs in your project folder. Reads are automatic; every \
+                     file edit and command it makes is shown to you for approval.",
                     kind.label()
                 ));
             } else {
@@ -464,6 +464,11 @@ fn approval_card(
                     Ok(()) => ai::ApprovalOutcome::EditApplied,
                     Err(e) => ai::ApprovalOutcome::EditFailed(e),
                 },
+                // CLI permission gate: the CLI applies the action itself; we
+                // only signal allow. Nothing is applied on the UMIDE side.
+                ai::ApprovalKind::CliPermission { .. } => {
+                    ai::ApprovalOutcome::Allowed
+                }
             };
             resolve(outcome);
         })
@@ -687,6 +692,7 @@ fn send_handler(
                 cli_session.clone(),
                 text,
                 queue.clone(),
+                approvals.clone(),
                 trigger,
                 cancel.clone(),
             ),

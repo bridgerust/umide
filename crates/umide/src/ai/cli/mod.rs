@@ -19,6 +19,7 @@
 pub mod claude;
 pub mod detect;
 pub mod framer;
+pub mod permission_server;
 pub mod proc_group;
 pub mod runner;
 

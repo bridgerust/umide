@@ -72,6 +72,9 @@ zip              = { version = "7.2.0", default-features = false, features = ["d
 tokio            = { version = "1.28", features = ["full"] }
 tokio-stream     = { version = "0.1" }
 which            = { version = "7" }
+# Tiny localhost HTTP server for the in-process MCP permission bridge (Claude
+# Code's --permission-prompt-tool calls back into UMIDE's approval queue).
+tiny_http        = { version = "0.12" }
 percent-encoding = { version = "2.3.1" }
 wgpu = "28.0.0"
 raw-window-handle = "0.6"

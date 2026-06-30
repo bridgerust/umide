@@ -114,6 +114,10 @@ pub enum ApprovalKind {
         old_str: String,
         new_str: String,
     },
+    /// Permission-only gate for an external agent CLI (Claude Code): the CLI
+    /// performs the action itself, UMIDE only decides allow/deny. Nothing is
+    /// applied on the UMIDE side — the outcome is mapped to the CLI's contract.
+    CliPermission { tool_name: String },
 }
 
 /// The result the UI sends back to the worker after the user decides.
@@ -125,6 +129,8 @@ pub enum ApprovalOutcome {
     EditApplied,
     /// The UI tried to apply the edit but failed (e.g. the file changed).
     EditFailed(String),
+    /// The user allowed a CLI permission gate (the CLI will do the action).
+    Allowed,
 }
 
 /// A mutating action the agent wants to take, awaiting the user's decision.
@@ -139,6 +145,12 @@ pub struct ApprovalRequest {
 }
 
 pub type ApprovalQueue = Arc<Mutex<VecDeque<ApprovalRequest>>>;
+
+/// A process-unique approval id, shared by the LLM tools and the CLI permission
+/// bridge so ids never collide across paths.
+pub fn next_approval_id() -> u64 {
+    NEXT_APPROVAL_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 /// A cheap, cloneable sink the runner uses to push events to the UI: it locks
 /// the shared queue, appends the event, and pulses the Floem trigger. Boxed so
@@ -299,12 +311,14 @@ pub fn spawn_turn(
 /// The CLI runs its own loop in `workspace` and streams events into `queue`;
 /// `trigger`/`cancel` behave exactly as for the LLM path. `session` carries the
 /// CLI's conversation id across turns so the agent keeps multi-turn context.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_cli_turn(
     kind: cli::CliKind,
     workspace: PathBuf,
     session: Arc<Mutex<Option<String>>>,
     user_text: String,
     queue: EventQueue,
+    approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
     cancel: Arc<AtomicBool>,
 ) {
@@ -329,8 +343,9 @@ pub fn spawn_cli_turn(
 
             let cancel = CancelHandle::new(cancel);
             rt.block_on(async move {
-                let mut runner =
-                    cli::runner::CliRunner::new(kind, workspace, session);
+                let mut runner = cli::runner::CliRunner::new(
+                    kind, workspace, session, approvals, trigger,
+                );
                 runner.run(user_text, push, cancel).await;
             });
         })
@@ -662,7 +677,7 @@ impl EditorTools {
             ApprovalOutcome::Rejected => ToolOutput::ok(
                 "The user rejected this edit. Consider a different approach.",
             ),
-            ApprovalOutcome::CommandApproved => {
+            ApprovalOutcome::CommandApproved | ApprovalOutcome::Allowed => {
                 ToolOutput::error("unexpected approval outcome for an edit")
             }
         }

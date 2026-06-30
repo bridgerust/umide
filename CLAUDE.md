@@ -39,10 +39,14 @@ Before finishing any change, check whether these need updating and keep them in 
 - `main` is protected (PR required). Branch for changes and open a PR; admin-merge if solo.
 - **Releases**: push a `v*` tag → GitHub Actions builds the notarized macOS DMG, Windows
   MSI, and Linux `.deb`, and publishes a GitHub Release.
-- **CI cost**: the slow Release build runs ONLY on packaging changes (`release.yml`,
-  `extra/**`, `umide.spec`, `docker-bake.hcl`, `Makefile`); ordinary code/dependency PRs
-  run only the CI workflow. Use the release workflow's `workflow_dispatch` button to
-  dry-run packaging on demand.
+- **CI cost**: the slow Release build does NOT run on PRs at all. It builds on a `v*`
+  tag (real release: build + sign + publish) and on a push to `main` *only when a
+  packaging input changed* (`release.yml`/`extra/**`/`umide.spec`/`docker-bake.hcl`/
+  `Makefile`) — that main-push case builds to validate packaging but never signs or
+  publishes (gated via `meta.outputs.should_build`/`is_release`). Ordinary code/dependency
+  PRs run only the CI workflow. Use the release workflow's `workflow_dispatch` button to
+  dry-run packaging on demand. NB: pushing changes under `.github/workflows/` needs the
+  `gh` token's `workflow` scope (`gh auth refresh -h github.com -s workflow`).
 
 ## Current status (keep this fresh — it is the cross-machine handoff)
 - **v0.2.0 shipped**: notarized macOS DMG, Windows MSI, Linux `.deb` on GitHub Releases.
@@ -96,6 +100,15 @@ Before finishing any change, check whether these need updating and keep them in 
     name; a stock Android Studio install on Windows doesn't add them to PATH, so the panel
     showed an empty list. Now resolves the SDK from `ANDROID_HOME`/`ANDROID_SDK_ROOT`/the
     per-OS default (`%LOCALAPPDATA%\Android\Sdk`).
+  - **Perf — guest was CPU-rendered (fixed)**: interaction felt sluggish because the
+    emulator launched with `-gpu auto`, which silently picks the SwiftShader *software*
+    rasterizer under `-no-window` (always set for streaming). Now launches `-gpu host`
+    (verified: guest GLES renderer went SwiftShader → Intel Iris Xe) with a
+    `swiftshader_indirect` fallback if host can't boot. Also: the panel no longer clones
+    the ~10 MB RGBA buffer per repaint (`DecodedFrame::rgba_arc` hands over the existing
+    `Arc`), and the stream is downscaled to a 1280px long edge while **touch input still
+    maps to native pixels** (probed once into a `native_size` signal — verified live: a
+    swipe on the downscaled panel still opens the shade).
 - **Next milestones / before tagging v0.3.0**:
   1. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
      the MSI/`release-lto` path isn't exercised by ordinary CI. Then flip the `docs/index.html`

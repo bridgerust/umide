@@ -49,9 +49,9 @@ Before finishing any change, check whether these need updating and keep them in 
 - **v0.3.0 in progress (unreleased)**: Windows build enabled + the embedded Android panel
   un-gated for Windows/Linux with pointer input. Source version bumped to `0.3.0`
   (Cargo.toml/umide.spec/Info.plist); the `docs/index.html` download badge stays `0.2.0`
-  until a `v0.3.0` tag is cut. Work lives on branch `feat/windows-build-emulator-panel`
-  (not yet pushed — `origin` is SSH and unauthenticated on the Windows box; fetch was done
-  over HTTPS).
+  until a `v0.3.0` tag is cut. Work lives on branch `feat/windows-build-emulator-panel`,
+  pushed and open as **PR #21**. (On the Windows box `origin` was switched to HTTPS via
+  `gh` — the SSH key is unauthenticated there; `gh auth setup-git` provides push creds.)
 - **floem** is pinned at `bridgerust/floem@e07fcd5ff148…` (branch `feat/external-texture`
   = upstream-latest + the wgpu external-texture / `VideoFrame` primitive + aspect letterbox).
   It is fetched from git automatically — you only need a local floem clone to iterate on

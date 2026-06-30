@@ -1,7 +1,80 @@
 use crate::common::{DeviceInfo, DevicePlatform, DeviceState, MobileDevice};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+
+/// Candidate Android SDK roots, most-specific first: the standard env vars, then
+/// the per-OS default install location. A typical Android Studio install on
+/// Windows does NOT put `adb`/`emulator` on PATH, so relying on PATH alone left
+/// the panel showing an empty device list.
+fn sdk_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Ok(v) = std::env::var(var) {
+            if !v.is_empty() {
+                roots.push(PathBuf::from(v));
+            }
+        }
+    }
+    #[cfg(windows)]
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        roots.push(PathBuf::from(local).join("Android").join("Sdk"));
+    }
+    #[cfg(target_os = "macos")]
+    if let Ok(home) = std::env::var("HOME") {
+        roots.push(
+            PathBuf::from(home)
+                .join("Library")
+                .join("Android")
+                .join("sdk"),
+        );
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Ok(home) = std::env::var("HOME") {
+        roots.push(PathBuf::from(home).join("Android").join("Sdk"));
+    }
+    roots
+}
+
+/// Resolve an SDK tool (`adb` / `emulator`) to an absolute path, or fall back to
+/// the bare name (PATH lookup) when the SDK can't be located.
+fn sdk_tool(name: &str) -> String {
+    let subdir = match name {
+        "adb" => "platform-tools",
+        "emulator" => "emulator",
+        _ => "",
+    };
+    let exe = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+    for root in sdk_roots() {
+        let candidate = root.join(subdir).join(&exe);
+        if candidate.is_file() {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+    name.to_string() // not found under any SDK root — rely on PATH
+}
+
+/// Build a `Command` for an SDK tool that (a) resolves the SDK location instead
+/// of relying on PATH, and (b) does not pop a console window on Windows.
+///
+/// `adb` / `emulator` are console apps; spawning them from the GUI flashes a
+/// black console window per call (several when the panel opens). `CREATE_NO_WINDOW`
+/// suppresses it — same convention as `proxy.rs` / `palette.rs` (`0x08000000`).
+fn quiet_command(program: &str) -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(sdk_tool(program));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
 
 pub struct AndroidEmulator {
     pub device_id: String,
@@ -18,7 +91,7 @@ impl AndroidEmulator {
 
     /// Get list of currently running emulator serials from adb devices
     pub fn get_running_serials() -> Vec<String> {
-        let output = match Command::new("adb").arg("devices").output() {
+        let output = match quiet_command("adb").arg("devices").output() {
             Ok(out) => out,
             Err(_) => return Vec::new(),
         };
@@ -55,7 +128,7 @@ impl AndroidEmulator {
         // Check if any running emulator corresponds to this AVD
         // We need to query each emulator for its AVD name
         for serial in &running {
-            if let Ok(output) = Command::new("adb")
+            if let Ok(output) = quiet_command("adb")
                 .args(["-s", serial, "emu", "avd", "name"])
                 .output()
             {
@@ -71,7 +144,7 @@ impl AndroidEmulator {
     }
 
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
-        let output = Command::new("emulator").arg("-list-avds").output()?;
+        let output = quiet_command("emulator").arg("-list-avds").output()?;
 
         if !output.status.success() {
             return Err(anyhow!("Failed to list Android AVDs"));
@@ -101,15 +174,38 @@ impl AndroidEmulator {
             return Ok(());
         }
 
-        // Launch emulator headless — no window, frames arrive via gRPC streaming
-        // GPU mode "auto" picks the best available backend (Metal on macOS)
-        // -no-window: run headless, no macOS window (we render via gRPC frames)
-        // -grpc 8554: expose gRPC endpoint for frame streaming and input
-        let child = Command::new("emulator")
+        // Prefer the host GPU; fall back to software if it can't come up.
+        // "auto" is deliberately NOT used: with -no-window (which we always set
+        // for gRPC streaming) it silently selects the SwiftShader *software*
+        // rasterizer, so the whole guest UI is CPU-rendered and sluggish even on
+        // capable GPUs (verified on Windows). "host" renders on the real GPU; a
+        // machine without a usable GPU falls back to swiftshader_indirect.
+        if Self::spawn_and_wait(avd_name, "host")? {
+            return Ok(());
+        }
+        tracing::warn!(
+            "emulator did not come up with `-gpu host`; \
+             retrying with software rendering"
+        );
+        if Self::spawn_and_wait(avd_name, "swiftshader_indirect")? {
+            return Ok(());
+        }
+        Err(anyhow!(
+            "emulator {} failed to boot with host or software GPU",
+            avd_name
+        ))
+    }
+
+    /// Spawn the headless emulator with the given `-gpu` mode and wait for it to
+    /// register with adb. Returns `Ok(true)` if it came up, `Ok(false)` if the
+    /// process exited early (this GPU mode is unsupported on this host, so the
+    /// caller should fall back), or `Err` if it could not be spawned at all.
+    fn spawn_and_wait(avd_name: &str, gpu: &str) -> Result<bool> {
+        let mut child = quiet_command("emulator")
             .arg("-avd")
             .arg(avd_name)
             .arg("-gpu")
-            .arg("auto")
+            .arg(gpu)
             .arg("-no-boot-anim")
             .arg("-no-skin")
             .arg("-no-window") // Headless: no desktop window, frames via gRPC
@@ -118,54 +214,39 @@ impl AndroidEmulator {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .stdin(Stdio::null())
-            .spawn();
+            .spawn()
+            .map_err(|e| anyhow!("Failed to spawn emulator: {}", e))?;
 
-        match child {
-            Ok(_child) => {
-                tracing::info!("Emulator process spawned for AVD: {}", avd_name);
+        tracing::info!("Emulator spawned for AVD {} (-gpu {})", avd_name, gpu);
 
-                // Wait for the emulator to become reachable via ADB
-                // Poll up to 30 seconds for the emulator to appear in adb devices
-                let mut ready = false;
-                for attempt in 0..60 {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    let serials = Self::get_running_serials();
-                    if !serials.is_empty() {
-                        // Verify this AVD is the one that booted
-                        if Self::is_running(avd_name) {
-                            tracing::info!(
-                                "AVD {} is now running (detected after {}ms)",
-                                avd_name,
-                                (attempt + 1) * 500
-                            );
-                            ready = true;
-                            break;
-                        }
-                    }
-                    if attempt % 10 == 0 && attempt > 0 {
-                        tracing::debug!(
-                            "Still waiting for AVD {} to boot... ({}s)",
-                            avd_name,
-                            (attempt + 1) / 2
-                        );
-                    }
-                }
-
-                if !ready {
-                    tracing::warn!("AVD {} may not be fully booted yet after 30s, proceeding anyway", avd_name);
-                }
-
-                Ok(())
+        // Poll up to 30s for the emulator to register with adb. If the process
+        // exits early, this GPU mode is unsupported here — report failure so the
+        // caller can fall back.
+        for attempt in 0..60 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if let Ok(Some(status)) = child.try_wait() {
+                tracing::warn!("emulator (-gpu {}) exited early ({})", gpu, status);
+                return Ok(false);
             }
-            Err(e) => {
-                tracing::error!(
-                    "Failed to spawn emulator for AVD {}: {}",
+            if Self::is_running(avd_name) {
+                tracing::info!(
+                    "AVD {} running after {}ms (-gpu {})",
                     avd_name,
-                    e
+                    (attempt + 1) * 500,
+                    gpu
                 );
-                Err(anyhow!("Failed to launch emulator: {}", e))
+                return Ok(true);
             }
         }
+
+        // Still alive but slow to boot — don't kill a working launch; the
+        // stream's connect-retry waits for it.
+        tracing::warn!(
+            "AVD {} not confirmed booted in 30s (-gpu {}); proceeding",
+            avd_name,
+            gpu
+        );
+        Ok(true)
     }
 
     pub fn stop(avd_name: &str) -> Result<()> {
@@ -182,7 +263,7 @@ impl AndroidEmulator {
         // Find the emulator that matches this AVD name
         for serial in &running_serials {
             // Query the AVD name for this emulator
-            if let Ok(output) = Command::new("adb")
+            if let Ok(output) = quiet_command("adb")
                 .args(["-s", serial, "emu", "avd", "name"])
                 .output()
             {
@@ -200,7 +281,7 @@ impl AndroidEmulator {
                     tracing::info!("Found matching emulator {} for AVD {}, sending kill command", serial, avd_name);
 
                     // Kill this emulator
-                    let result = Command::new("adb")
+                    let result = quiet_command("adb")
                         .args(["-s", serial, "emu", "kill"])
                         .output();
 
@@ -236,7 +317,7 @@ impl AndroidEmulator {
         tracing::warn!("No exact AVD match found, trying partial match...");
         for serial in &running_serials {
             // Just kill the first one as fallback
-            let result = Command::new("adb")
+            let result = quiet_command("adb")
                 .args(["-s", serial, "emu", "kill"])
                 .output();
 

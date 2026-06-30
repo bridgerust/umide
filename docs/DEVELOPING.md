@@ -9,8 +9,18 @@ holds the live status + conventions; this is the human-facing setup/workflow.
 ## Prerequisites
 - **Rust** (rustup; the repo's edition-2024 toolchain) and **protoc** (protobuf compiler —
   the emulator gRPC build needs it).
-- **macOS**: Xcode Command Line Tools. **Windows**: MSVC C++ build tools (Visual Studio
-  Build Tools). **Linux**: `sudo make ubuntu-deps`.
+- **macOS**: Xcode Command Line Tools. **Linux**: `sudo make ubuntu-deps`.
+- **Windows**: MSVC C++ build tools **and** the Windows SDK. The cheapest path is the
+  Visual Studio 2022 Community installer with the "Desktop development with C++" workload,
+  which bundles both. Without the SDK, even tiny crates fail to link
+  (`kernel32.lib` / `user32.lib` missing). Quick install via winget:
+  ```powershell
+  winget install --id Microsoft.WindowsSDK.10.0.26100
+  winget install --id Google.Protobuf
+  ```
+  Run builds from the **Developer PowerShell for VS 2022** shortcut (or a regular shell
+  with `vcvars64.bat` sourced) so `link.exe` is on PATH. Regular PowerShell will fail with
+  `note: program not found ... link.exe`.
 - For the emulator work: Android SDK + emulator + a system image, launched with the gRPC
   endpoint, e.g. `emulator -avd <name> -grpc 8554` (`-no-window` for headless is fine).
 

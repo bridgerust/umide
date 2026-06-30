@@ -3,27 +3,27 @@ name: Release
 on:
   push:
     tags:
-      - "v[0-9]*"
+      - "v[0-9]*" # real release: always builds + publishes
+    branches:
+      - main # post-merge: builds to validate packaging (gated in `meta`)
   workflow_dispatch:
     inputs:
       tag_name:
         description: "Release tag (for example: v0.1.0)"
         required: true
-  pull_request:
-    # Only re-run the (slow) release build+packaging when the release PIPELINE
-    # or packaging inputs change. Code/dependency correctness is already covered
-    # by the CI workflow (ci.yml), which builds on all three OSes. For other
-    # changes, dry-run the release manually via the workflow_dispatch button.
-    paths:
-      - ".github/workflows/release.yml"
-      - "extra/**"
-      - "umide.spec"
-      - "docker-bake.hcl"
-      - "Makefile"
+  # NB: intentionally no `pull_request` trigger and no `paths:` on the push above.
+  # A `paths` filter on `push` would also apply to tag pushes and could stop a
+  # real release from building. Instead the (slow) build jobs are gated in the
+  # `meta` job: tags + manual dispatch always build; a push to main builds only
+  # when a packaging input (umide.spec, extra/**, release.yml, …) changed.
+  # PR-time code/dependency correctness is covered by ci.yml on all three OSes;
+  # for an on-demand packaging dry-run use the workflow_dispatch button.
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Cancel a superseded main-branch validation build when a newer push lands;
+  # never cancel a tag release (each tag is its own concurrency group anyway).
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -35,7 +35,40 @@ jobs:
     outputs:
       tag_name: ${{ steps.meta.outputs.tag_name }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
+      should_build: ${{ steps.decide.outputs.should_build }}
+      is_release: ${{ steps.decide.outputs.is_release }}
     steps:
+      # A push to main only needs the slow release build when a packaging input
+      # changed — diff the push to decide. Tags / manual dispatch always build.
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          fetch-depth: 0
+      - id: decide
+        shell: bash
+        run: |
+          # A real release (a v* tag or a manual dispatch) always builds AND
+          # signs/publishes. A push to main only *builds* — and only when a
+          # packaging input changed — to validate packaging; it never signs or
+          # publishes.
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.ref_type }}" == "tag" ]]; then
+            echo "is_release=true" | tee -a "$GITHUB_OUTPUT"
+            echo "should_build=true" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "is_release=false" | tee -a "$GITHUB_OUTPUT"
+          before="${{ github.event.before }}"
+          if [[ -z "$before" || "$before" =~ ^0+$ ]]; then
+            # No known base (new branch / first run) — build to be safe.
+            echo "should_build=true" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$before" "${{ github.sha }}")"
+          if grep -qE '^(\.github/workflows/release\.yml|extra/|umide\.spec|docker-bake\.hcl|Makefile)' <<<"$changed"; then
+            echo "should_build=true" | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "should_build=false" | tee -a "$GITHUB_OUTPUT"
+          fi
       - id: meta
         shell: bash
         run: |
@@ -64,6 +97,7 @@ jobs:
     name: Build Linux
     runs-on: ubuntu-latest
     needs: meta
+    if: needs.meta.outputs.should_build == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -112,6 +146,7 @@ jobs:
     name: Build Windows
     runs-on: windows-latest
     needs: meta
+    if: needs.meta.outputs.should_build == 'true'
     defaults:
       run:
         shell: pwsh
@@ -175,6 +210,7 @@ jobs:
     name: Build macOS
     runs-on: macos-14
     needs: meta
+    if: needs.meta.outputs.should_build == 'true'
     env:
       APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
       APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD }}
@@ -199,7 +235,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Validate macOS signing secrets
-        if: github.event_name != 'pull_request'
+        if: needs.meta.outputs.is_release == 'true'
         shell: bash
         run: |
           missing=()
@@ -223,7 +259,7 @@ jobs:
           fi
 
       - name: Import Developer ID certificate
-        if: github.event_name != 'pull_request'
+        if: needs.meta.outputs.is_release == 'true'
         shell: bash
         run: |
           KEYCHAIN_PATH="${RUNNER_TEMP}/build.keychain-db"
@@ -265,12 +301,13 @@ jobs:
           UMIDE_ARM64: ./target/aarch64-apple-darwin/release-lto/umide
           PROXY_X64: ./target/x86_64-apple-darwin/release-lto/umide-proxy
           PROXY_ARM64: ./target/aarch64-apple-darwin/release-lto/umide-proxy
-          # On PR dry-runs the cert isn't imported, so don't attempt signing
-          # (package_app.sh skips codesign when this is empty).
-          APPLE_DEVELOPER_ID_APPLICATION_IDENTITY: ${{ github.event_name != 'pull_request' && secrets.APPLE_DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
+          # On non-release builds (e.g. a main-push packaging check) the cert
+          # isn't imported, so don't attempt signing (package_app.sh skips
+          # codesign when this is empty).
+          APPLE_DEVELOPER_ID_APPLICATION_IDENTITY: ${{ needs.meta.outputs.is_release == 'true' && secrets.APPLE_DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
 
       - name: Notarize and staple DMG
-        if: github.event_name != 'pull_request'
+        if: needs.meta.outputs.is_release == 'true'
         shell: bash
         run: |
           xcrun notarytool submit \
@@ -293,7 +330,10 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    if: github.event_name != 'pull_request'
+    # Only publish a real release on a v* tag (or a manual dispatch with a tag
+    # name). A push to main may build (to validate packaging) but must NOT create
+    # a release named "main".
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs:
       - meta

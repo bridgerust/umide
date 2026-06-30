@@ -67,9 +67,24 @@ pub fn start_emulator_stream(
                 }
             });
 
-            while let Some(frame) = grx.recv().await {
-                if tx.send(Arc::new(frame)).is_err() {
-                    break; // UI side gone — stop streaming
+            // Watchdog: if the stream stalls (connected but no frames arrive,
+            // e.g. a half-open socket) stop instead of hanging this thread +
+            // runtime forever.
+            loop {
+                match tokio::time::timeout(Duration::from_secs(10), grx.recv()).await
+                {
+                    Ok(Some(frame)) => {
+                        if tx.send(Arc::new(frame)).is_err() {
+                            break; // UI side gone — stop streaming
+                        }
+                    }
+                    Ok(None) => break, // stream ended
+                    Err(_) => {
+                        tracing::warn!(
+                            "emulator stream: no frame for 10s, stopping"
+                        );
+                        break;
+                    }
                 }
             }
         });
@@ -88,26 +103,28 @@ enum InputEvent {
 /// Handle for sending input (touch/keys) to the emulator. Cheap to clone; call
 /// from the UI thread — events are dispatched on a background gRPC command
 /// connection (separate from the frame stream, to avoid lock contention).
+/// Backed by a bounded channel: events are dropped (latest-wins) if the command
+/// client can't keep up or hasn't connected yet, so input can't grow unbounded.
 #[derive(Clone)]
 pub struct EmulatorInput {
-    tx: tokio::sync::mpsc::UnboundedSender<InputEvent>,
+    tx: tokio::sync::mpsc::Sender<InputEvent>,
 }
 
 impl EmulatorInput {
     pub fn touch_down(&self, x: i32, y: i32) {
-        let _ = self.tx.send(InputEvent::TouchDown(x, y));
+        let _ = self.tx.try_send(InputEvent::TouchDown(x, y));
     }
     pub fn touch_move(&self, x: i32, y: i32) {
-        let _ = self.tx.send(InputEvent::TouchMove(x, y));
+        let _ = self.tx.try_send(InputEvent::TouchMove(x, y));
     }
     pub fn touch_up(&self, x: i32, y: i32) {
-        let _ = self.tx.send(InputEvent::TouchUp(x, y));
+        let _ = self.tx.try_send(InputEvent::TouchUp(x, y));
     }
     pub fn key(&self, key: &str) {
-        let _ = self.tx.send(InputEvent::Key(key.to_string()));
+        let _ = self.tx.try_send(InputEvent::Key(key.to_string()));
     }
     pub fn key_code(&self, code: i32) {
-        let _ = self.tx.send(InputEvent::KeyCode(code));
+        let _ = self.tx.try_send(InputEvent::KeyCode(code));
     }
 }
 
@@ -115,7 +132,9 @@ impl EmulatorInput {
 /// input. Returns immediately; events sent via the returned handle are
 /// forwarded on a background thread.
 pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InputEvent>();
+    // Bounded: drop input on full/disconnected (latest-wins) rather than
+    // queueing unboundedly during the connect window.
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<InputEvent>(256);
 
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
@@ -163,6 +182,10 @@ pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
 /// Map a pointer position in the view's local coordinates to a device pixel
 /// coordinate, accounting for the aspect-preserving letterbox. Returns `None`
 /// if the point falls in the letterbox margins (outside the displayed frame).
+///
+/// NOTE: this letterbox math must stay in lockstep with floem's
+/// `draw_external_texture` centering (vger/src/lib.rs); if they diverge, taps
+/// land on the wrong device pixel with no error.
 pub fn view_to_device(
     px: f64,
     py: f64,

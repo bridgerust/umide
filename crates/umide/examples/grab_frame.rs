@@ -13,10 +13,12 @@ async fn main() {
         .nth(1)
         .unwrap_or_else(|| "/tmp/umide_frame.png".to_string());
 
-    let mut client =
-        EmulatorGrpcClient::connect_with_retry("http://localhost:8554", Duration::from_secs(30))
-            .await
-            .expect("connect to emulator gRPC");
+    let mut client = EmulatorGrpcClient::connect_with_retry(
+        "http://localhost:8554",
+        Duration::from_secs(30),
+    )
+    .await
+    .expect("connect to emulator gRPC");
 
     let frame = client.get_screenshot().await.expect("get_screenshot");
     let rgba = frame.to_rgba().expect("to_rgba");

@@ -16,12 +16,12 @@
 
 use std::sync::Arc;
 
+use floem::Application;
 use floem::kurbo::Size;
 use floem::prelude::*;
 use floem::reactive::RwSignal;
 use floem::views::{RgbaFrame, video_frame};
 use floem::window::WindowConfig;
-use floem::Application;
 use umide_app::panel::emulator_stream::start_emulator_stream;
 use umide_emulator::decoder::DecodedFrame;
 

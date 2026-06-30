@@ -1,16 +1,70 @@
 use crate::common::{DeviceInfo, DevicePlatform, DeviceState, MobileDevice};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-/// Build a `Command` that does not pop a console window on Windows.
+/// Candidate Android SDK roots, most-specific first: the standard env vars, then
+/// the per-OS default install location. A typical Android Studio install on
+/// Windows does NOT put `adb`/`emulator` on PATH, so relying on PATH alone left
+/// the panel showing an empty device list.
+fn sdk_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Ok(v) = std::env::var(var) {
+            if !v.is_empty() {
+                roots.push(PathBuf::from(v));
+            }
+        }
+    }
+    #[cfg(windows)]
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        roots.push(PathBuf::from(local).join("Android").join("Sdk"));
+    }
+    #[cfg(target_os = "macos")]
+    if let Ok(home) = std::env::var("HOME") {
+        roots.push(
+            PathBuf::from(home).join("Library").join("Android").join("sdk"),
+        );
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Ok(home) = std::env::var("HOME") {
+        roots.push(PathBuf::from(home).join("Android").join("Sdk"));
+    }
+    roots
+}
+
+/// Resolve an SDK tool (`adb` / `emulator`) to an absolute path, or fall back to
+/// the bare name (PATH lookup) when the SDK can't be located.
+fn sdk_tool(name: &str) -> String {
+    let subdir = match name {
+        "adb" => "platform-tools",
+        "emulator" => "emulator",
+        _ => "",
+    };
+    let exe = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+    for root in sdk_roots() {
+        let candidate = root.join(subdir).join(&exe);
+        if candidate.is_file() {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+    name.to_string() // not found under any SDK root — rely on PATH
+}
+
+/// Build a `Command` for an SDK tool that (a) resolves the SDK location instead
+/// of relying on PATH, and (b) does not pop a console window on Windows.
 ///
 /// `adb` / `emulator` are console apps; spawning them from the GUI flashes a
 /// black console window per call (several when the panel opens). `CREATE_NO_WINDOW`
 /// suppresses it — same convention as `proxy.rs` / `palette.rs` (`0x08000000`).
 fn quiet_command(program: &str) -> Command {
     #[allow(unused_mut)]
-    let mut cmd = Command::new(program);
+    let mut cmd = Command::new(sdk_tool(program));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

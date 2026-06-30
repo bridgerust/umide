@@ -28,9 +28,10 @@ Before finishing any change, check whether these need updating and keep them in 
 
 ## Product positioning (keep accurate everywhere)
 - **macOS**: full product — editor + embedded Android/iOS emulators + AI assistant.
-- **Windows/Linux**: editor + AI assistant + **embedded Android emulator (preview, view-only)**.
-  iOS Simulator stays macOS-only permanently. Input (tap/scroll/type) lands with M3 on every
-  platform; until then the embedded Android view is view-only.
+- **Windows/Linux**: editor + AI assistant + **embedded, interactive Android emulator
+  (preview)** — live frames + pointer tap/drag (M3). iOS Simulator stays macOS-only
+  permanently. Still preview-grade: hardware buttons (Home/Back/Power) and keyboard text
+  are not yet wired into the portable panel, and a live device run on Windows is pending.
 
 ## Repo conventions
 - **Sole commit author**: `dev-josias <kologojosias@gmail.com>`. Do not introduce other
@@ -55,15 +56,21 @@ Before finishing any change, check whether these need updating and keep them in 
     Pixel emulator. Code: `crates/umide/src/panel/emulator_stream.rs`. Demos:
     `cargo run -p umide-app --example live_emulator` (GUI) and `… --example grab_frame`
     (headless) with an emulator running on gRPC `8554`.
-  - **In-app integration (done)**: `crates/umide/src/panel/emulator_view.rs` now ships a
-    `(not macos)` `android_panel_portable` that drives the panel via `video_frame` + the
-    same `start_emulator_stream` flow as the example. iOS panel is omitted on
-    Windows/Linux (Simulator is macOS-only permanently). View-only — input lands with M3.
+  - **M3 (done)**: emulator touch input over gRPC — `start_emulator_input` +
+    `view_to_device` in `emulator_stream.rs` (merged from the Mac, PR #20). Demos:
+    `… --example live_emulator` (now interactive) and `… --example tap_test` (headless swipe).
+  - **In-app integration (done)**: `crates/umide/src/panel/emulator_view.rs` ships a
+    `(not macos)` `android_panel_portable` that drives the panel via `video_frame` +
+    `start_emulator_stream`, and forwards pointer tap/drag through `start_emulator_input` +
+    `view_to_device` (PointerDown/Move/Up → touch_down/move/up). iOS panel is omitted on
+    Windows/Linux (Simulator is macOS-only permanently).
 - **Next milestones**:
-  1. **M3 — input**: map floem pointer/keyboard on the view → emulator gRPC (tap/scroll/type).
-     Currently view-only on every platform.
-  2. **Live-verify the Windows panel** end-to-end with an Android emulator on `localhost:8554`
-     (build is green; needs human-driven device test to confirm frames land).
+  1. **Live-verify the Windows panel** end-to-end with an Android emulator on `localhost:8554`
+     (build is green for the real binary; needs a human-driven device run to confirm frames
+     render and taps land).
+  2. **Hardware buttons + keyboard** in the portable panel (Home/Back/Power via
+     `EmulatorInput::key_code`; text via `key`) — the macOS sidebar has these; the portable
+     panel currently wires pointer only.
   3. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
      AI providers.
 

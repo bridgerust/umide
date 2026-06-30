@@ -11,8 +11,8 @@ UMIDE is a unified IDE for cross-platform mobile development (React Native + Flu
 Get the latest build from the [Releases page](https://github.com/bridgerust/umide/releases/latest):
 
 - **macOS** (Apple Silicon & Intel) — signed & notarized `.dmg`. Full product: editor, embedded Android/iOS emulators, and the AI assistant.
-- **Windows** — `.msi` installer. Editor + AI assistant + **embedded Android emulator (preview, view-only)**. iOS Simulator stays macOS-only.
-- **Linux** — `.deb` or tarball. Editor + AI assistant + **embedded Android emulator (preview, view-only)**. iOS Simulator stays macOS-only.
+- **Windows** — `.msi` installer. Editor + AI assistant + **embedded, interactive Android emulator (preview)** — live screen with tap/drag input. iOS Simulator stays macOS-only.
+- **Linux** — `.deb` or tarball. Editor + AI assistant + **embedded, interactive Android emulator (preview)** — live screen with tap/drag input. iOS Simulator stays macOS-only.
 
 ## Screenshots
 

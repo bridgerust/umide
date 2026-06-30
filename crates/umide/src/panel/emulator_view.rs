@@ -617,12 +617,12 @@ fn emulator_sidebar(
 }
 
 /// Cross-platform Android emulator panel using floem's `video_frame` view to
-/// render frames from `start_emulator_stream` directly on the GPU.
+/// render frames from `start_emulator_stream` directly on the GPU, with
+/// pointer input forwarded to the device via M3's `start_emulator_input`.
 ///
 /// This is the portable counterpart to the macOS `platform_panel` overlay
 /// path. iOS is not exposed here — iOS Simulator is permanently macOS-only.
-/// Hardware controls (Home/Back/Power/etc.) and pointer/keyboard mapping land
-/// with M3 input.
+/// Pointer (tap/drag) is wired; hardware buttons and keyboard are a follow-up.
 #[cfg(not(target_os = "macos"))]
 fn android_panel_portable(
     devices: RwSignal<Vec<DeviceInfo>>,
@@ -632,23 +632,43 @@ fn android_panel_portable(
     current_device_id: RwSignal<String>,
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
-    use crate::panel::emulator_stream::start_emulator_stream;
+    use crate::panel::emulator_stream::{
+        EmulatorInput, start_emulator_input, start_emulator_stream,
+        view_to_device,
+    };
+    use floem::event::{Event, EventListener};
+    use floem::kurbo::Size;
     use floem::views::{RgbaFrame, video_frame};
 
-    // Start the gRPC frame stream exactly once when an Android device first
-    // runs. The stream stays alive for the panel's lifetime — a future polish
-    // is per-launch lifecycle, but for view-only use the first stream is
-    // sufficient: `connect_with_retry` waits 60s for the emulator to boot.
+    const ENDPOINT: &str = "http://localhost:8554";
+
+    // Start the gRPC frame stream and the input command connection exactly once
+    // when an Android device first runs. Both stay alive for the panel's
+    // lifetime — a future polish is per-launch lifecycle, but for the preview
+    // the first stream is sufficient: `connect_with_retry` waits for boot.
     let stream_started = RwSignal::new(false);
+    let input_handle: RwSignal<Option<EmulatorInput>> = RwSignal::new(None);
     Effect::new(move |_| {
         if running_device.get().is_some() && !stream_started.get_untracked() {
-            start_emulator_stream(
-                "http://localhost:8554".to_string(),
-                frame_signal,
-            );
+            start_emulator_stream(ENDPOINT.to_string(), frame_signal);
+            input_handle.set(Some(start_emulator_input(ENDPOINT.to_string())));
             stream_started.set(true);
         }
     });
+
+    // Pointer state for touch_down → move → up gesture forwarding.
+    let view_size = RwSignal::new(Size::ZERO);
+    let pressed = RwSignal::new(false);
+    let last = RwSignal::new((0i32, 0i32));
+
+    // Map a view-local pointer position to a device pixel, through the
+    // aspect-preserving letterbox. `None` when the point is in the margins.
+    let to_device = move |e: &Event| -> Option<(i32, i32)> {
+        let p = e.point()?;
+        let sz = view_size.get_untracked();
+        let f = frame_signal.get_untracked()?;
+        view_to_device(p.x, p.y, sz.width, sz.height, f.width, f.height)
+    };
 
     let device_item = move |device: DeviceInfo| {
         let device_cloned_start = device.clone();
@@ -784,6 +804,36 @@ fn android_panel_portable(
                             height: f.height,
                         })
                     })
+                })
+                .on_resize(move |rect| view_size.set(rect.size()))
+                .on_event_stop(EventListener::PointerDown, move |e| {
+                    if let Some(input) = input_handle.get_untracked() {
+                        if let Some((x, y)) = to_device(e) {
+                            pressed.set(true);
+                            last.set((x, y));
+                            input.touch_down(x, y);
+                        }
+                    }
+                })
+                .on_event_stop(EventListener::PointerMove, move |e| {
+                    if pressed.get_untracked() {
+                        if let Some(input) = input_handle.get_untracked() {
+                            if let Some((x, y)) = to_device(e) {
+                                last.set((x, y));
+                                input.touch_move(x, y);
+                            }
+                        }
+                    }
+                })
+                .on_event_stop(EventListener::PointerUp, move |e| {
+                    if pressed.get_untracked() {
+                        pressed.set(false);
+                        if let Some(input) = input_handle.get_untracked() {
+                            let (x, y) = to_device(e)
+                                .unwrap_or_else(|| last.get_untracked());
+                            input.touch_up(x, y);
+                        }
+                    }
                 })
                 .style(|s| s.flex_grow(1.0).width_full().min_height(0.0)),
                 Stack::new((

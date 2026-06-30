@@ -622,7 +622,8 @@ fn emulator_sidebar(
 ///
 /// This is the portable counterpart to the macOS `platform_panel` overlay
 /// path. iOS is not exposed here — iOS Simulator is permanently macOS-only.
-/// Pointer (tap/drag) is wired; hardware buttons and keyboard are a follow-up.
+/// Pointer (tap/drag), hardware buttons (Home/Back/Recents/Power), and keyboard
+/// are all wired — each forwarded to the device over gRPC.
 #[cfg(not(target_os = "macos"))]
 fn android_panel_portable(
     devices: RwSignal<Vec<DeviceInfo>>,
@@ -637,6 +638,7 @@ fn android_panel_portable(
     };
     use floem::event::{Event, EventListener};
     use floem::kurbo::Size;
+    use floem::prelude::{Key, NamedKey};
     use floem::style::Position;
     use floem::views::{RgbaFrame, video_frame};
 
@@ -678,6 +680,52 @@ fn android_panel_portable(
             _ => (f.width, f.height),
         };
         view_to_device(p.x, p.y, sz.width, sz.height, dw, dh)
+    };
+
+    // A hardware-control button: an emoji glyph that forwards a named device key
+    // over gRPC (e.g. "GoHome") — the same path as touch, no adb shell. No-op
+    // until the input command channel has connected.
+    let hw_button = move |glyph: &'static str, key: &'static str| {
+        Stack::new((Label::new(glyph).style(|s| s.font_size(14.0)),))
+            .on_click_stop(move |_| {
+                if let Some(input) = input_handle.get_untracked() {
+                    input.key(key);
+                }
+            })
+            .style(move |s| {
+                s.width(28.0)
+                    .height(28.0)
+                    .items_center()
+                    .justify_center()
+                    .border_radius(4.0)
+                    .cursor(floem::style::CursorStyle::Pointer)
+                    .border(1.0)
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+                    .hover(|s| {
+                        s.background(floem::peniko::Color::from_rgba8(
+                            255, 255, 255, 20,
+                        ))
+                    })
+            })
+    };
+
+    // Map a floem key press to the device key string the emulator's gRPC
+    // `sendKey` accepts (DOM-style names for the named keys; the raw character
+    // otherwise). Returns `None` for keys we don't forward (e.g. bare modifiers).
+    let to_device_key = |key: &Key| -> Option<String> {
+        Some(match key {
+            Key::Character(c) => c.to_string(),
+            Key::Named(NamedKey::Enter) => "Enter".to_string(),
+            Key::Named(NamedKey::Backspace) => "Backspace".to_string(),
+            Key::Named(NamedKey::Tab) => "Tab".to_string(),
+            Key::Named(NamedKey::Escape) => "Escape".to_string(),
+            Key::Named(NamedKey::Delete) => "Delete".to_string(),
+            Key::Named(NamedKey::ArrowUp) => "ArrowUp".to_string(),
+            Key::Named(NamedKey::ArrowDown) => "ArrowDown".to_string(),
+            Key::Named(NamedKey::ArrowLeft) => "ArrowLeft".to_string(),
+            Key::Named(NamedKey::ArrowRight) => "ArrowRight".to_string(),
+            _ => return None,
+        })
     };
 
     let device_item = move |device: DeviceInfo| {
@@ -770,8 +818,8 @@ fn android_panel_portable(
                 Label::new("Android".to_string())
                     .style(|s| s.font_size(12.0).font_bold().padding(6.0)),
                 // Make the preview status self-evident in the panel itself, not
-                // just in the docs (B3-adjacent) — pointer works, but hardware
-                // buttons/keyboard and a live Windows run are still pending.
+                // just in the docs (B3-adjacent): pointer + hardware buttons +
+                // keyboard are wired; still preview-grade (single emulator, etc.).
                 Label::new("PREVIEW".to_string()).style(move |s| {
                     let config = config.get();
                     s.font_size(8.0)
@@ -882,7 +930,18 @@ fn android_panel_portable(
                             }
                         }
                     })
-                    .style(|s| s.size_full()),
+                    // Forward each key press over gRPC; the view is `focusable`
+                    // (below) so clicking into the panel routes the keyboard here.
+                    .on_event_stop(EventListener::KeyDown, move |e| {
+                        if let Event::Key(ke) = e {
+                            if let Some(input) = input_handle.get_untracked() {
+                                if let Some(k) = to_device_key(&ke.key) {
+                                    input.key(&k);
+                                }
+                            }
+                        }
+                    })
+                    .style(|s| s.size_full().focusable(true)),
                     // Centered status overlay; pointer-transparent so taps still
                     // reach the device, and hidden once frames start arriving.
                     Container::new(
@@ -953,6 +1012,12 @@ fn android_panel_portable(
                         config,
                     ),
                     Label::new("Hide").style(|s| s.font_size(10.0)),
+                    Label::new("").style(|s| s.height(10.0)),
+                    // Hardware buttons — forwarded to the device over gRPC.
+                    hw_button("🏠", "GoHome"),
+                    hw_button("◀", "GoBack"),
+                    hw_button("⊞", "AppSwitch"),
+                    hw_button("⏻", "Power"),
                 ))
                 .style(move |s| {
                     let config_val = config.get();

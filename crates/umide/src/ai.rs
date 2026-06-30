@@ -12,8 +12,9 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use floem::ext_event::{ExtSendTrigger, register_ext_trigger};
@@ -24,6 +25,8 @@ use umide_agent::tools::{ToolExecutor, ToolInvocation, ToolOutput};
 use umide_agent::{
     Agent, AgentEvent, ContentBlock, Message, ProviderConfig, ProviderKind, ToolDef,
 };
+
+pub mod cli;
 
 use crate::window_tab::WindowTabData;
 
@@ -137,6 +140,113 @@ pub struct ApprovalRequest {
 
 pub type ApprovalQueue = Arc<Mutex<VecDeque<ApprovalRequest>>>;
 
+/// A cheap, cloneable sink the runner uses to push events to the UI: it locks
+/// the shared queue, appends the event, and pulses the Floem trigger. Boxed so
+/// the LLM and CLI runners share one type and can clone it across tasks.
+#[derive(Clone)]
+pub struct Push(Arc<dyn Fn(AgentEvent) + Send + Sync>);
+
+impl Push {
+    pub fn new(f: impl Fn(AgentEvent) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(f))
+    }
+
+    /// Emit one event to the UI.
+    pub fn emit(&self, ev: AgentEvent) {
+        let f: &(dyn Fn(AgentEvent) + Send + Sync) = &*self.0;
+        f(ev);
+    }
+}
+
+/// A cancellation token shared with the UI's Stop button. Wraps the existing
+/// `Arc<AtomicBool>` (which the panel sets directly) and adds an awaitable
+/// [`CancelHandle::cancelled`], so a CLI runner's `select!` can react to a stop
+/// while parked on child I/O — not only by polling between events.
+#[derive(Clone)]
+pub struct CancelHandle {
+    flag: Arc<AtomicBool>,
+}
+
+impl CancelHandle {
+    pub fn new(flag: Arc<AtomicBool>) -> Self {
+        Self { flag }
+    }
+
+    /// The raw flag, for the LLM path (`Agent::send` takes `&AtomicBool`).
+    pub fn flag(&self) -> &AtomicBool {
+        &self.flag
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.flag.load(Ordering::Relaxed)
+    }
+
+    /// Resolves once cancellation is observed. Polls the shared flag on a short
+    /// interval so it composes in a `select!` and works with the panel's direct
+    /// `flag.store(true)` without the UI signaling a separate primitive.
+    pub async fn cancelled(&self) {
+        while !self.is_cancelled() {
+            tokio::time::sleep(Duration::from_millis(120)).await;
+        }
+    }
+}
+
+/// One assistant turn, abstracted over how it is fulfilled: UMIDE's own agentic
+/// loop ([`LlmRunner`]) or an external agent CLI. Both stream the same
+/// [`AgentEvent`]s through `push` and honor `cancel`, so the panel is identical.
+///
+/// `?Send`: runners are driven on a dedicated worker thread via a current-thread
+/// runtime (see [`spawn_turn`]), so their futures need not be `Send`.
+#[async_trait(?Send)]
+pub trait AgentRunner {
+    async fn run(&mut self, user_text: String, push: Push, cancel: CancelHandle);
+}
+
+/// The built-in path: drive [`umide_agent::Agent`] over the workspace tools,
+/// gating every mutation through the [`ApprovalQueue`]. This is the original
+/// `spawn_turn` body, unchanged in behavior — just lifted behind [`AgentRunner`].
+pub struct LlmRunner {
+    pub workspace: Option<PathBuf>,
+    pub provider: ProviderConfig,
+    pub history: Arc<Mutex<Vec<Message>>>,
+    pub approvals: ApprovalQueue,
+    pub trigger: ExtSendTrigger,
+}
+
+#[async_trait(?Send)]
+impl AgentRunner for LlmRunner {
+    async fn run(&mut self, user_text: String, push: Push, cancel: CancelHandle) {
+        let tools: Arc<dyn ToolExecutor> = Arc::new(EditorTools::new(
+            self.workspace.clone(),
+            self.approvals.clone(),
+            self.trigger,
+        ));
+        let seed = self.history.lock().unwrap().clone();
+        let mut agent =
+            match Agent::resume(self.provider.clone(), tools, SYSTEM_PROMPT, seed) {
+                Ok(a) => a,
+                Err(e) => {
+                    push.emit(AgentEvent::Error(e.to_string()));
+                    return;
+                }
+            };
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
+        let content = vec![ContentBlock::text(user_text)];
+
+        let send_fut = agent.send(content, tx, cancel.flag());
+        let drain_fut = async {
+            while let Some(ev) = rx.recv().await {
+                push.emit(ev);
+            }
+        };
+        let _ = tokio::join!(send_fut, drain_fut);
+
+        // Persist updated history for the next turn.
+        *self.history.lock().unwrap() = agent.history().to_vec();
+    }
+}
+
 /// Run one agent turn off-thread, streaming events into `queue` and surfacing
 /// approval requests into `approvals`; `trigger` wakes the UI for both. Setting
 /// `cancel` aborts the turn (the in-flight request and the tool loop).
@@ -149,15 +259,15 @@ pub fn spawn_turn(
     queue: EventQueue,
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
-    cancel: Arc<std::sync::atomic::AtomicBool>,
+    cancel: Arc<AtomicBool>,
 ) {
     std::thread::Builder::new()
         .name("umide-agent".into())
         .spawn(move || {
-            let push = move |ev: AgentEvent| {
+            let push = Push::new(move |ev: AgentEvent| {
                 queue.lock().unwrap().push_back(ev);
                 register_ext_trigger(trigger);
-            };
+            });
 
             let rt = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -165,38 +275,21 @@ pub fn spawn_turn(
             {
                 Ok(rt) => rt,
                 Err(e) => {
-                    push(AgentEvent::Error(format!("runtime: {e}")));
+                    push.emit(AgentEvent::Error(format!("runtime: {e}")));
                     return;
                 }
             };
 
+            let cancel = CancelHandle::new(cancel);
             rt.block_on(async move {
-                let tools: Arc<dyn ToolExecutor> =
-                    Arc::new(EditorTools::new(workspace, approvals, trigger));
-                let seed = history.lock().unwrap().clone();
-                let mut agent =
-                    match Agent::resume(provider, tools, SYSTEM_PROMPT, seed) {
-                        Ok(a) => a,
-                        Err(e) => {
-                            push(AgentEvent::Error(e.to_string()));
-                            return;
-                        }
-                    };
-
-                let (tx, mut rx) =
-                    tokio::sync::mpsc::unbounded_channel::<AgentEvent>();
-                let content = vec![ContentBlock::text(user_text)];
-
-                let send_fut = agent.send(content, tx, &cancel);
-                let drain_fut = async {
-                    while let Some(ev) = rx.recv().await {
-                        push(ev);
-                    }
+                let mut runner = LlmRunner {
+                    workspace,
+                    provider,
+                    history,
+                    approvals,
+                    trigger,
                 };
-                let _ = tokio::join!(send_fut, drain_fut);
-
-                // Persist updated history for the next turn.
-                *history.lock().unwrap() = agent.history().to_vec();
+                runner.run(user_text, push, cancel).await;
             });
         })
         .expect("spawn agent thread");

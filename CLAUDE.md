@@ -1,5 +1,21 @@
 # UMIDE — working notes for Claude
 
+## Before you start — REFRESH TO LATEST (every session, especially when switching machines)
+Two machines (Mac + Windows) share this repo but NOT chat history, so always begin from the
+latest committed state — never assume your local checkout is current:
+1. **Pull umide**: `git checkout main && git pull` (the other machine may have pushed), then
+   branch for the change. Do this at the start of every session.
+2. **Keep floem current with its original repo**: umide pins a specific `bridgerust/floem`
+   rev. To pull in the latest *upstream* floem (`lapce/floem`) features/fixes, periodically
+   sync the fork and re-pin:
+   - in a `bridgerust/floem` clone: `git remote add upstream https://github.com/lapce/floem`,
+     `git fetch upstream`, merge `upstream/main` into the fork branch, push;
+   - then bump the `floem` / `floem_renderer` / `floem-editor-core` `rev` in umide's
+     `Cargo.toml` to the new commit, `cargo build` to refresh `Cargo.lock`, and open a PR.
+   Do this when you want the latest floem, or before starting significant emulator/UI work.
+
+See `docs/DEVELOPING.md` for the full cross-machine setup/build steps.
+
 ## Release & docs hygiene — DO THIS WITH EVERY CHANGE SET
 Before finishing any change, check whether these need updating and keep them in sync:
 1. **README.md** — features list and Download/install instructions.

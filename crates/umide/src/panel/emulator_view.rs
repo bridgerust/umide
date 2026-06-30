@@ -835,8 +835,10 @@ fn android_panel_portable(
                 Stack::new((
                     video_frame(move || {
                         frame_signal.get().and_then(|f| {
-                            f.to_rgba().map(|rgba| RgbaFrame {
-                                data: Arc::new(rgba),
+                            // Reuse the frame's existing Arc — cloning the RGBA
+                            // buffer here is a ~10 MB memcpy on every repaint.
+                            f.rgba_arc().map(|data| RgbaFrame {
+                                data,
                                 width: f.width,
                                 height: f.height,
                             })

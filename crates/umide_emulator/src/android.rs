@@ -171,15 +171,19 @@ impl AndroidEmulator {
             return Ok(());
         }
 
-        // Launch emulator headless — no window, frames arrive via gRPC streaming
-        // GPU mode "auto" picks the best available backend (Metal on macOS)
-        // -no-window: run headless, no macOS window (we render via gRPC frames)
+        // Launch emulator headless — no window, frames arrive via gRPC streaming.
+        // -gpu host: render the guest on the host GPU. IMPORTANT: "auto" silently
+        // falls back to the SwiftShader *software* rasterizer whenever -no-window
+        // is set (which we always set), making the whole guest UI CPU-rendered
+        // and sluggish even on capable GPUs. "host" keeps it on the real GPU
+        // (verified on Windows: Intel Iris Xe instead of SwiftShader).
+        // -no-window: run headless, no desktop window (we render via gRPC frames)
         // -grpc 8554: expose gRPC endpoint for frame streaming and input
         let child = quiet_command("emulator")
             .arg("-avd")
             .arg(avd_name)
             .arg("-gpu")
-            .arg("auto")
+            .arg("host")
             .arg("-no-boot-anim")
             .arg("-no-skin")
             .arg("-no-window") // Headless: no desktop window, frames via gRPC

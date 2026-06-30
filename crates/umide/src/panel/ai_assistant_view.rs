@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use floem::{
     View,
     ext_event::{ExtSendTrigger, create_trigger},
-    prelude::{SignalGet, SignalUpdate},
+    prelude::{Key, NamedKey, SignalGet, SignalUpdate},
     reactive::{ReadSignal, RwSignal},
     views::{Decorators, Label, Scroll, Stack, dyn_stack, text_input},
 };
@@ -134,7 +134,13 @@ pub fn ai_assistant_panel(
         )
         .style(|s| s.flex_col().width_full().padding(8.0)),
     )
-    .style(|s| s.flex_grow(1.0).width_full());
+    .style(|s| s.flex_grow(1.0).width_full())
+    // Auto-scroll to the bottom as messages arrive / tokens stream in.
+    .scroll_to_percent(move || {
+        let _ = messages.get();
+        let _ = active.get();
+        100.0
+    });
 
     let status_line = Label::derived(move || status.get()).style(move |s| {
         s.width_full()
@@ -144,7 +150,8 @@ pub fn ai_assistant_panel(
             .color(config.get().color(UmideColor::PANEL_FOREGROUND))
     });
 
-    let send = send_handler(
+    // `Rc` so the same send action backs both the Send button and Enter-to-send.
+    let send = Rc::new(send_handler(
         trigger,
         workspace,
         history,
@@ -158,15 +165,28 @@ pub fn ai_assistant_panel(
         next_id,
         streaming,
         status,
-    );
+    ));
 
-    let input_box = text_input(input).style(move |s| {
-        s.flex_grow(1.0)
-            .padding(6.0)
-            .border(1.0)
-            .border_radius(6.0)
-            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
-    });
+    let send_key = send.clone();
+    let input_box = text_input(input)
+        .style(move |s| {
+            s.flex_grow(1.0)
+                .padding(6.0)
+                .border(1.0)
+                .border_radius(6.0)
+                .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+        })
+        // Plain Enter (no modifiers) sends; while streaming, ignore it so the
+        // in-flight request isn't interrupted. send_handler no-ops on empty input.
+        .on_key_down(
+            Key::Named(NamedKey::Enter),
+            |m| m.is_empty(),
+            move |_| {
+                if !streaming.get_untracked() {
+                    (*send_key)();
+                }
+            },
+        );
     let cancel_btn = cancel.clone();
     let send_button = Stack::new((Label::derived(move || {
         if streaming.get() {
@@ -179,7 +199,7 @@ pub fn ai_assistant_panel(
         if streaming.get_untracked() {
             cancel_btn.store(true, Ordering::Relaxed);
         } else {
-            send();
+            (*send)();
         }
     })
     .style(move |s| {

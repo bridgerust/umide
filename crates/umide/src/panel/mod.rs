@@ -4,6 +4,7 @@ pub mod data;
 pub mod debug_view;
 pub mod document_symbol;
 pub mod emulator_native_view;
+pub mod emulator_stream;
 pub mod emulator_view;
 pub mod global_search_view;
 pub mod implementation_view;

@@ -91,6 +91,9 @@ pub fn ai_assistant_panel(
     let backend = RwSignal::new(AssistantBackend::Llm(initial_kind));
     // The CLI conversation id, threaded across turns for `--resume`.
     let cli_session: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    // Session-scoped consent for Codex's autonomous (sandboxed, no per-action
+    // approval) writes. Reset every session; required before the first Codex turn.
+    let codex_consent = RwSignal::new(false);
     let has_workspace = workspace.is_some();
     // Detect installed agent CLIs once (shells out to `--version`); greys out
     // backends that aren't available.
@@ -176,6 +179,7 @@ pub fn ai_assistant_panel(
         cancel.clone(),
         provider_kind,
         backend,
+        codex_consent,
         cli_session.clone(),
         input,
         messages,
@@ -245,6 +249,42 @@ pub fn ai_assistant_panel(
         )
         .style(|s| s.flex_col().width_full().padding(6.0))
     };
+
+    // Session-consent banner for Codex (autonomous, sandboxed writes). Shown only
+    // when Codex is selected and not yet enabled this session.
+    let consent_banner = Stack::new((
+        Label::new(
+            "⚠ Codex works on its own: it reads, edits files, and runs commands \
+             in your project folder. Writes are sandboxed to the workspace (no \
+             network, nothing outside it) — but unlike Claude Code it does NOT \
+             ask before each change. Review with git afterward.",
+        )
+        .style(move |s| {
+            s.width_full()
+                .font_size(11.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+        }),
+        pill_button("Enable Codex for this session", config, move || {
+            codex_consent.set(true);
+            status.set("Codex enabled for this session — send your message.".into());
+        }),
+    ))
+    .style(move |s| {
+        let s = s
+            .flex_col()
+            .width_full()
+            .padding(8.0)
+            .border(1.0)
+            .border_radius(6.0)
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER));
+        if backend.get() == AssistantBackend::Cli(CliKind::Codex)
+            && !codex_consent.get()
+        {
+            s
+        } else {
+            s.hide()
+        }
+    });
 
     // Key entry — only visible until a key is stored (keychain or env).
     let key_box = text_input(key_input).style(move |s| {
@@ -339,6 +379,7 @@ pub fn ai_assistant_panel(
         provider_row,
         transcript,
         approvals_view,
+        consent_banner,
         status_line,
         key_row,
         input_row,
@@ -408,9 +449,9 @@ fn cli_button(
                         kind.label()
                     ),
                     CliKind::Codex => format!(
-                        "{} — read-only: reads your project and runs sandboxed \
-                         commands to answer; it can't edit files or reach the \
-                         network.",
+                        "{} — autonomous: reads, edits files, and runs commands \
+                         in your project, sandboxed to the workspace (no network). \
+                         No per-action approval — enable it for the session below.",
                         kind.label()
                     ),
                     CliKind::GeminiCli => kind.label().to_string(),
@@ -620,6 +661,7 @@ fn send_handler(
     cancel: Arc<AtomicBool>,
     provider_kind: RwSignal<ProviderKind>,
     backend: RwSignal<AssistantBackend>,
+    codex_consent: RwSignal<bool>,
     cli_session: Arc<Mutex<Option<String>>>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
@@ -653,14 +695,31 @@ fn send_handler(
                     }
                 }
             }
-            AssistantBackend::Cli(cli_kind) => match workspace.clone() {
-                Some(ws) => Launch::Cli(cli_kind, ws),
-                None => {
-                    status
-                        .set(format!("Open a folder to use {}.", cli_kind.label()));
+            AssistantBackend::Cli(cli_kind) => {
+                // Codex writes autonomously (sandboxed, no per-action approval),
+                // so require an explicit session consent before the first turn.
+                if matches!(cli_kind, CliKind::Codex)
+                    && !codex_consent.get_untracked()
+                {
+                    status.set(
+                        "Codex edits files and runs commands on its own \
+                         (sandboxed to your project). Click \u{201c}Enable Codex \
+                         for this session\u{201d} to proceed."
+                            .into(),
+                    );
                     return;
                 }
-            },
+                match workspace.clone() {
+                    Some(ws) => Launch::Cli(cli_kind, ws),
+                    None => {
+                        status.set(format!(
+                            "Open a folder to use {}.",
+                            cli_kind.label()
+                        ));
+                        return;
+                    }
+                }
+            }
         };
 
         let id = next_id.get_untracked();

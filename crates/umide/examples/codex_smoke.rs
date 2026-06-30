@@ -26,7 +26,7 @@ fn main() {
     println!("→ workdir: {}", dir.display());
 
     let prompt = std::env::args().nth(1).unwrap_or_else(|| {
-        "Read notes.txt and tell me the two words in it, then stop.".to_string()
+        "Create a file made.txt containing exactly: codex-was-here".to_string()
     });
 
     let mut child = Command::new("codex")
@@ -37,7 +37,7 @@ fn main() {
             "-C",
             &dir.to_string_lossy(),
             "--sandbox",
-            "read-only",
+            "workspace-write",
         ])
         .current_dir(&dir)
         .stdin(Stdio::piped())
@@ -69,14 +69,16 @@ fn main() {
     let _ = child.wait();
 
     let evs = log.lock().unwrap();
-    let has_text = evs.iter().any(|e| matches!(e, AgentEvent::TextDelta(_)));
     let session = parser.take_session_id();
+    let wrote = std::fs::read_to_string(dir.join("made.txt")).ok();
     println!("\n=== verdict ===");
     println!("events: {} | session: {:?}", evs.len(), session);
-    if has_text && session.is_some() {
-        println!("✅ PASS — Codex streamed events through the parser");
+    println!("made.txt: {:?}", wrote.as_deref().map(str::trim));
+    if wrote.as_deref().map(str::trim) == Some("codex-was-here") && session.is_some()
+    {
+        println!("✅ PASS — Codex wrote the file in workspace-write mode");
     } else {
-        println!("⚠ no assistant text / session captured — check auth/output");
+        println!("⚠ file not written as expected — check auth/sandbox/output");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

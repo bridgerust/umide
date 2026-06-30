@@ -175,10 +175,14 @@ impl CliRunner {
                 a
             }
             CliKind::Codex => {
-                // P2a is read-only: codex's read-only sandbox lets it read and
-                // run safe commands to answer, but it can't write files or reach
-                // the network. The prompt is fed on stdin (no positional arg).
-                // Writes (workspace-write, seatbelt-confined) are a follow-up.
+                // Codex edits files and runs commands confined by the OS sandbox
+                // (Apple Seatbelt on macOS, Landlock/seccomp on Linux):
+                // `workspace-write` permits writes within the project dir (and
+                // system temp) but blocks the rest of the filesystem and the
+                // network — verified. `codex exec` has NO per-action approval
+                // hook (the `-a` flag is rejected there), so the sandbox is the
+                // boundary and the panel gates this behind an explicit
+                // session-consent click. The prompt is fed on stdin.
                 let mut a = vec!["exec".to_string()];
                 if let Some(id) = resume {
                     a.push("resume".into());
@@ -189,7 +193,7 @@ impl CliRunner {
                 a.push("-C".into());
                 a.push(self.workspace.to_string_lossy().into_owned());
                 a.push("--sandbox".into());
-                a.push("read-only".into());
+                a.push("workspace-write".into());
                 a
             }
             CliKind::GeminiCli => Vec::new(),

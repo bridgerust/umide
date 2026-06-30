@@ -1,11 +1,11 @@
 use floem::{
-    View, ViewId,
-    context::ComputeLayoutCx,
-    peniko::kurbo::Rect,
+    View,
     prelude::{SignalGet, SignalUpdate},
     reactive::{Effect, RwSignal},
     views::{Container, Decorators, Label, Scroll, Stack, dyn_stack},
 };
+#[cfg(target_os = "macos")]
+use floem::{ViewId, context::ComputeLayoutCx, peniko::kurbo::Rect};
 use std::{rc::Rc, sync::Arc};
 
 use crate::{
@@ -23,39 +23,7 @@ use umide_emulator::{
 #[cfg(target_os = "macos")]
 use umide_native::emulator::EmulatorPlatform;
 
-#[cfg(not(target_os = "macos"))]
-#[derive(Clone, Copy)]
-enum EmulatorPlatform {
-    Android,
-    Ios,
-}
-
-#[cfg(not(target_os = "macos"))]
-struct NativeEmulatorView;
-
-#[cfg(not(target_os = "macos"))]
-impl NativeEmulatorView {
-    fn new<T>(
-        _handle: T,
-        _x: i32,
-        _y: i32,
-        _width: u32,
-        _height: u32,
-        _platform: EmulatorPlatform,
-    ) -> Result<Self, String> {
-        Err("Native emulator embedding is only supported on macOS".to_string())
-    }
-
-    fn resize(&self, _x: i32, _y: i32, _width: u32, _height: u32) {}
-    fn show(&self) {}
-    fn hide(&self) {}
-    fn attach_device(&mut self, _device_id: &str) {}
-    fn is_android(&self) -> bool {
-        false
-    }
-    fn start_grpc_stream(&mut self, _grpc_endpoint: &str) {}
-}
-
+#[cfg(target_os = "macos")]
 struct NativeEmulatorWidget {
     id: ViewId,
     native_view: Rc<std::cell::RefCell<Option<NativeEmulatorView>>>,
@@ -70,6 +38,7 @@ struct NativeEmulatorWidget {
     frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
 }
 
+#[cfg(target_os = "macos")]
 impl NativeEmulatorWidget {
     pub fn new(
         running_device: RwSignal<Option<DeviceInfo>>,
@@ -99,6 +68,7 @@ impl NativeEmulatorWidget {
     }
 }
 
+#[cfg(target_os = "macos")]
 impl View for NativeEmulatorWidget {
     fn id(&self) -> ViewId {
         self.id
@@ -271,7 +241,10 @@ impl View for NativeEmulatorWidget {
     }
 }
 
-/// Create a single platform panel (Android or iOS)
+/// Create a single platform panel (Android or iOS) backed by the macOS-only
+/// native overlay (`NativeEmulatorWidget`). The portable wgpu/`video_frame`
+/// path is in [`android_panel_portable`] below.
+#[cfg(target_os = "macos")]
 fn platform_panel(
     platform: DevicePlatform,
     devices: RwSignal<Vec<DeviceInfo>>,
@@ -495,7 +468,10 @@ fn platform_panel(
     })
 }
 
-/// Helper to create a sidebar button that executes an arbitrary shell command
+/// Helper to create a sidebar button that executes an arbitrary shell command.
+/// macOS-only — uses `sh -c` with Homebrew's PATH; the portable Windows/Linux
+/// panel currently exposes a smaller set of controls (no shell shellouts).
+#[cfg(target_os = "macos")]
 fn action_button(
     label: &'static str,
     _tooltip: &'static str,
@@ -540,7 +516,9 @@ fn action_button(
         })
 }
 
-/// Emulator sidebar with control buttons (Stop/Hide for all, hardware buttons for Android)
+/// Emulator sidebar with control buttons (Stop/Hide for all, hardware buttons
+/// for Android). macOS-only — the portable panel has its own minimal sidebar.
+#[cfg(target_os = "macos")]
 fn emulator_sidebar(
     platform: DevicePlatform,
     running_device: RwSignal<Option<DeviceInfo>>,
@@ -638,6 +616,257 @@ fn emulator_sidebar(
     })
 }
 
+/// Cross-platform Android emulator panel using floem's `video_frame` view to
+/// render frames from `start_emulator_stream` directly on the GPU.
+///
+/// This is the portable counterpart to the macOS `platform_panel` overlay
+/// path. iOS is not exposed here — iOS Simulator is permanently macOS-only.
+/// Hardware controls (Home/Back/Power/etc.) and pointer/keyboard mapping land
+/// with M3 input.
+#[cfg(not(target_os = "macos"))]
+fn android_panel_portable(
+    devices: RwSignal<Vec<DeviceInfo>>,
+    running_device: RwSignal<Option<DeviceInfo>>,
+    is_visible: RwSignal<bool>,
+    frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
+    current_device_id: RwSignal<String>,
+    config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
+) -> impl View {
+    use crate::panel::emulator_stream::start_emulator_stream;
+    use floem::views::{RgbaFrame, video_frame};
+
+    // Start the gRPC frame stream exactly once when an Android device first
+    // runs. The stream stays alive for the panel's lifetime — a future polish
+    // is per-launch lifecycle, but for view-only use the first stream is
+    // sufficient: `connect_with_retry` waits 60s for the emulator to boot.
+    let stream_started = RwSignal::new(false);
+    Effect::new(move |_| {
+        if running_device.get().is_some() && !stream_started.get_untracked() {
+            start_emulator_stream(
+                "http://localhost:8554".to_string(),
+                frame_signal,
+            );
+            stream_started.set(true);
+        }
+    });
+
+    let device_item = move |device: DeviceInfo| {
+        let device_cloned_start = device.clone();
+        let device_cloned_stop = device.clone();
+        let device_cloned_resume = device.clone();
+        let is_running = device.state == DeviceState::Running;
+        let is_starting = device.state == DeviceState::Starting;
+        let is_disconnected = device.state == DeviceState::Disconnected;
+
+        Stack::new((
+            Label::new(device.name.clone())
+                .style(|s| s.flex_grow(1.0).padding_horiz(6.0).text_ellipsis()),
+            clickable_icon(
+                || UmideIcons::DEBUG_CONTINUE,
+                move || {
+                    if let Some(ref running) = running_device.get_untracked() {
+                        if running.id == device_cloned_resume.id {
+                            current_device_id
+                                .set(device_cloned_resume.id.clone());
+                            is_visible.set(true);
+                            return;
+                        }
+                    }
+                    let _ = launch_device(&device_cloned_start);
+                    let mut d = device_cloned_start.clone();
+                    d.state = DeviceState::Running;
+                    running_device.set(Some(d));
+                    current_device_id.set(device_cloned_start.id.clone());
+                    is_visible.set(true);
+                },
+                || false,
+                move || {
+                    if is_running {
+                        is_visible.get()
+                    } else {
+                        !is_disconnected
+                    }
+                },
+                move || if is_running { "Show" } else { "Start" },
+                config,
+            ),
+            clickable_icon(
+                || UmideIcons::DEBUG_STOP,
+                move || {
+                    let _ = stop_device(&device_cloned_stop);
+                    running_device.set(None);
+                    is_visible.set(false);
+                    frame_signal.set(None);
+                    current_device_id.set(String::new());
+                },
+                || false,
+                move || !is_running,
+                || "Stop",
+                config,
+            ),
+            Label::new(if is_starting { "Starting..." } else { "" })
+                .style(|s| s.padding_horiz(5.0).font_size(10.0)),
+        ))
+        .style(|s| {
+            s.width_full()
+                .flex_row()
+                .items_center()
+                .padding_vert(5.0)
+                .border_bottom(1.0)
+                .gap(2.0)
+        })
+    };
+
+    Stack::new((
+        // Header
+        Container::new(
+            Stack::horizontal((
+                Label::new("Android".to_string())
+                    .style(|s| s.font_size(12.0).font_bold().padding(6.0)),
+                Label::derived(move || {
+                    if let Some(device) = running_device.get() {
+                        if is_visible.get() {
+                            format!(" - {}", device.name)
+                        } else {
+                            format!(" - {} (hidden)", device.name)
+                        }
+                    } else {
+                        String::new()
+                    }
+                })
+                .style(|s| s.font_size(10.0).flex_grow(1.0).padding_right(6.0)),
+            ))
+            .style(|s| s.width_full().items_center()),
+        )
+        .style(move |s| {
+            let config = config.get();
+            s.width_full()
+                .border_bottom(1.0)
+                .border_color(config.color(UmideColor::LAPCE_BORDER))
+        }),
+        // Content: device list OR live emulator view
+        Stack::new((
+            Scroll::new(
+                dyn_stack(
+                    move || {
+                        let visible = is_visible.get();
+                        let has_running = running_device.get().is_some();
+                        if has_running && visible {
+                            return Vec::new();
+                        }
+                        devices
+                            .get()
+                            .into_iter()
+                            .filter(|d| d.platform == DevicePlatform::Android)
+                            .collect::<Vec<_>>()
+                    },
+                    |d| format!("{}-{}", d.id, d.state as u32),
+                    device_item,
+                )
+                .style(|s| s.flex_col().width_full()),
+            )
+            .style(move |s| {
+                let visible = is_visible.get();
+                let has_running = running_device.get().is_some();
+                s.flex_grow(1.0)
+                    .width_full()
+                    .min_width(0.0)
+                    .min_height(0.0)
+                    .apply_if(has_running && visible, |s| s.hide())
+            }),
+            // Live device view + minimal sidebar (Stop/Hide).
+            Stack::horizontal((
+                video_frame(move || {
+                    frame_signal.get().and_then(|f| {
+                        f.to_rgba().map(|rgba| RgbaFrame {
+                            data: Arc::new(rgba),
+                            width: f.width,
+                            height: f.height,
+                        })
+                    })
+                })
+                .style(|s| s.flex_grow(1.0).width_full().min_height(0.0)),
+                Stack::new((
+                    clickable_icon(
+                        || UmideIcons::DEBUG_STOP,
+                        move || {
+                            if let Some(device) = running_device.get_untracked() {
+                                tracing::info!("Stopping device: {}", device.name);
+                                if let Err(e) = stop_device(&device) {
+                                    tracing::error!(
+                                        "Failed to stop device {}: {}",
+                                        device.name,
+                                        e
+                                    );
+                                }
+                            }
+                            running_device.set(None);
+                            is_visible.set(false);
+                            frame_signal.set(None);
+                            current_device_id.set(String::new());
+                        },
+                        || false,
+                        || false,
+                        || "Stop",
+                        config,
+                    ),
+                    Label::new("Stop").style(|s| s.font_size(10.0)),
+                    Label::new("").style(|s| s.height(8.0)),
+                    clickable_icon(
+                        || UmideIcons::CLOSE,
+                        move || {
+                            tracing::info!(
+                                "Hiding emulator view (device still running)"
+                            );
+                            is_visible.set(false);
+                        },
+                        || false,
+                        || false,
+                        || "Hide",
+                        config,
+                    ),
+                    Label::new("Hide").style(|s| s.font_size(10.0)),
+                ))
+                .style(move |s| {
+                    let config_val = config.get();
+                    s.flex_col()
+                        .items_center()
+                        .padding(4.0)
+                        .gap(2.0)
+                        .border_left(1.0)
+                        .border_color(config_val.color(UmideColor::LAPCE_BORDER))
+                }),
+            ))
+            .style(move |s| {
+                let visible = is_visible.get();
+                let has_running = running_device.get().is_some();
+                s.flex_grow(1.0)
+                    .width_full()
+                    .min_width(0.0)
+                    .min_height(0.0)
+                    .apply_if(!has_running || !visible, |s| s.hide())
+            }),
+        ))
+        .style(|s| {
+            s.flex_col()
+                .flex_grow(1.0)
+                .width_full()
+                .min_width(0.0)
+                .min_height(0.0)
+        }),
+    ))
+    .style(move |s| {
+        let config = config.get();
+        s.flex_col()
+            .flex_grow(1.0)
+            .flex_basis(0.0)
+            .min_width(0.0)
+            .min_height(0.0)
+            .border(1.0)
+            .border_color(config.color(UmideColor::LAPCE_BORDER))
+    })
+}
+
 pub fn emulator_panel(
     window_tab_data: Rc<WindowTabData>,
     position: PanelPosition,
@@ -645,23 +874,37 @@ pub fn emulator_panel(
     #[cfg(not(target_os = "macos"))]
     {
         let config = window_tab_data.common.config;
+        let devices = RwSignal::new(Vec::<DeviceInfo>::new());
+        let running_device = RwSignal::new(None::<DeviceInfo>);
+        let is_visible = RwSignal::new(false);
+        let current_device_id = RwSignal::new(String::new());
+        let frame_signal = window_tab_data.panel.android_frame;
+
+        Effect::new(move |_| {
+            let dev_list = list_all_devices();
+            for device in &dev_list {
+                if device.state == DeviceState::Running
+                    && device.platform == DevicePlatform::Android
+                    && running_device.get().is_none()
+                {
+                    running_device.set(Some(device.clone()));
+                    current_device_id.set(device.id.clone());
+                }
+            }
+            devices.set(dev_list);
+        });
+
         return PanelBuilder::new(config, position)
             .add(
                 "Emulators",
-                Stack::new((
-                    Label::new(
-                        "Emulator embedding is currently macOS only.".to_string(),
-                    )
-                    .style(|s| s.padding(12.0).font_size(13.0)),
-                    Label::new("Windows and Linux support coming soon.".to_string())
-                        .style(move |s| {
-                            s.padding_horiz(12.0)
-                                .padding_bottom(12.0)
-                                .font_size(12.0)
-                                .color(config.get().color(UmideColor::EDITOR_DIM))
-                        }),
-                ))
-                .style(|s| s.flex_col().width_full()),
+                android_panel_portable(
+                    devices,
+                    running_device,
+                    is_visible,
+                    frame_signal,
+                    current_device_id,
+                    config,
+                ),
                 window_tab_data
                     .panel
                     .section_open(crate::panel::data::PanelSection::Process),

@@ -28,8 +28,9 @@ Before finishing any change, check whether these need updating and keep them in 
 
 ## Product positioning (keep accurate everywhere)
 - **macOS**: full product — editor + embedded Android/iOS emulators + AI assistant.
-- **Windows/Linux**: editor + AI assistant only. Embedded emulators are "coming soon"
-  (iOS Simulator is macOS-only permanently; Android embedding is a pending wgpu port).
+- **Windows/Linux**: editor + AI assistant + **embedded Android emulator (preview, view-only)**.
+  iOS Simulator stays macOS-only permanently. Input (tap/scroll/type) lands with M3 on every
+  platform; until then the embedded Android view is view-only.
 
 ## Repo conventions
 - **Sole commit author**: `dev-josias <kologojosias@gmail.com>`. Do not introduce other
@@ -54,14 +55,17 @@ Before finishing any change, check whether these need updating and keep them in 
     Pixel emulator. Code: `crates/umide/src/panel/emulator_stream.rs`. Demos:
     `cargo run -p umide-app --example live_emulator` (GUI) and `… --example grab_frame`
     (headless) with an emulator running on gRPC `8554`.
+  - **In-app integration (done)**: `crates/umide/src/panel/emulator_view.rs` now ships a
+    `(not macos)` `android_panel_portable` that drives the panel via `video_frame` + the
+    same `start_emulator_stream` flow as the example. iOS panel is omitted on
+    Windows/Linux (Simulator is macOS-only permanently). View-only — input lands with M3.
 - **Next milestones**:
   1. **M3 — input**: map floem pointer/keyboard on the view → emulator gRPC (tap/scroll/type).
-     Currently view-only ("can't interact with it").
-  2. **Un-gate the emulator panel** for Windows/Linux — it is still
-     `#[cfg(target_os = "macos")]` in `crates/umide/src/panel/emulator_view.rs`; wiring the
-     portable path there is the in-app integration.
-  3. Windows Authenticode signing (needs a cert); fix `umide_native/build.rs` host-vs-target
-     cfg (use `CARGO_CFG_TARGET_OS`); live-verify the OpenAI/DeepSeek/Gemini AI providers.
+     Currently view-only on every platform.
+  2. **Live-verify the Windows panel** end-to-end with an Android emulator on `localhost:8554`
+     (build is green; needs human-driven device test to confirm frames land).
+  3. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
+     AI providers.
 
 ## Working across machines (Mac + Windows)
 Claude Code conversation history is **local to each machine — it does not sync**. A chat
@@ -71,6 +75,26 @@ both machines in sync this way:
   usual. Pull before starting, push when done.
 - **Context** syncs via this file: Claude Code auto-loads `CLAUDE.md` in any session in this
   repo on any OS. The "Current status" above is the handoff — keep it updated as work lands.
-- **Windows build prereqs**: a recent Rust toolchain (edition 2024), `protoc` (protobuf
-  compiler — the emulator gRPC build needs it), and the MSVC C++ build tools. Then
-  `cargo build` works the same as on macOS.
+
+### Windows build prereqs
+A recent Rust toolchain (edition 2024), `protoc`, and the **MSVC C++ build tools +
+Windows SDK** (VS 2022 Build Tools or Community with the "Desktop development with C++"
+workload covers both). Without the Windows SDK, even tiny crates fail to link —
+`kernel32.lib` / `user32.lib` can't be found. Install via winget:
+```powershell
+winget install --id Microsoft.WindowsSDK.10.0.26100   # or newer SDK
+winget install --id Google.Protobuf                   # protoc for emulator gRPC
+```
+
+### Windows build invocation (Claude AND humans)
+`link.exe` is only on PATH inside a Visual Studio Developer environment. Humans: use the
+**Developer PowerShell for VS 2022** shortcut. For Claude Code's PowerShell tool calls
+(env doesn't persist between calls), prefix every build call with the dev shell:
+```powershell
+Import-Module "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+Enter-VsDevShell -VsInstallPath "C:\Program Files\Microsoft Visual Studio\2022\Community" -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64" | Out-Null
+$env:PROTOC = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Google.Protobuf_Microsoft.Winget.Source_8wekyb3d8bbwe\bin\protoc.exe"
+$env:Path = (Split-Path $env:PROTOC) + ";" + $env:Path
+cargo build   # or check, test, etc.
+```
+The `'vswhere.exe' is not recognized` warning from `Enter-VsDevShell` is harmless.

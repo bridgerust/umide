@@ -1,7 +1,10 @@
 fn main() {
-    // Only compile C++ on macOS for now
-    #[cfg(target_os = "macos")]
-    {
+    // `#[cfg(target_os = ...)]` inside a build script evaluates against the
+    // HOST (where the script itself runs), so cross-compiling to a non-macOS
+    // target from macOS would still try to build the Objective-C++ sources.
+    // Use cargo's CARGO_CFG_TARGET_OS instead — that is the actual target.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "macos" {
         println!("cargo:rerun-if-changed=cpp/");
 
         cc::Build::new()

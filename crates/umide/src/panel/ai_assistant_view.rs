@@ -15,6 +15,8 @@ use floem::{
 use tokio::sync::oneshot;
 use umide_agent::{AgentEvent, Message, ProviderConfig, ProviderKind};
 
+use crate::ai::cli::detect::CliStatus;
+use crate::ai::cli::{AssistantBackend, CliKind};
 use crate::{
     ai,
     config::{UmideConfig, color::UmideColor},
@@ -82,6 +84,18 @@ pub fn ai_assistant_panel(
             initial_kind.label()
         )
     });
+
+    // Which assistant backend is selected: a BYO-key LLM provider (default) or
+    // an external agent CLI. Kept beside `provider_kind` so the LLM key/resolve
+    // path is undisturbed; a CLI is never auto-selected (opt-in only).
+    let backend = RwSignal::new(AssistantBackend::Llm(initial_kind));
+    // The CLI conversation id, threaded across turns for `--resume`.
+    let cli_session: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let has_workspace = workspace.is_some();
+    // Detect installed agent CLIs once (shells out to `--version`); greys out
+    // backends that aren't available.
+    let claude_installed =
+        CliStatus::detect(CliKind::ClaudeCode).installed() && has_workspace;
 
     // Lossless cross-thread bridge: the worker pushes AgentEvents into `queue`
     // and pulses `trigger`; a UI-thread effect tracks the trigger and drains the
@@ -159,6 +173,8 @@ pub fn ai_assistant_panel(
         approvals,
         cancel.clone(),
         provider_kind,
+        backend,
+        cli_session.clone(),
         input,
         messages,
         active,
@@ -256,14 +272,24 @@ pub fn ai_assistant_panel(
     });
     let key_row = Stack::new((key_box, save_key)).style(move |s| {
         let s = s.width_full().items_center().padding(6.0);
-        if has_key.get() { s.hide() } else { s }
+        // A CLI backend authenticates itself (account login or its own API key),
+        // so the key entry is irrelevant there.
+        if backend.get().is_cli() || has_key.get() {
+            s.hide()
+        } else {
+            s
+        }
     });
 
-    // Provider selector — Claude / OpenAI / DeepSeek / Gemini (BYO key each).
+    // Backend selector. Left group: BYO-key API providers (approval-gated, the
+    // safe default). Right of the divider: external agent CLIs that run in your
+    // project folder. Claude Code (P1a) is read-only — reads & explains, can't
+    // edit or run commands yet.
     let provider_row = Stack::new((
         provider_button(
             ProviderKind::Anthropic,
             provider_kind,
+            backend,
             has_key,
             status,
             config,
@@ -271,6 +297,7 @@ pub fn ai_assistant_panel(
         provider_button(
             ProviderKind::OpenAi,
             provider_kind,
+            backend,
             has_key,
             status,
             config,
@@ -278,6 +305,7 @@ pub fn ai_assistant_panel(
         provider_button(
             ProviderKind::DeepSeek,
             provider_kind,
+            backend,
             has_key,
             status,
             config,
@@ -285,7 +313,19 @@ pub fn ai_assistant_panel(
         provider_button(
             ProviderKind::Gemini,
             provider_kind,
+            backend,
             has_key,
+            status,
+            config,
+        ),
+        Label::new("·").style(move |s| {
+            s.padding_horiz(6.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+        }),
+        cli_button(
+            CliKind::ClaudeCode,
+            claude_installed,
+            backend,
             status,
             config,
         ),
@@ -304,9 +344,11 @@ pub fn ai_assistant_panel(
 }
 
 /// A provider tab in the selector row; highlights when it's the active provider.
+#[allow(clippy::too_many_arguments)]
 fn provider_button(
     kind: ProviderKind,
     provider_kind: RwSignal<ProviderKind>,
+    backend: RwSignal<AssistantBackend>,
     has_key: RwSignal<bool>,
     status: RwSignal<String>,
     config: ReadSignal<Arc<UmideConfig>>,
@@ -314,6 +356,7 @@ fn provider_button(
     Stack::new((Label::new(kind.label()),))
         .on_click_stop(move |_| {
             provider_kind.set(kind);
+            backend.set(AssistantBackend::Llm(kind));
             let ok = ProviderConfig::resolve(kind, ai::load_api_key(kind)).is_ok();
             has_key.set(ok);
             status.set(if ok {
@@ -323,13 +366,61 @@ fn provider_button(
             });
         })
         .style(move |s| {
-            let active = provider_kind.get() == kind;
+            let active = backend.get() == AssistantBackend::Llm(kind);
             let s = s
                 .padding_horiz(10.0)
                 .padding_vert(4.0)
                 .border_radius(6.0)
                 .cursor(floem::style::CursorStyle::Pointer)
                 .color(config.get().color(UmideColor::PANEL_FOREGROUND));
+            if active {
+                s.border(1.0)
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+                    .background(floem::peniko::Color::from_rgba8(255, 255, 255, 28))
+            } else {
+                s.border(1.0)
+                    .border_color(floem::peniko::Color::from_rgba8(0, 0, 0, 0))
+            }
+        })
+}
+
+/// An external-agent-CLI tab (e.g. Claude Code). Greyed out when the CLI isn't
+/// installed (or no folder is open); clicking it then just shows the install
+/// hint instead of selecting it.
+fn cli_button(
+    kind: CliKind,
+    available: bool,
+    backend: RwSignal<AssistantBackend>,
+    status: RwSignal<String>,
+    config: ReadSignal<Arc<UmideConfig>>,
+) -> impl View {
+    Stack::new((Label::new(kind.label()),))
+        .on_click_stop(move |_| {
+            if available {
+                backend.set(AssistantBackend::Cli(kind));
+                status.set(format!(
+                    "{} — read-only: runs in your project folder, reads and \
+                     explains your code; it can't edit files or run commands yet.",
+                    kind.label()
+                ));
+            } else {
+                status.set(kind.install_hint().to_string());
+            }
+        })
+        .style(move |s| {
+            let active = backend.get() == AssistantBackend::Cli(kind);
+            let s = s
+                .padding_horiz(10.0)
+                .padding_vert(4.0)
+                .border_radius(6.0)
+                .cursor(floem::style::CursorStyle::Pointer)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND));
+            let s = if available {
+                s
+            } else {
+                // Dim when unavailable (not installed / no folder open).
+                s.color(floem::peniko::Color::from_rgba8(140, 140, 140, 255))
+            };
             if active {
                 s.border(1.0)
                     .border_color(config.get().color(UmideColor::LAPCE_BORDER))
@@ -495,6 +586,13 @@ fn message_view(m: ChatMsg, config: ReadSignal<Arc<UmideConfig>>) -> impl View {
     .style(|s| s.flex_col().width_full().padding_vert(6.0))
 }
 
+/// What a send will launch, resolved (and validated) before any UI mutation so
+/// a guard can bail cleanly without leaving a half-started turn.
+enum Launch {
+    Llm(ProviderConfig),
+    Cli(CliKind, PathBuf),
+}
+
 #[allow(clippy::too_many_arguments)]
 fn send_handler(
     trigger: ExtSendTrigger,
@@ -504,6 +602,8 @@ fn send_handler(
     approvals: ai::ApprovalQueue,
     cancel: Arc<AtomicBool>,
     provider_kind: RwSignal<ProviderKind>,
+    backend: RwSignal<AssistantBackend>,
+    cli_session: Arc<Mutex<Option<String>>>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
     active: RwSignal<Option<ChatMsg>>,
@@ -511,6 +611,7 @@ fn send_handler(
     streaming: RwSignal<bool>,
     status: RwSignal<String>,
 ) -> impl Fn() + 'static {
+    let _ = provider_kind; // retained for symmetry; selection drives via `backend`
     move || {
         if streaming.get_untracked() {
             return;
@@ -520,16 +621,29 @@ fn send_handler(
             return;
         }
 
-        let kind = provider_kind.get_untracked();
-        let provider = match ProviderConfig::resolve(kind, ai::load_api_key(kind)) {
-            Ok(p) => p,
-            Err(_) => {
-                status.set(format!(
-                    "Add your {} API key below to enable it.",
-                    kind.label()
-                ));
-                return;
+        // Resolve the backend BEFORE mutating the transcript, so a missing key
+        // (LLM) or missing folder (CLI) bails without a dangling bubble.
+        let launch = match backend.get_untracked() {
+            AssistantBackend::Llm(kind) => {
+                match ProviderConfig::resolve(kind, ai::load_api_key(kind)) {
+                    Ok(p) => Launch::Llm(p),
+                    Err(_) => {
+                        status.set(format!(
+                            "Add your {} API key below to enable it.",
+                            kind.label()
+                        ));
+                        return;
+                    }
+                }
             }
+            AssistantBackend::Cli(cli_kind) => match workspace.clone() {
+                Some(ws) => Launch::Cli(cli_kind, ws),
+                None => {
+                    status
+                        .set(format!("Open a folder to use {}.", cli_kind.label()));
+                    return;
+                }
+            },
         };
 
         let id = next_id.get_untracked();
@@ -556,15 +670,26 @@ fn send_handler(
         status.set("thinking…".into());
 
         cancel.store(false, Ordering::Relaxed);
-        ai::spawn_turn(
-            workspace.clone(),
-            provider,
-            history.clone(),
-            text,
-            queue.clone(),
-            approvals.clone(),
-            trigger,
-            cancel.clone(),
-        );
+        match launch {
+            Launch::Llm(provider) => ai::spawn_turn(
+                workspace.clone(),
+                provider,
+                history.clone(),
+                text,
+                queue.clone(),
+                approvals.clone(),
+                trigger,
+                cancel.clone(),
+            ),
+            Launch::Cli(cli_kind, ws) => ai::spawn_cli_turn(
+                cli_kind,
+                ws,
+                cli_session.clone(),
+                text,
+                queue.clone(),
+                trigger,
+                cancel.clone(),
+            ),
+        }
     }
 }

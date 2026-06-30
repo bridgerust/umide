@@ -16,9 +16,12 @@
 
 use std::sync::Arc;
 
+use floem::kurbo::Size;
 use floem::prelude::*;
 use floem::reactive::RwSignal;
 use floem::views::{RgbaFrame, video_frame};
+use floem::window::WindowConfig;
+use floem::Application;
 use umide_app::panel::emulator_stream::start_emulator_stream;
 use umide_emulator::decoder::DecodedFrame;
 
@@ -41,5 +44,12 @@ fn app() -> impl IntoView {
 }
 
 fn main() {
-    floem::launch(app);
+    // Portrait window roughly matching a phone's aspect; the primitive
+    // letterboxes to the exact frame aspect regardless.
+    Application::new()
+        .window(
+            move |_| app(),
+            Some(WindowConfig::default().size(Size::new(380.0, 820.0))),
+        )
+        .run();
 }

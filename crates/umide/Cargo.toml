@@ -66,13 +66,13 @@ floem_renderer = { workspace = true }
 floem-editor-core = { workspace = true }
 structdesc       = { path = "../../vendor/structdesc" }
 base64           = { version = "0.22.1" }
-sha2             = { version = "0.10.8" }
+sha2             = { version = "0.11.0" }
 keyring          = { version = "3" }
 zip              = { version = "7.2.0", default-features = false, features = ["deflate"] }
 tokio            = { version = "1.28", features = ["full"] }
 tokio-stream     = { version = "0.1" }
 percent-encoding = { version = "2.3.1" }
-wgpu = "28.0.0"
+wgpu = "29.0.3"
 raw-window-handle = "0.6"
 image = "0.25"
 

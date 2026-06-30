@@ -110,17 +110,20 @@ impl EmulatorGrpcClient {
         self.image_to_frame(image)
     }
 
-    /// Start streaming screenshots
-    /// Returns a channel receiver that yields frames
+    /// Start streaming screenshots, optionally downscaled to `width`×`height`
+    /// (pass `0, 0` for native resolution). Downscaling cuts gRPC bandwidth,
+    /// decode, and GPU upload; the decoder reports the actual returned size.
     pub async fn stream_screenshots(
         &mut self,
         tx: mpsc::Sender<DecodedFrame>,
+        width: u32,
+        height: u32,
     ) -> Result<(), GrpcError> {
         let format = ImageFormat {
             format: ImgFormat::Rgba8888 as i32,
             rotation: None,
-            width: 0, // Native resolution
-            height: 0,
+            width,
+            height,
             display: 0,
         };
 

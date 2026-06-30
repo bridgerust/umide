@@ -32,19 +32,25 @@ const ENDPOINT: &str = "http://localhost:8554";
 
 fn app() -> impl IntoView {
     let frame_signal: RwSignal<Option<Arc<DecodedFrame>>> = RwSignal::new(None);
-    start_emulator_stream(ENDPOINT.to_string(), frame_signal);
+    let native_size: RwSignal<Option<(u32, u32)>> = RwSignal::new(None);
+    start_emulator_stream(ENDPOINT.to_string(), frame_signal, native_size);
     let input = start_emulator_input(ENDPOINT.to_string());
 
     let view_size = RwSignal::new(Size::ZERO);
     let pressed = RwSignal::new(false);
     let last = RwSignal::new((0i32, 0i32));
 
-    // Pointer position (view-local) -> device pixel, through the letterbox.
+    // Pointer position (view-local) -> native device pixel, through the
+    // letterbox. Uses native size (not the downscaled stream) so taps land.
     let to_device = move |e: &Event| -> Option<(i32, i32)> {
         let p = e.point()?;
         let sz = view_size.get_untracked();
         let f = frame_signal.get_untracked()?;
-        view_to_device(p.x, p.y, sz.width, sz.height, f.width, f.height)
+        let (dw, dh) = match native_size.get_untracked() {
+            Some((w, h)) if w > 0 && h > 0 => (w, h),
+            _ => (f.width, f.height),
+        };
+        view_to_device(p.x, p.y, sz.width, sz.height, dw, dh)
     };
 
     video_frame(move || {

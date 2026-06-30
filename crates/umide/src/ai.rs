@@ -1021,16 +1021,37 @@ fn resolve_target(input: &serde_json::Value) -> Result<Target, String> {
     }
 }
 
-/// PATH augmented with Homebrew, the Android SDK platform-tools, and the usual
-/// idb install locations so `adb`/`idb`/`xcrun` resolve regardless of the shell.
+/// PATH augmented with the Android SDK platform-tools (and, on Unix, Homebrew
+/// and the usual idb install locations) so `adb`/`idb`/`xcrun` resolve
+/// regardless of the shell. Uses the platform's PATH separator — a `:`-joined
+/// Unix path is malformed on Windows and broke `adb` resolution there.
 fn tool_path_env() -> String {
     let base = std::env::var("PATH").unwrap_or_default();
-    let home = std::env::var("HOME").unwrap_or_default();
-    format!(
-        "/opt/homebrew/bin:/usr/local/bin:{home}/.local/bin:\
-         {home}/Library/Android/sdk/platform-tools:\
-         {home}/Android/Sdk/platform-tools:{base}"
-    )
+    #[cfg(windows)]
+    {
+        let mut parts: Vec<String> = Vec::new();
+        for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+            if let Ok(v) = std::env::var(var) {
+                if !v.is_empty() {
+                    parts.push(format!("{v}\\platform-tools"));
+                }
+            }
+        }
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            parts.push(format!("{local}\\Android\\Sdk\\platform-tools"));
+        }
+        parts.push(base);
+        parts.join(";")
+    }
+    #[cfg(not(windows))]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        format!(
+            "/opt/homebrew/bin:/usr/local/bin:{home}/.local/bin:\
+             {home}/Library/Android/sdk/platform-tools:\
+             {home}/Android/Sdk/platform-tools:{base}"
+        )
+    }
 }
 
 /// Build a Command that runs `cmd` through the platform shell

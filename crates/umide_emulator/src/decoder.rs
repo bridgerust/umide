@@ -128,6 +128,17 @@ impl DecodedFrame {
             GpuFrame::Hardware(handle) => handle.read_pixels(),
         }
     }
+
+    /// RGBA pixels as a shared `Arc`, avoiding a multi-MB copy on every repaint.
+    /// Software frames already hold an `Arc`, so this is just a refcount bump;
+    /// the panel's `video_frame` closure runs per repaint, so cloning the buffer
+    /// (`to_rgba`) there was ~10 MB of memcpy per frame at native resolution.
+    pub fn rgba_arc(&self) -> Option<Arc<Vec<u8>>> {
+        match &self.frame {
+            GpuFrame::Software(data, _, _) => Some(data.clone()),
+            GpuFrame::Hardware(handle) => handle.read_pixels().map(Arc::new),
+        }
+    }
 }
 
 #[derive(Debug, Error)]

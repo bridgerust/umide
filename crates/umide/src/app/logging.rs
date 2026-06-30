@@ -33,13 +33,22 @@ pub(super) fn logging() -> (Handle<Targets>, Vec<WorkerGuard>) {
     };
 
     // 2. Debug File Appender (User Request)
+    // Must be a cross-platform path: a hardcoded "/tmp/umide_debug.log" with a
+    // "/dev/null" fallback panicked at startup on Windows (os error 3, the
+    // path's parent does not exist), crashing the whole app before any window.
+    let debug_log_path = std::env::temp_dir().join("umide_debug.log");
     let (debug_writer, debug_guard) = tracing_appender::non_blocking(
         std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open("/tmp/umide_debug.log")
-            .unwrap_or_else(|_| std::fs::File::create("/dev/null").unwrap()),
+            .open(&debug_log_path)
+            .unwrap_or_else(|_| {
+                // Fall back to the platform null device so logging can never
+                // abort startup.
+                let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
+                std::fs::File::create(null).unwrap()
+            }),
     );
     guards.push(debug_guard);
 

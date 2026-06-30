@@ -386,7 +386,11 @@ impl NativeEmulatorView {
                 let (tx, mut rx) = mpsc::channel(2);
                 let stream_cancel = cancel_flag.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = stream_client.stream_screenshots(tx).await {
+                    // 0, 0 = native resolution (the macOS native overlay shows
+                    // the full-res device frame).
+                    if let Err(e) =
+                        stream_client.stream_screenshots(tx, 0, 0).await
+                    {
                         if !stream_cancel.load(Ordering::SeqCst) {
                             tracing::error!("Android gRPC stream error: {}", e);
                         }

@@ -295,6 +295,48 @@ pub fn spawn_turn(
         .expect("spawn agent thread");
 }
 
+/// Like [`spawn_turn`], but backed by an external agent CLI (Claude Code, …).
+/// The CLI runs its own loop in `workspace` and streams events into `queue`;
+/// `trigger`/`cancel` behave exactly as for the LLM path. `session` carries the
+/// CLI's conversation id across turns so the agent keeps multi-turn context.
+pub fn spawn_cli_turn(
+    kind: cli::CliKind,
+    workspace: PathBuf,
+    session: Arc<Mutex<Option<String>>>,
+    user_text: String,
+    queue: EventQueue,
+    trigger: ExtSendTrigger,
+    cancel: Arc<AtomicBool>,
+) {
+    std::thread::Builder::new()
+        .name("umide-agent-cli".into())
+        .spawn(move || {
+            let push = Push::new(move |ev: AgentEvent| {
+                queue.lock().unwrap().push_back(ev);
+                register_ext_trigger(trigger);
+            });
+
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    push.emit(AgentEvent::Error(format!("runtime: {e}")));
+                    return;
+                }
+            };
+
+            let cancel = CancelHandle::new(cancel);
+            rt.block_on(async move {
+                let mut runner =
+                    cli::runner::CliRunner::new(kind, workspace, session);
+                runner.run(user_text, push, cancel).await;
+            });
+        })
+        .expect("spawn agent cli thread");
+}
+
 // ---------------------------------------------------------------------------
 // Read-only tools, bounded to the open workspace
 // ---------------------------------------------------------------------------

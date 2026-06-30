@@ -16,7 +16,11 @@
 //!
 //! [`LlmBackend`]: umide_agent::backend::LlmBackend
 
+pub mod claude;
+pub mod detect;
 pub mod framer;
+pub mod proc_group;
+pub mod runner;
 
 use umide_agent::ProviderKind;
 

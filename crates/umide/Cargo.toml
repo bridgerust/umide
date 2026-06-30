@@ -71,10 +71,15 @@ keyring          = { version = "3" }
 zip              = { version = "7.2.0", default-features = false, features = ["deflate"] }
 tokio            = { version = "1.28", features = ["full"] }
 tokio-stream     = { version = "0.1" }
+which            = { version = "7" }
 percent-encoding = { version = "2.3.1" }
 wgpu = "28.0.0"
 raw-window-handle = "0.6"
 image = "0.25"
+
+[target.'cfg(unix)'.dependencies]
+# Process-group kill for agent-CLI children (kill(-pgid, …)); Windows uses taskkill.
+libc = "0.2"
 
 [target.'cfg(target_os="macos")'.dependencies]
 fs_extra = "1.2.0"

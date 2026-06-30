@@ -24,7 +24,10 @@ fn sdk_roots() -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
     if let Ok(home) = std::env::var("HOME") {
         roots.push(
-            PathBuf::from(home).join("Library").join("Android").join("sdk"),
+            PathBuf::from(home)
+                .join("Library")
+                .join("Android")
+                .join("sdk"),
         );
     }
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -171,19 +174,38 @@ impl AndroidEmulator {
             return Ok(());
         }
 
-        // Launch emulator headless — no window, frames arrive via gRPC streaming.
-        // -gpu host: render the guest on the host GPU. IMPORTANT: "auto" silently
-        // falls back to the SwiftShader *software* rasterizer whenever -no-window
-        // is set (which we always set), making the whole guest UI CPU-rendered
-        // and sluggish even on capable GPUs. "host" keeps it on the real GPU
-        // (verified on Windows: Intel Iris Xe instead of SwiftShader).
-        // -no-window: run headless, no desktop window (we render via gRPC frames)
-        // -grpc 8554: expose gRPC endpoint for frame streaming and input
-        let child = quiet_command("emulator")
+        // Prefer the host GPU; fall back to software if it can't come up.
+        // "auto" is deliberately NOT used: with -no-window (which we always set
+        // for gRPC streaming) it silently selects the SwiftShader *software*
+        // rasterizer, so the whole guest UI is CPU-rendered and sluggish even on
+        // capable GPUs (verified on Windows). "host" renders on the real GPU; a
+        // machine without a usable GPU falls back to swiftshader_indirect.
+        if Self::spawn_and_wait(avd_name, "host")? {
+            return Ok(());
+        }
+        tracing::warn!(
+            "emulator did not come up with `-gpu host`; \
+             retrying with software rendering"
+        );
+        if Self::spawn_and_wait(avd_name, "swiftshader_indirect")? {
+            return Ok(());
+        }
+        Err(anyhow!(
+            "emulator {} failed to boot with host or software GPU",
+            avd_name
+        ))
+    }
+
+    /// Spawn the headless emulator with the given `-gpu` mode and wait for it to
+    /// register with adb. Returns `Ok(true)` if it came up, `Ok(false)` if the
+    /// process exited early (this GPU mode is unsupported on this host, so the
+    /// caller should fall back), or `Err` if it could not be spawned at all.
+    fn spawn_and_wait(avd_name: &str, gpu: &str) -> Result<bool> {
+        let mut child = quiet_command("emulator")
             .arg("-avd")
             .arg(avd_name)
             .arg("-gpu")
-            .arg("host")
+            .arg(gpu)
             .arg("-no-boot-anim")
             .arg("-no-skin")
             .arg("-no-window") // Headless: no desktop window, frames via gRPC
@@ -192,54 +214,39 @@ impl AndroidEmulator {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .stdin(Stdio::null())
-            .spawn();
+            .spawn()
+            .map_err(|e| anyhow!("Failed to spawn emulator: {}", e))?;
 
-        match child {
-            Ok(_child) => {
-                tracing::info!("Emulator process spawned for AVD: {}", avd_name);
+        tracing::info!("Emulator spawned for AVD {} (-gpu {})", avd_name, gpu);
 
-                // Wait for the emulator to become reachable via ADB
-                // Poll up to 30 seconds for the emulator to appear in adb devices
-                let mut ready = false;
-                for attempt in 0..60 {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    let serials = Self::get_running_serials();
-                    if !serials.is_empty() {
-                        // Verify this AVD is the one that booted
-                        if Self::is_running(avd_name) {
-                            tracing::info!(
-                                "AVD {} is now running (detected after {}ms)",
-                                avd_name,
-                                (attempt + 1) * 500
-                            );
-                            ready = true;
-                            break;
-                        }
-                    }
-                    if attempt % 10 == 0 && attempt > 0 {
-                        tracing::debug!(
-                            "Still waiting for AVD {} to boot... ({}s)",
-                            avd_name,
-                            (attempt + 1) / 2
-                        );
-                    }
-                }
-
-                if !ready {
-                    tracing::warn!("AVD {} may not be fully booted yet after 30s, proceeding anyway", avd_name);
-                }
-
-                Ok(())
+        // Poll up to 30s for the emulator to register with adb. If the process
+        // exits early, this GPU mode is unsupported here — report failure so the
+        // caller can fall back.
+        for attempt in 0..60 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if let Ok(Some(status)) = child.try_wait() {
+                tracing::warn!("emulator (-gpu {}) exited early ({})", gpu, status);
+                return Ok(false);
             }
-            Err(e) => {
-                tracing::error!(
-                    "Failed to spawn emulator for AVD {}: {}",
+            if Self::is_running(avd_name) {
+                tracing::info!(
+                    "AVD {} running after {}ms (-gpu {})",
                     avd_name,
-                    e
+                    (attempt + 1) * 500,
+                    gpu
                 );
-                Err(anyhow!("Failed to launch emulator: {}", e))
+                return Ok(true);
             }
         }
+
+        // Still alive but slow to boot — don't kill a working launch; the
+        // stream's connect-retry waits for it.
+        tracing::warn!(
+            "AVD {} not confirmed booted in 30s (-gpu {}); proceeding",
+            avd_name,
+            gpu
+        );
+        Ok(true)
     }
 
     pub fn stop(avd_name: &str) -> Result<()> {

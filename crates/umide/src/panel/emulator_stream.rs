@@ -19,8 +19,33 @@ use floem::reactive::RwSignal;
 use umide_emulator::decoder::DecodedFrame;
 use umide_emulator::grpc_client::EmulatorGrpcClient;
 
+/// Cap on the streamed frame's longer edge, in device pixels. The panel is a
+/// narrow side dock, so streaming the full native resolution (e.g. 1080×2424 =
+/// ~10 MB/frame uncompressed) wastes gRPC bandwidth, decode, and GPU upload.
+/// The emulator scales server-side; touch input still maps to native pixels.
+const MAX_STREAM_DIM: u32 = 1280;
+
+/// Downscale `(w, h)` so its longer edge is at most `max_dim`, preserving the
+/// aspect ratio. Returns the input unchanged when it already fits or is unknown.
+fn downscaled(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
+    let long = w.max(h);
+    if long == 0 || long <= max_dim {
+        return (w, h);
+    }
+    let scale = max_dim as f64 / long as f64;
+    (
+        ((w as f64 * scale).round() as u32).max(1),
+        ((h as f64 * scale).round() as u32).max(1),
+    )
+}
+
 /// Start streaming frames from the emulator at `endpoint`
 /// (e.g. `http://localhost:8554`) into `frame_signal`.
+///
+/// `native_size` is populated with the device's native resolution (probed
+/// once), so pointer input can map to native device pixels even though the
+/// stream itself is downscaled — the emulator's touch input is in native
+/// coordinates, independent of the screenshot resolution.
 ///
 /// Spawns background threads and returns immediately. floem marshals each
 /// frame onto the UI thread before updating the signal, so this is safe to
@@ -29,11 +54,15 @@ use umide_emulator::grpc_client::EmulatorGrpcClient;
 pub fn start_emulator_stream(
     endpoint: String,
     frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
+    native_size: RwSignal<Option<(u32, u32)>>,
 ) {
     // floem owns a reader thread on `rx` and applies each item to the signal
     // on the UI thread; we feed `tx` from the gRPC streaming thread below.
     let (tx, rx) = mpsc::channel::<Arc<DecodedFrame>>();
     update_signal_from_channel(frame_signal.write_only(), rx);
+    // Same UI-thread bridge for the one-shot native-resolution probe.
+    let (ntx, nrx) = mpsc::channel::<(u32, u32)>();
+    update_signal_from_channel(native_size.write_only(), nrx);
 
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
@@ -58,11 +87,27 @@ pub fn start_emulator_stream(
                 }
             };
 
+            // Probe native resolution once (for input mapping) and derive the
+            // downscaled stream size from it, so the aspect ratio is exact
+            // regardless of how the emulator interprets a bounding box.
+            let (sw, sh) = match client.get_screenshot().await {
+                Ok(frame) => {
+                    let _ = ntx.send((frame.width, frame.height));
+                    downscaled(frame.width, frame.height, MAX_STREAM_DIM)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "native-size probe failed: {e}; streaming native res"
+                    );
+                    (0, 0) // 0,0 = native
+                }
+            };
+
             // The gRPC client streams decoded frames over a bounded channel;
             // a full channel naturally drops older frames (latest-frame-wins).
             let (gtx, mut grx) = tokio::sync::mpsc::channel::<DecodedFrame>(2);
             tokio::spawn(async move {
-                if let Err(e) = client.stream_screenshots(gtx).await {
+                if let Err(e) = client.stream_screenshots(gtx, sw, sh).await {
                     tracing::error!("emulator frame stream ended: {e}");
                 }
             });

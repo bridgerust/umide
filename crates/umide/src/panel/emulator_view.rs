@@ -633,8 +633,7 @@ fn android_panel_portable(
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
     use crate::panel::emulator_stream::{
-        EmulatorInput, start_emulator_input, start_emulator_stream,
-        view_to_device,
+        EmulatorInput, start_emulator_input, start_emulator_stream, view_to_device,
     };
     use floem::event::{Event, EventListener};
     use floem::kurbo::Size;
@@ -649,9 +648,13 @@ fn android_panel_portable(
     // the first stream is sufficient: `connect_with_retry` waits for boot.
     let stream_started = RwSignal::new(false);
     let input_handle: RwSignal<Option<EmulatorInput>> = RwSignal::new(None);
+    // Native device resolution, probed by the stream; pointer input maps to it
+    // (the emulator's touch input is in native pixels, not the downscaled
+    // stream resolution).
+    let native_size: RwSignal<Option<(u32, u32)>> = RwSignal::new(None);
     Effect::new(move |_| {
         if running_device.get().is_some() && !stream_started.get_untracked() {
-            start_emulator_stream(ENDPOINT.to_string(), frame_signal);
+            start_emulator_stream(ENDPOINT.to_string(), frame_signal, native_size);
             input_handle.set(Some(start_emulator_input(ENDPOINT.to_string())));
             stream_started.set(true);
         }
@@ -663,12 +666,18 @@ fn android_panel_portable(
     let last = RwSignal::new((0i32, 0i32));
 
     // Map a view-local pointer position to a device pixel, through the
-    // aspect-preserving letterbox. `None` when the point is in the margins.
+    // aspect-preserving letterbox. `None` when there is no frame yet or the
+    // point is in the letterbox margins. The device size is the native
+    // resolution (not the downscaled stream), so taps land correctly.
     let to_device = move |e: &Event| -> Option<(i32, i32)> {
         let p = e.point()?;
         let sz = view_size.get_untracked();
         let f = frame_signal.get_untracked()?;
-        view_to_device(p.x, p.y, sz.width, sz.height, f.width, f.height)
+        let (dw, dh) = match native_size.get_untracked() {
+            Some((w, h)) if w > 0 && h > 0 => (w, h),
+            _ => (f.width, f.height),
+        };
+        view_to_device(p.x, p.y, sz.width, sz.height, dw, dh)
     };
 
     let device_item = move |device: DeviceInfo| {
@@ -687,8 +696,7 @@ fn android_panel_portable(
                 move || {
                     if let Some(ref running) = running_device.get_untracked() {
                         if running.id == device_cloned_resume.id {
-                            current_device_id
-                                .set(device_cloned_resume.id.clone());
+                            current_device_id.set(device_cloned_resume.id.clone());
                             is_visible.set(true);
                             return;
                         }

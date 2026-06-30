@@ -96,6 +96,8 @@ pub fn ai_assistant_panel(
     // backends that aren't available.
     let claude_installed =
         CliStatus::detect(CliKind::ClaudeCode).installed() && has_workspace;
+    let codex_installed =
+        CliStatus::detect(CliKind::Codex).installed() && has_workspace;
 
     // Lossless cross-thread bridge: the worker pushes AgentEvents into `queue`
     // and pulses `trigger`; a UI-thread effect tracks the trigger and drains the
@@ -329,6 +331,7 @@ pub fn ai_assistant_panel(
             status,
             config,
         ),
+        cli_button(CliKind::Codex, codex_installed, backend, status, config),
     ))
     .style(|s| s.width_full().items_center().padding(6.0));
 
@@ -398,11 +401,20 @@ fn cli_button(
         .on_click_stop(move |_| {
             if available {
                 backend.set(AssistantBackend::Cli(kind));
-                status.set(format!(
-                    "{} — runs in your project folder. Reads are automatic; every \
-                     file edit and command it makes is shown to you for approval.",
-                    kind.label()
-                ));
+                status.set(match kind {
+                    CliKind::ClaudeCode => format!(
+                        "{} — runs in your project folder. Reads are automatic; \
+                         every file edit and command is shown to you for approval.",
+                        kind.label()
+                    ),
+                    CliKind::Codex => format!(
+                        "{} — read-only: reads your project and runs sandboxed \
+                         commands to answer; it can't edit files or reach the \
+                         network.",
+                        kind.label()
+                    ),
+                    CliKind::GeminiCli => kind.label().to_string(),
+                });
             } else {
                 status.set(kind.install_hint().to_string());
             }

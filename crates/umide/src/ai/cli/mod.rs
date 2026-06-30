@@ -17,6 +17,7 @@
 //! [`LlmBackend`]: umide_agent::backend::LlmBackend
 
 pub mod claude;
+pub mod codex;
 pub mod detect;
 pub mod framer;
 pub mod permission_server;

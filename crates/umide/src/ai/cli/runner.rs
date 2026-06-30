@@ -25,6 +25,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use umide_agent::AgentEvent;
 
 use super::claude::ClaudeParser;
+use super::codex::CodexParser;
 use super::framer::CliFramer;
 use super::permission_server::PermissionServer;
 use super::{CliKind, proc_group};
@@ -116,9 +117,10 @@ impl CliRunner {
     fn make_parser(&self) -> Box<dyn CliParser> {
         match self.kind {
             CliKind::ClaudeCode => Box::new(ClaudeParser::new()),
-            // Codex/Gemini parsers land in later phases; the panel only offers a
-            // CLI once its backend is wired, so this fallback is never hit today.
-            _ => Box::new(ClaudeParser::new()),
+            CliKind::Codex => Box::new(CodexParser::new()),
+            // Gemini lands in a later phase; the panel only offers a CLI once its
+            // backend is wired, so this fallback is never hit today.
+            CliKind::GeminiCli => Box::new(ClaudeParser::new()),
         }
     }
 
@@ -172,7 +174,25 @@ impl CliRunner {
                 }
                 a
             }
-            _ => Vec::new(),
+            CliKind::Codex => {
+                // P2a is read-only: codex's read-only sandbox lets it read and
+                // run safe commands to answer, but it can't write files or reach
+                // the network. The prompt is fed on stdin (no positional arg).
+                // Writes (workspace-write, seatbelt-confined) are a follow-up.
+                let mut a = vec!["exec".to_string()];
+                if let Some(id) = resume {
+                    a.push("resume".into());
+                    a.push(id.into());
+                }
+                a.push("--json".into());
+                a.push("--skip-git-repo-check".into());
+                a.push("-C".into());
+                a.push(self.workspace.to_string_lossy().into_owned());
+                a.push("--sandbox".into());
+                a.push("read-only".into());
+                a
+            }
+            CliKind::GeminiCli => Vec::new(),
         }
     }
 }

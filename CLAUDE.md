@@ -77,27 +77,35 @@ Before finishing any change, check whether these need updating and keep them in 
   - **Live plumbing verified on Windows (done)**: against a real `Pixel_9a` AVD on gRPC
     `8554`, `grab_frame` pulled a real 1080×2424 home-screen frame and `tap_test`'s swipe
     opened the notification shade — i.e. `start_emulator_stream` (decode) and
-    `start_emulator_input` (touch) both work on Windows. Still unverified: the in-app GUI
-    panel itself (floem render + B1 Stop→Start *inside* the running app + on-screen pointer
-    mapping) — needs a `umide.exe` GUI run with a human/automation watching.
-  - **KNOWN GAP — adb/emulator must be on PATH**: `android.rs` calls `Command::new("adb")`/
-    `("emulator")` by bare name. A standard Android Studio install on Windows does NOT add
-    them to PATH (SDK at `%LOCALAPPDATA%\Android\Sdk`), so a fresh Windows user sees an
-    EMPTY device list with no hint. Follow-up: resolve the SDK from
-    `ANDROID_HOME`/`ANDROID_SDK_ROOT`/default location instead of relying on PATH.
+    `start_emulator_input` (touch) both work on Windows.
+  - **In-app GUI panel verified on Windows (done)**: ran the real `umide.exe`; the Emulator
+    panel renders in the right dock with the PREVIEW badge + `Android · Pixel_9a` header, the
+    device is auto-detected, the live screen paints via the wgpu `VideoFrame`, and an
+    on-screen tap routed through `view_to_device` → `start_emulator_input` launched an app on
+    the device. Window/render path: wgpu Vulkan on Intel Iris Xe. (B1's Stop→full-reboot→Start
+    cycle wasn't run live — it forces a slow cold boot — but the latch-reset fix is in place.)
+  - **TWO Windows-only runtime bugs found only by running the binary (fixed)**: the build was
+    green but the app *crashed on launch* and the AI adb path was broken — neither is caught
+    by `cargo build`/`check`. (a) `app/logging.rs` hardcoded `/tmp/umide_debug.log` + a
+    `/dev/null` fallback → panic at startup on Windows (os error 3) before any window; now
+    `std::env::temp_dir()` + per-OS null device. (b) `ai.rs tool_path_env` returned a
+    `:`-joined Unix PATH fed to `cmd /C` → adb unresolvable; now platform PATH separator +
+    Android SDK platform-tools. Lesson: a green Windows build says nothing about runtime —
+    always launch the binary.
+  - **adb/emulator SDK resolution (fixed)**: `android.rs` called `adb`/`emulator` by bare
+    name; a stock Android Studio install on Windows doesn't add them to PATH, so the panel
+    showed an empty list. Now resolves the SDK from `ANDROID_HOME`/`ANDROID_SDK_ROOT`/the
+    per-OS default (`%LOCALAPPDATA%\Android\Sdk`).
 - **Next milestones / before tagging v0.3.0**:
-  1. **In-app GUI panel run on Windows** — launch `umide.exe`, open the Android panel,
-     confirm frames render in the floem view, on-screen taps land, and specifically
-     **Stop → Start again** (exercises B1) + cold-launch (B2/B3). The underlying plumbing
-     is now live-verified (above); this is the remaining GUI-shell verification.
-  2. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
+  1. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
      the MSI/`release-lto` path isn't exercised by ordinary CI. Then flip the `docs/index.html`
      badge to `0.3.0`.
-  3. **Hardware buttons + keyboard** in the portable panel (Home/Back/Power via
+  2. **Hardware buttons + keyboard** in the portable panel (Home/Back/Power via
      `EmulatorInput::key_code`; text via `key`) — the macOS sidebar has these; the portable
      panel currently wires pointer only.
-  4. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
-     AI providers.
+  3. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
+     AI providers (note: `ai.rs` tool PATH on Windows is now fixed, but the providers
+     themselves haven't been exercised on Windows).
 
 ## Working across machines (Mac + Windows)
 Claude Code conversation history is **local to each machine — it does not sync**. A chat

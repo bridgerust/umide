@@ -75,3 +75,122 @@ pub fn start_emulator_stream(
         });
     });
 }
+
+/// An input event to forward to the emulator over gRPC.
+enum InputEvent {
+    TouchDown(i32, i32),
+    TouchMove(i32, i32),
+    TouchUp(i32, i32),
+    Key(String),
+    KeyCode(i32),
+}
+
+/// Handle for sending input (touch/keys) to the emulator. Cheap to clone; call
+/// from the UI thread — events are dispatched on a background gRPC command
+/// connection (separate from the frame stream, to avoid lock contention).
+#[derive(Clone)]
+pub struct EmulatorInput {
+    tx: tokio::sync::mpsc::UnboundedSender<InputEvent>,
+}
+
+impl EmulatorInput {
+    pub fn touch_down(&self, x: i32, y: i32) {
+        let _ = self.tx.send(InputEvent::TouchDown(x, y));
+    }
+    pub fn touch_move(&self, x: i32, y: i32) {
+        let _ = self.tx.send(InputEvent::TouchMove(x, y));
+    }
+    pub fn touch_up(&self, x: i32, y: i32) {
+        let _ = self.tx.send(InputEvent::TouchUp(x, y));
+    }
+    pub fn key(&self, key: &str) {
+        let _ = self.tx.send(InputEvent::Key(key.to_string()));
+    }
+    pub fn key_code(&self, code: i32) {
+        let _ = self.tx.send(InputEvent::KeyCode(code));
+    }
+}
+
+/// Open a gRPC command connection to the emulator at `endpoint` for sending
+/// input. Returns immediately; events sent via the returned handle are
+/// forwarded on a background thread.
+pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<InputEvent>();
+
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(e) => {
+                tracing::error!("emulator input: failed to start runtime: {e}");
+                return;
+            }
+        };
+        rt.block_on(async move {
+            let mut client = match EmulatorGrpcClient::connect_with_retry(
+                &endpoint,
+                Duration::from_secs(30),
+            )
+            .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("emulator input gRPC connect failed: {e}");
+                    return;
+                }
+            };
+            while let Some(ev) = rx.recv().await {
+                let r = match ev {
+                    InputEvent::TouchDown(x, y) => {
+                        client.send_touch_down(x, y).await
+                    }
+                    InputEvent::TouchMove(x, y) => {
+                        client.send_touch_move(x, y).await
+                    }
+                    InputEvent::TouchUp(x, y) => client.send_touch_up(x, y).await,
+                    InputEvent::Key(k) => client.send_key(&k).await,
+                    InputEvent::KeyCode(c) => client.send_key_code(c).await,
+                };
+                if let Err(e) = r {
+                    tracing::warn!("emulator input send failed: {e}");
+                }
+            }
+        });
+    });
+
+    EmulatorInput { tx }
+}
+
+/// Map a pointer position in the view's local coordinates to a device pixel
+/// coordinate, accounting for the aspect-preserving letterbox. Returns `None`
+/// if the point falls in the letterbox margins (outside the displayed frame).
+pub fn view_to_device(
+    px: f64,
+    py: f64,
+    view_w: f64,
+    view_h: f64,
+    frame_w: u32,
+    frame_h: u32,
+) -> Option<(i32, i32)> {
+    if view_w <= 0.0 || view_h <= 0.0 || frame_w == 0 || frame_h == 0 {
+        return None;
+    }
+    let frame_aspect = frame_w as f64 / frame_h as f64;
+    let view_aspect = view_w / view_h;
+    let (dw, dh) = if frame_aspect > view_aspect {
+        (view_w, view_w / frame_aspect)
+    } else {
+        (view_h * frame_aspect, view_h)
+    };
+    let ox = (view_w - dw) / 2.0;
+    let oy = (view_h - dh) / 2.0;
+    let (lx, ly) = (px - ox, py - oy);
+    if lx < 0.0 || ly < 0.0 || lx > dw || ly > dh {
+        return None;
+    }
+    let dx = (lx / dw * frame_w as f64).round() as i32;
+    let dy = (ly / dh * frame_h as f64).round() as i32;
+    Some((
+        dx.clamp(0, frame_w as i32 - 1),
+        dy.clamp(0, frame_h as i32 - 1),
+    ))
+}

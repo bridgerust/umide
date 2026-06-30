@@ -17,19 +17,35 @@
 use std::sync::Arc;
 
 use floem::Application;
+use floem::event::{Event, EventListener};
 use floem::kurbo::Size;
 use floem::prelude::*;
 use floem::reactive::RwSignal;
 use floem::views::{RgbaFrame, video_frame};
 use floem::window::WindowConfig;
-use umide_app::panel::emulator_stream::start_emulator_stream;
+use umide_app::panel::emulator_stream::{
+    start_emulator_input, start_emulator_stream, view_to_device,
+};
 use umide_emulator::decoder::DecodedFrame;
+
+const ENDPOINT: &str = "http://localhost:8554";
 
 fn app() -> impl IntoView {
     let frame_signal: RwSignal<Option<Arc<DecodedFrame>>> = RwSignal::new(None);
+    start_emulator_stream(ENDPOINT.to_string(), frame_signal);
+    let input = start_emulator_input(ENDPOINT.to_string());
 
-    // Start streaming from the running emulator's gRPC endpoint.
-    start_emulator_stream("http://localhost:8554".to_string(), frame_signal);
+    let view_size = RwSignal::new(Size::ZERO);
+    let pressed = RwSignal::new(false);
+    let last = RwSignal::new((0i32, 0i32));
+
+    // Pointer position (view-local) -> device pixel, through the letterbox.
+    let to_device = move |e: &Event| -> Option<(i32, i32)> {
+        let p = e.point()?;
+        let sz = view_size.get_untracked();
+        let f = frame_signal.get_untracked()?;
+        view_to_device(p.x, p.y, sz.width, sz.height, f.width, f.height)
+    };
 
     video_frame(move || {
         frame_signal.get().and_then(|f| {
@@ -39,6 +55,38 @@ fn app() -> impl IntoView {
                 height: f.height,
             })
         })
+    })
+    .on_resize(move |rect| view_size.set(rect.size()))
+    .on_event_stop(EventListener::PointerDown, {
+        let input = input.clone();
+        move |e| {
+            if let Some((x, y)) = to_device(e) {
+                pressed.set(true);
+                last.set((x, y));
+                input.touch_down(x, y);
+            }
+        }
+    })
+    .on_event_stop(EventListener::PointerMove, {
+        let input = input.clone();
+        move |e| {
+            if pressed.get_untracked() {
+                if let Some((x, y)) = to_device(e) {
+                    last.set((x, y));
+                    input.touch_move(x, y);
+                }
+            }
+        }
+    })
+    .on_event_stop(EventListener::PointerUp, {
+        let input = input.clone();
+        move |e| {
+            if pressed.get_untracked() {
+                pressed.set(false);
+                let (x, y) = to_device(e).unwrap_or_else(|| last.get_untracked());
+                input.touch_up(x, y);
+            }
+        }
     })
     .style(|s| s.size_full())
 }

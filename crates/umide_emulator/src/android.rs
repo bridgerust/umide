@@ -3,6 +3,22 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::process::{Command, Stdio};
 
+/// Build a `Command` that does not pop a console window on Windows.
+///
+/// `adb` / `emulator` are console apps; spawning them from the GUI flashes a
+/// black console window per call (several when the panel opens). `CREATE_NO_WINDOW`
+/// suppresses it — same convention as `proxy.rs` / `palette.rs` (`0x08000000`).
+fn quiet_command(program: &str) -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 pub struct AndroidEmulator {
     pub device_id: String,
     pub grpc_address: String,
@@ -18,7 +34,7 @@ impl AndroidEmulator {
 
     /// Get list of currently running emulator serials from adb devices
     pub fn get_running_serials() -> Vec<String> {
-        let output = match Command::new("adb").arg("devices").output() {
+        let output = match quiet_command("adb").arg("devices").output() {
             Ok(out) => out,
             Err(_) => return Vec::new(),
         };
@@ -55,7 +71,7 @@ impl AndroidEmulator {
         // Check if any running emulator corresponds to this AVD
         // We need to query each emulator for its AVD name
         for serial in &running {
-            if let Ok(output) = Command::new("adb")
+            if let Ok(output) = quiet_command("adb")
                 .args(["-s", serial, "emu", "avd", "name"])
                 .output()
             {
@@ -71,7 +87,7 @@ impl AndroidEmulator {
     }
 
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
-        let output = Command::new("emulator").arg("-list-avds").output()?;
+        let output = quiet_command("emulator").arg("-list-avds").output()?;
 
         if !output.status.success() {
             return Err(anyhow!("Failed to list Android AVDs"));
@@ -105,7 +121,7 @@ impl AndroidEmulator {
         // GPU mode "auto" picks the best available backend (Metal on macOS)
         // -no-window: run headless, no macOS window (we render via gRPC frames)
         // -grpc 8554: expose gRPC endpoint for frame streaming and input
-        let child = Command::new("emulator")
+        let child = quiet_command("emulator")
             .arg("-avd")
             .arg(avd_name)
             .arg("-gpu")
@@ -182,7 +198,7 @@ impl AndroidEmulator {
         // Find the emulator that matches this AVD name
         for serial in &running_serials {
             // Query the AVD name for this emulator
-            if let Ok(output) = Command::new("adb")
+            if let Ok(output) = quiet_command("adb")
                 .args(["-s", serial, "emu", "avd", "name"])
                 .output()
             {
@@ -200,7 +216,7 @@ impl AndroidEmulator {
                     tracing::info!("Found matching emulator {} for AVD {}, sending kill command", serial, avd_name);
 
                     // Kill this emulator
-                    let result = Command::new("adb")
+                    let result = quiet_command("adb")
                         .args(["-s", serial, "emu", "kill"])
                         .output();
 
@@ -236,7 +252,7 @@ impl AndroidEmulator {
         tracing::warn!("No exact AVD match found, trying partial match...");
         for serial in &running_serials {
             // Just kill the first one as fallback
-            let result = Command::new("adb")
+            let result = quiet_command("adb")
                 .args(["-s", serial, "emu", "kill"])
                 .output();
 

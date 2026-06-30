@@ -7592,12 +7592,10 @@ version = "0.9.11+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3afc9a848309fe1aaffaed6e1546a7a14de1f935dc9d89d32afd9a44bab7c46"
 dependencies = [
- "indexmap 2.13.0",
  "serde_core",
  "serde_spanned 1.0.4",
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
- "toml_writer",
  "winnow 0.7.14",
 ]
 
@@ -7681,12 +7679,6 @@ name = "toml_write"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
-
-[[package]]
-name = "toml_writer"
-version = "1.1.1+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tonic"
@@ -7993,7 +7985,7 @@ dependencies = [
 
 [[package]]
 name = "umide"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "floem_renderer",
  "umide-app",
@@ -8002,7 +7994,7 @@ dependencies = [
 
 [[package]]
 name = "umide-app"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "Inflector",
  "alacritty_terminal",
@@ -8057,7 +8049,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
- "toml 0.9.11+spec-1.1.0",
+ "toml 0.5.11",
  "toml_edit 0.22.27",
  "tracing 0.2.0",
  "tracing-appender",
@@ -8072,14 +8064,14 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "wgpu 28.0.0",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
  "zip",
  "zstd",
 ]
 
 [[package]]
 name = "umide-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -8107,7 +8099,7 @@ dependencies = [
 
 [[package]]
 name = "umide-proxy"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -8139,7 +8131,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tar",
- "toml 0.9.11+spec-1.1.0",
+ "toml 0.5.11",
  "tracing 0.2.0",
  "tracing-log",
  "trash",
@@ -8156,7 +8148,7 @@ dependencies = [
 
 [[package]]
 name = "umide-rpc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",

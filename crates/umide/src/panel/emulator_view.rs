@@ -638,6 +638,7 @@ fn android_panel_portable(
     };
     use floem::event::{Event, EventListener};
     use floem::kurbo::Size;
+    use floem::style::Position;
     use floem::views::{RgbaFrame, video_frame};
 
     const ENDPOINT: &str = "http://localhost:8554";
@@ -692,7 +693,19 @@ fn android_panel_portable(
                             return;
                         }
                     }
-                    let _ = launch_device(&device_cloned_start);
+                    // Launch off the UI thread — AndroidEmulator::launch blocks
+                    // ~30s polling adb, which would freeze floem (B2). The frame
+                    // stream's connect_with_retry waits for the device to boot.
+                    let to_launch = device_cloned_start.clone();
+                    std::thread::spawn(move || {
+                        if let Err(e) = launch_device(&to_launch) {
+                            tracing::error!(
+                                "Failed to launch {}: {}",
+                                to_launch.name,
+                                e
+                            );
+                        }
+                    });
                     let mut d = device_cloned_start.clone();
                     d.state = DeviceState::Running;
                     running_device.set(Some(d));
@@ -718,6 +731,11 @@ fn android_panel_portable(
                     is_visible.set(false);
                     frame_signal.set(None);
                     current_device_id.set(String::new());
+                    // Reset the stream/input latch so a later Start re-connects
+                    // (B1) — otherwise the panel stays black after the first Stop.
+                    stream_started.set(false);
+                    input_handle.set(None);
+                    pressed.set(false);
                 },
                 || false,
                 move || !is_running,
@@ -743,10 +761,26 @@ fn android_panel_portable(
             Stack::horizontal((
                 Label::new("Android".to_string())
                     .style(|s| s.font_size(12.0).font_bold().padding(6.0)),
+                // Make the preview status self-evident in the panel itself, not
+                // just in the docs (B3-adjacent) — pointer works, but hardware
+                // buttons/keyboard and a live Windows run are still pending.
+                Label::new("PREVIEW".to_string()).style(move |s| {
+                    let config = config.get();
+                    s.font_size(8.0)
+                        .padding_horiz(4.0)
+                        .border_radius(3.0)
+                        .border(1.0)
+                        .border_color(config.color(UmideColor::LAPCE_BORDER))
+                        .color(config.color(UmideColor::EDITOR_DIM))
+                }),
                 Label::derived(move || {
                     if let Some(device) = running_device.get() {
                         if is_visible.get() {
-                            format!(" - {}", device.name)
+                            if frame_signal.get().is_none() {
+                                format!(" - {} (connecting…)", device.name)
+                            } else {
+                                format!(" - {}", device.name)
+                            }
                         } else {
                             format!(" - {} (hidden)", device.name)
                         }
@@ -754,7 +788,7 @@ fn android_panel_portable(
                         String::new()
                     }
                 })
-                .style(|s| s.font_size(10.0).flex_grow(1.0).padding_right(6.0)),
+                .style(|s| s.font_size(10.0).flex_grow(1.0).padding_horiz(6.0)),
             ))
             .style(|s| s.width_full().items_center()),
         )
@@ -796,46 +830,74 @@ fn android_panel_portable(
             }),
             // Live device view + minimal sidebar (Stop/Hide).
             Stack::horizontal((
-                video_frame(move || {
-                    frame_signal.get().and_then(|f| {
-                        f.to_rgba().map(|rgba| RgbaFrame {
-                            data: Arc::new(rgba),
-                            width: f.width,
-                            height: f.height,
+                // Video + a "Connecting…" overlay while no frame has arrived,
+                // so an empty panel reads as connecting rather than broken (B3).
+                Stack::new((
+                    video_frame(move || {
+                        frame_signal.get().and_then(|f| {
+                            f.to_rgba().map(|rgba| RgbaFrame {
+                                data: Arc::new(rgba),
+                                width: f.width,
+                                height: f.height,
+                            })
                         })
                     })
-                })
-                .on_resize(move |rect| view_size.set(rect.size()))
-                .on_event_stop(EventListener::PointerDown, move |e| {
-                    if let Some(input) = input_handle.get_untracked() {
-                        if let Some((x, y)) = to_device(e) {
-                            pressed.set(true);
-                            last.set((x, y));
-                            input.touch_down(x, y);
-                        }
-                    }
-                })
-                .on_event_stop(EventListener::PointerMove, move |e| {
-                    if pressed.get_untracked() {
+                    .on_resize(move |rect| view_size.set(rect.size()))
+                    .on_event_stop(EventListener::PointerDown, move |e| {
                         if let Some(input) = input_handle.get_untracked() {
                             if let Some((x, y)) = to_device(e) {
+                                pressed.set(true);
                                 last.set((x, y));
-                                input.touch_move(x, y);
+                                input.touch_down(x, y);
                             }
                         }
-                    }
-                })
-                .on_event_stop(EventListener::PointerUp, move |e| {
-                    if pressed.get_untracked() {
-                        pressed.set(false);
-                        if let Some(input) = input_handle.get_untracked() {
-                            let (x, y) = to_device(e)
-                                .unwrap_or_else(|| last.get_untracked());
-                            input.touch_up(x, y);
+                    })
+                    .on_event_stop(EventListener::PointerMove, move |e| {
+                        if pressed.get_untracked() {
+                            if let Some(input) = input_handle.get_untracked() {
+                                if let Some((x, y)) = to_device(e) {
+                                    last.set((x, y));
+                                    input.touch_move(x, y);
+                                }
+                            }
                         }
-                    }
-                })
-                .style(|s| s.flex_grow(1.0).width_full().min_height(0.0)),
+                    })
+                    .on_event_stop(EventListener::PointerUp, move |e| {
+                        if pressed.get_untracked() {
+                            pressed.set(false);
+                            if let Some(input) = input_handle.get_untracked() {
+                                let (x, y) = to_device(e)
+                                    .unwrap_or_else(|| last.get_untracked());
+                                input.touch_up(x, y);
+                            }
+                        }
+                    })
+                    .style(|s| s.size_full()),
+                    // Centered status overlay; pointer-transparent so taps still
+                    // reach the device, and hidden once frames start arriving.
+                    Container::new(
+                        Label::derived(move || {
+                            if frame_signal.get().is_none() {
+                                "Connecting to emulator…".to_string()
+                            } else {
+                                String::new()
+                            }
+                        })
+                        .style(move |s| {
+                            s.font_size(13.0)
+                                .color(config.get().color(UmideColor::EDITOR_DIM))
+                        }),
+                    )
+                    .style(move |s| {
+                        s.position(Position::Absolute)
+                            .size_full()
+                            .items_center()
+                            .justify_center()
+                            .pointer_events_none()
+                            .apply_if(frame_signal.get().is_some(), |s| s.hide())
+                    }),
+                ))
+                .style(|s| s.flex_grow(1.0).min_width(0.0).min_height(0.0)),
                 Stack::new((
                     clickable_icon(
                         || UmideIcons::DEBUG_STOP,
@@ -854,6 +916,11 @@ fn android_panel_portable(
                             is_visible.set(false);
                             frame_signal.set(None);
                             current_device_id.set(String::new());
+                            // Reset the stream/input latch so a later Start
+                            // re-connects (B1).
+                            stream_started.set(false);
+                            input_handle.set(None);
+                            pressed.set(false);
                         },
                         || false,
                         || false,

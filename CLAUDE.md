@@ -74,11 +74,22 @@ Before finishing any change, check whether these need updating and keep them in 
     B1 stream-latch reset on Stop (panel reconnects on a 2nd Start), B2 async launch (no
     UI freeze), B3 "Connecting…" overlay + header hint, B4 `CREATE_NO_WINDOW` on
     `adb`/`emulator` (`quiet_command` in `android.rs`). Added an in-app PREVIEW badge.
+  - **Live plumbing verified on Windows (done)**: against a real `Pixel_9a` AVD on gRPC
+    `8554`, `grab_frame` pulled a real 1080×2424 home-screen frame and `tap_test`'s swipe
+    opened the notification shade — i.e. `start_emulator_stream` (decode) and
+    `start_emulator_input` (touch) both work on Windows. Still unverified: the in-app GUI
+    panel itself (floem render + B1 Stop→Start *inside* the running app + on-screen pointer
+    mapping) — needs a `umide.exe` GUI run with a human/automation watching.
+  - **KNOWN GAP — adb/emulator must be on PATH**: `android.rs` calls `Command::new("adb")`/
+    `("emulator")` by bare name. A standard Android Studio install on Windows does NOT add
+    them to PATH (SDK at `%LOCALAPPDATA%\Android\Sdk`), so a fresh Windows user sees an
+    EMPTY device list with no hint. Follow-up: resolve the SDK from
+    `ANDROID_HOME`/`ANDROID_SDK_ROOT`/default location instead of relying on PATH.
 - **Next milestones / before tagging v0.3.0**:
-  1. **Live-verify on Windows** end-to-end with an Android emulator on `localhost:8554`:
-     confirm frames render, taps land, and specifically **Stop → Start again** (exercises
-     B1) + cold-launch (B2/B3). This is the one remaining unverified gap — build is green
-     for the real binary but no device run has happened on Windows yet.
+  1. **In-app GUI panel run on Windows** — launch `umide.exe`, open the Android panel,
+     confirm frames render in the floem view, on-screen taps land, and specifically
+     **Stop → Start again** (exercises B1) + cold-launch (B2/B3). The underlying plumbing
+     is now live-verified (above); this is the remaining GUI-shell verification.
   2. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
      the MSI/`release-lto` path isn't exercised by ordinary CI. Then flip the `docs/index.html`
      badge to `0.3.0`.

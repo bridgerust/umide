@@ -46,6 +46,12 @@ Before finishing any change, check whether these need updating and keep them in 
 
 ## Current status (keep this fresh — it is the cross-machine handoff)
 - **v0.2.0 shipped**: notarized macOS DMG, Windows MSI, Linux `.deb` on GitHub Releases.
+- **v0.3.0 in progress (unreleased)**: Windows build enabled + the embedded Android panel
+  un-gated for Windows/Linux with pointer input. Source version bumped to `0.3.0`
+  (Cargo.toml/umide.spec/Info.plist); the `docs/index.html` download badge stays `0.2.0`
+  until a `v0.3.0` tag is cut. Work lives on branch `feat/windows-build-emulator-panel`
+  (not yet pushed — `origin` is SSH and unauthenticated on the Windows box; fetch was done
+  over HTTPS).
 - **floem** is pinned at `bridgerust/floem@e07fcd5ff148…` (branch `feat/external-texture`
   = upstream-latest + the wgpu external-texture / `VideoFrame` primitive + aspect letterbox).
   It is fetched from git automatically — you only need a local floem clone to iterate on
@@ -64,14 +70,22 @@ Before finishing any change, check whether these need updating and keep them in 
     `start_emulator_stream`, and forwards pointer tap/drag through `start_emulator_input` +
     `view_to_device` (PointerDown/Move/Up → touch_down/move/up). iOS panel is omitted on
     Windows/Linux (Simulator is macOS-only permanently).
-- **Next milestones**:
-  1. **Live-verify the Windows panel** end-to-end with an Android emulator on `localhost:8554`
-     (build is green for the real binary; needs a human-driven device run to confirm frames
-     render and taps land).
-  2. **Hardware buttons + keyboard** in the portable panel (Home/Back/Power via
+  - **Prod-readiness pass (done)**: fixed the blockers an adversarial review found —
+    B1 stream-latch reset on Stop (panel reconnects on a 2nd Start), B2 async launch (no
+    UI freeze), B3 "Connecting…" overlay + header hint, B4 `CREATE_NO_WINDOW` on
+    `adb`/`emulator` (`quiet_command` in `android.rs`). Added an in-app PREVIEW badge.
+- **Next milestones / before tagging v0.3.0**:
+  1. **Live-verify on Windows** end-to-end with an Android emulator on `localhost:8554`:
+     confirm frames render, taps land, and specifically **Stop → Start again** (exercises
+     B1) + cold-launch (B2/B3). This is the one remaining unverified gap — build is green
+     for the real binary but no device run has happened on Windows yet.
+  2. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
+     the MSI/`release-lto` path isn't exercised by ordinary CI. Then flip the `docs/index.html`
+     badge to `0.3.0`.
+  3. **Hardware buttons + keyboard** in the portable panel (Home/Back/Power via
      `EmulatorInput::key_code`; text via `key`) — the macOS sidebar has these; the portable
      panel currently wires pointer only.
-  3. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
+  4. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
      AI providers.
 
 ## Working across machines (Mac + Windows)

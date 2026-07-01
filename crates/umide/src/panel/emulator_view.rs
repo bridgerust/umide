@@ -726,6 +726,32 @@ fn android_panel_portable(
             )
         };
 
+    // Volume + Rotate go through `adb` (using the running device's serial),
+    // not the gRPC key path: the emulator ignores a lone gRPC key-press for
+    // volume (non-character key), and rotate has no gRPC equivalent. Run off the
+    // UI thread (B2); a no-op until the device serial has resolved after boot.
+    let adb_key_button =
+        move |icon: &'static str, tooltip: &'static str, keycode: i32| {
+            clickable_icon(
+                move || icon,
+                move || {
+                    if let Some(serial) =
+                        running_device.get_untracked().and_then(|d| d.serial)
+                    {
+                        std::thread::spawn(move || {
+                            let _ = umide_emulator::AndroidEmulator::press_keyevent(
+                                &serial, keycode,
+                            );
+                        });
+                    }
+                },
+                || false,
+                || false,
+                move || tooltip,
+                config,
+            )
+        };
+
     // Map a floem key press to the device key string the emulator's gRPC
     // `sendKey` accepts (DOM-style names for the named keys; the raw character
     // otherwise). Returns `None` for keys we don't forward (e.g. bare modifiers).
@@ -1048,6 +1074,31 @@ fn android_panel_portable(
                     hw_button(UmideIcons::DEVICE_BACK, "Back", "GoBack"),
                     hw_button(UmideIcons::DEVICE_RECENTS, "Recents", "AppSwitch"),
                     hw_button(UmideIcons::DEVICE_POWER, "Power", "Power"),
+                    // Volume (adb keyevent 24/25) + Rotate (adb emu rotate).
+                    adb_key_button(UmideIcons::DEVICE_VOLUME_UP, "Volume up", 24),
+                    adb_key_button(
+                        UmideIcons::DEVICE_VOLUME_DOWN,
+                        "Volume down",
+                        25,
+                    ),
+                    clickable_icon(
+                        || UmideIcons::DEVICE_ROTATE,
+                        move || {
+                            if let Some(serial) =
+                                running_device.get_untracked().and_then(|d| d.serial)
+                            {
+                                std::thread::spawn(move || {
+                                    let _ = umide_emulator::AndroidEmulator::rotate(
+                                        &serial,
+                                    );
+                                });
+                            }
+                        },
+                        || false,
+                        || false,
+                        || "Rotate",
+                        config,
+                    ),
                     Label::new("").style(|s| s.height(6.0)),
                     // Screenshot — save a native-res PNG and reveal it.
                     clickable_icon(

@@ -144,6 +144,33 @@ impl AndroidEmulator {
         None
     }
 
+    /// Press a hardware keyevent on the device by Android keycode
+    /// (e.g. 24 = Volume Up, 25 = Volume Down). Used for the panel's Volume
+    /// buttons: the emulator ignores a lone gRPC key-*press* for non-character
+    /// keys, so these go through `adb shell input keyevent` (a full down+up).
+    pub fn press_keyevent(serial: &str, keycode: i32) -> Result<()> {
+        quiet_command("adb")
+            .args([
+                "-s",
+                serial,
+                "shell",
+                "input",
+                "keyevent",
+                &keycode.to_string(),
+            ])
+            .output()?;
+        Ok(())
+    }
+
+    /// Rotate the device 90° via the emulator console (`emu rotate`). There is
+    /// no gRPC equivalent, so the panel's Rotate button uses this.
+    pub fn rotate(serial: &str) -> Result<()> {
+        quiet_command("adb")
+            .args(["-s", serial, "emu", "rotate"])
+            .output()?;
+        Ok(())
+    }
+
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
         let output = quiet_command("emulator").arg("-list-avds").output()?;
 

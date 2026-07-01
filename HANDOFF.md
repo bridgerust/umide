@@ -23,9 +23,8 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Both** → `feat/device-serial` (**PR #44**) — `DeviceInfo.serial` for
-  multi-Android: Windows added the field + panel resolution, Mac added the
-  `resolve_target` consumer half on the same branch. (G2 consumer #39 merged.)
+- **Windows** → `feat/device-mcp` (**PR #46**) — device-tools MCP server for the
+  Claude Code CLI backend (core; proven live). (DeviceInfo.serial #44 merged.)
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -33,22 +32,33 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-01) **`DeviceInfo.serial` — producer + consumer + macOS producer, all
-  on PR #44.** Windows: `serial: Option<String>` = `emulator-<consolePort>` for a
-  running Android device (`None` for iOS / not running), populated in
-  `list_all_devices` (new `AndroidEmulator::running_serial`) + reconciled onto
-  `running_device` after a Start-button launch (off the UI thread). Mac:
-  `resolve_target` prefers `active_device.serial` when `Some`, else first running
-  serial; **also wired the macOS G2 producer** (`emulator_view.rs` macOS branch,
-  the old NOTE spot — mirrors `running_android`/`ios` → `active_device`). **Full
-  loop live-verified on macOS** against a booted `Pixel_9a`: `list_all_devices()`
-  → `serial=Some("emulator-5554")`, `resolve_target(selected)` → that device, and
-  the device tools (screenshot, `describe_ui` = 17 parsed nodes, `type_text` with
-  `& | < >`, filtered logs) all run clean via the #41 argv path. Added a
-  `#[ignore]` `live_android` smoke test. **Windows: multi-Android live check is
-  yours** — two emulators up, confirm the agent hits the one you're viewing.
-- (2026-07-01) ✅ cmd.exe device-tool fixes (#41) verified live on the Pixel +
-  merged; B4 `describe_ui` parser checked against a real 37 KB dump. Both resolved.
+- (2026-07-01, Windows→Mac) **Device-tools MCP for Claude Code — core proven,
+  wiring is yours (fits your agent-UI refinement).** New `ai/cli/device_server.rs`
+  (**PR #46**) exposes the emulator device tools to the Claude Code backend so the
+  in-panel session drives the device **with no API key** — verified LIVE on the
+  Pixel: the real `claude` CLI called `device_screenshot` → reasoned → `device_tap`
+  (`claude exit=0`). Reuses your `ai.rs` device fns via `super::super::` (no `ai.rs`
+  change). **4 seams to expose it from the panel (all your area — I stayed out):**
+  1. `runner.rs` — in `CliRunner::run` (~:249) start `DeviceServer::start(serial)`
+     next to `PermissionServer`; in `build_args` Claude branch (~:166) merge its
+     `mcp_config_entry()` into the ONE `--mcp-config` JSON's `mcpServers` map
+     (`--strict-mcp-config` means it must be in that JSON); add a serial field to
+     `CliRunner`.
+  2. `ai.rs` — add `selected_device: Option<DeviceInfo>` to `spawn_cli_turn`
+     (~:385), forward to `CliRunner::new` (~:419). Resolve the Android serial from
+     it (reuse `resolve_target`/`.serial`).
+  3. `ai_assistant_view.rs:824` — pass `active_device.get_untracked()` into the
+     `Launch::Cli` arm (mirror the LLM arm at `:821`).
+  4. `permission_server.rs` `is_read_only` (~:245) — add `mcp__umide-device__
+     device_screenshot`/`…describe_ui`/`…device_logs` (auto-allow reads); writes
+     (`tap`/`swipe`/`type`/`key`) keep prompting. Nicer card titles in `describe`
+     optional.
+  `DeviceServer::start(serial)` takes the pinned serial (`None` = first running).
+  Ping me and I'll live-verify the wired in-panel flow on the Pixel.
+- (2026-07-01, Mac→Windows) **Multi-Android live check** (from #44): two emulators
+  up, confirm the agent drives the one you're viewing. Blocked here on a provider
+  key (agent path) — will do it once a key's available or via Claude Code once the
+  MCP wiring lands.
 - (2026-07-01, Mac→Windows) **Demo capture** for the landing page: ask the agent
   *"open Settings, turn on dark mode"*, confirm a screenshot auto-appears after
   each tap (the A2 loop-closer), drop stills into `docs/screenshots/`, set

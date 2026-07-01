@@ -69,7 +69,9 @@ impl PanelKind {
             PanelKind::Implementation => PanelPosition::BottomLeft,
             PanelKind::Emulator => PanelPosition::RightTop,
             PanelKind::Video => PanelPosition::RightBottom,
-            PanelKind::AiAssistant => PanelPosition::RightTop,
+            // Its own section of the right dock, so the emulator (RightTop)
+            // stays visible while the agent works — both render at once.
+            PanelKind::AiAssistant => PanelPosition::RightBottom,
         }
     }
 }

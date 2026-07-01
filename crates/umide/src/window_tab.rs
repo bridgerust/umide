@@ -465,11 +465,36 @@ impl WindowTabData {
                         panel_order.entry(PanelPosition::RightTop).or_default();
                     panels.push_back(PanelKind::Emulator);
                 }
+                let mut styles = i.panel.styles.clone();
+                // Old layouts get the new right dock once: emulator on top
+                // (visible), assistant below (visible). Fires when the saved
+                // order still IS the old default (`migrate_right_dock`) or when
+                // the saved styles predate the layout version (styles saved
+                // before the assistant moved to RightBottom would keep that
+                // section hidden). After this one-time rewrite the info is
+                // re-saved at the current version, so user choices stick.
+                let migrated =
+                    super::panel::data::migrate_right_dock(&mut panel_order);
+                if migrated
+                    || i.panel.version < super::panel::data::PANEL_LAYOUT_VERSION
+                {
+                    for pos in [PanelPosition::RightTop, PanelPosition::RightBottom]
+                    {
+                        styles.insert(
+                            pos,
+                            super::panel::style::PanelStyle {
+                                active: 0,
+                                shown: true,
+                                maximized: false,
+                            },
+                        );
+                    }
+                }
                 PanelData::new(
                     cx,
                     super::panel::data::PanelDataInfo {
                         panels: panel_order,
-                        styles: i.panel.styles.clone(),
+                        styles,
                         size: i.panel.size.clone(),
                         sections: i
                             .panel
@@ -496,6 +521,7 @@ impl WindowTabData {
                         panel_order.entry(PanelPosition::RightTop).or_default();
                     panels.push_back(PanelKind::Emulator);
                 }
+                super::panel::data::migrate_right_dock(&mut panel_order);
 
                 let mut styles = im::HashMap::new();
                 styles.insert(
@@ -542,7 +568,9 @@ impl WindowTabData {
                     PanelPosition::RightBottom,
                     super::panel::style::PanelStyle {
                         active: 0,
-                        shown: false,
+                        // Visible on startup: the AI assistant lives here, below
+                        // the emulator, so both show at once.
+                        shown: true,
                         maximized: false,
                     },
                 );

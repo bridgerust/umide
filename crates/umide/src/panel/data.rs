@@ -42,19 +42,49 @@ pub fn default_panel_order() -> PanelOrder {
             PanelKind::Implementation
         ],
     );
+    // Emulator first so a fresh workspace opens SHOWING the device; the AI
+    // assistant lives in the bottom section of the same dock, so both are
+    // visible at once (watch the agent drive the emulator) and each can be
+    // closed independently.
     order.insert(
         PanelPosition::RightTop,
-        im::vector![
-            PanelKind::DocumentSymbol,
-            PanelKind::Emulator,
-            PanelKind::AiAssistant
-        ],
+        im::vector![PanelKind::Emulator, PanelKind::DocumentSymbol],
     );
-    order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
+    order.insert(
+        PanelPosition::RightBottom,
+        im::vector![PanelKind::AiAssistant, PanelKind::Video],
+    );
     order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
     order.insert(PanelPosition::BottomRight, im::vector![]);
 
     order
+}
+
+/// One-time layout migration for saved orders that still carry the OLD right-
+/// dock default — `[DocumentSymbol, Emulator, AiAssistant]` packed into ONE tab
+/// area (RightTop), which made the emulator and the agent mutually exclusive.
+/// Rewrites just the right dock to the new default (emulator on top, assistant
+/// below, both visible). A customized order no longer matches the old default,
+/// so user-arranged layouts are left untouched. Returns whether it migrated,
+/// so the caller can also un-hide the RightBottom section once.
+pub fn migrate_right_dock(order: &mut PanelOrder) -> bool {
+    let old_top = im::vector![
+        PanelKind::DocumentSymbol,
+        PanelKind::Emulator,
+        PanelKind::AiAssistant
+    ];
+    if order.get(&PanelPosition::RightTop) != Some(&old_top) {
+        return false;
+    }
+    order.insert(
+        PanelPosition::RightTop,
+        im::vector![PanelKind::Emulator, PanelKind::DocumentSymbol],
+    );
+    let bottom = order.entry(PanelPosition::RightBottom).or_default();
+    if !bottom.contains(&PanelKind::AiAssistant) {
+        bottom.push_front(PanelKind::AiAssistant);
+    }
+    true
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
@@ -82,12 +112,19 @@ pub struct PanelSize {
     pub right_split: f64,
 }
 
+/// Bump when the default layout changes shape and saved styles/orders need a
+/// one-time rewrite (see `migrate_right_dock` + the version check at load).
+/// Saved data predating the field deserializes as 0.
+pub const PANEL_LAYOUT_VERSION: u32 = 1;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PanelInfo {
     pub panels: PanelOrder,
     pub styles: im::HashMap<PanelPosition, PanelStyle>,
     pub size: PanelSize,
     pub sections: im::HashMap<PanelSection, bool>,
+    #[serde(default)]
+    pub version: u32,
 }
 
 #[derive(Clone)]
@@ -160,6 +197,7 @@ impl PanelData {
                 .into_iter()
                 .map(|(key, value)| (key, value.get_untracked()))
                 .collect(),
+            version: PANEL_LAYOUT_VERSION,
         }
     }
 
@@ -432,4 +470,66 @@ pub fn panel_position(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrate_right_dock_rewrites_only_the_old_default() {
+        // A saved order still on the old default → migrated: emulator first up
+        // top, assistant moved to the bottom section.
+        let mut order = PanelOrder::new();
+        order.insert(
+            PanelPosition::RightTop,
+            im::vector![
+                PanelKind::DocumentSymbol,
+                PanelKind::Emulator,
+                PanelKind::AiAssistant
+            ],
+        );
+        order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
+        assert!(migrate_right_dock(&mut order));
+        assert_eq!(
+            order.get(&PanelPosition::RightTop),
+            Some(&im::vector![PanelKind::Emulator, PanelKind::DocumentSymbol])
+        );
+        assert_eq!(
+            order.get(&PanelPosition::RightBottom),
+            Some(&im::vector![PanelKind::AiAssistant, PanelKind::Video])
+        );
+        // Running it again is a no-op (no longer matches the old default).
+        assert!(!migrate_right_dock(&mut order));
+    }
+
+    #[test]
+    fn migrate_right_dock_leaves_customized_layouts_alone() {
+        // The user moved the assistant somewhere deliberate → untouched.
+        let mut order = PanelOrder::new();
+        order.insert(
+            PanelPosition::RightTop,
+            im::vector![PanelKind::AiAssistant, PanelKind::Emulator],
+        );
+        let before = order.clone();
+        assert!(!migrate_right_dock(&mut order));
+        assert_eq!(order, before);
+    }
+
+    #[test]
+    fn fresh_default_shows_emulator_and_assistant_together() {
+        let order = default_panel_order();
+        // Emulator is the active (first) RightTop tab on a fresh workspace…
+        assert_eq!(
+            order.get(&PanelPosition::RightTop).and_then(|v| v.front()),
+            Some(&PanelKind::Emulator)
+        );
+        // …and the assistant heads its own, simultaneously-visible section.
+        assert_eq!(
+            order
+                .get(&PanelPosition::RightBottom)
+                .and_then(|v| v.front()),
+            Some(&PanelKind::AiAssistant)
+        );
+    }
 }

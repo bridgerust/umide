@@ -34,7 +34,7 @@ use floem::{
     taffy::AlignItems,
     ui_events::pointer::PointerUpdate,
     unit::PxPctAuto,
-    views::{Container, Decorators, Empty, Label, Stack, dyn_stack, tab},
+    views::{Container, Decorators, Empty, Label, Stack, clip, dyn_stack, tab},
 };
 
 pub fn foldable_panel_section(
@@ -470,7 +470,10 @@ fn panel_view(
     };
     let active_fn =
         move || panel.styles.with(|s| s.get(&position).map(|s| s.active));
-    tab(
+    // clip: a panel's content must not paint outside its section — with two
+    // sections stacked in one dock, un-clipped overflow (e.g. a long device
+    // list) bleeds through the other section's view.
+    clip(tab(
         active_fn,
         panels,
         |p| *p,
@@ -525,13 +528,20 @@ fn panel_view(
             };
             view.style(|s| s.size_pct(100.0, 100.0))
         },
-    )
+    ))
     .style(move |s| {
-        s.size_pct(100.0, 100.0).apply_if(
-            !panel.is_position_shown(&position, true)
-                || panel.is_position_empty(&position, true),
-            |s| s.hide(),
-        )
+        // min size 0: flex children only share the container when they may
+        // shrink below their content's min size — without this, a section with
+        // tall content (e.g. the emulator's device list) hogs the whole dock
+        // and its top/bottom peer collapses to zero height.
+        s.size_pct(100.0, 100.0)
+            .min_height(0.0)
+            .min_width(0.0)
+            .apply_if(
+                !panel.is_position_shown(&position, true)
+                    || panel.is_position_empty(&position, true),
+                |s| s.hide(),
+            )
     })
 }
 

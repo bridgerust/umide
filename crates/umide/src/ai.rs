@@ -1219,12 +1219,15 @@ fn resolve_target(
             umide_emulator::DevicePlatform::Ios => {
                 return Ok(Target::Ios(dev.id.clone()));
             }
-            // An Android `.id` is the AVD name, not an adb serial, so we still
-            // resolve the running serial — but scoped to Android because that's
-            // what the user selected. TODO: prefer a panel-provided adb serial
-            // to disambiguate multiple Android devices (pending DeviceInfo.serial).
+            // Prefer the panel-resolved adb serial (`emulator-<port>`) when the
+            // producer has it — that targets the *exact* device the user is
+            // viewing even with several Android emulators up. Fall back to the
+            // first running serial (the `.id` is only the AVD name, not a serial).
             umide_emulator::DevicePlatform::Android => {
-                return android_serial().map(Target::Android);
+                return match &dev.serial {
+                    Some(serial) => Ok(Target::Android(serial.clone())),
+                    None => android_serial().map(Target::Android),
+                };
             }
         }
     }
@@ -1868,6 +1871,7 @@ mod tests {
             name: "iPhone 15".into(),
             platform: DevicePlatform::Ios,
             state: DeviceState::Running,
+            serial: None, // iOS has no adb serial
         };
         // No explicit arg → target the selected iOS sim directly by its UDID
         // (this branch resolves without touching a real device).
@@ -1882,6 +1886,19 @@ mod tests {
         assert!(
             resolve_target(&serde_json::json!({"platform": "android"}), Some(&ios))
                 .is_err()
+        );
+        // A selected Android device with a panel-resolved serial targets that
+        // exact serial (no device needed — the serial is taken as-is).
+        let android = DeviceInfo {
+            id: "Pixel_9a".into(),
+            name: "Pixel 9a".into(),
+            platform: DevicePlatform::Android,
+            state: DeviceState::Running,
+            serial: Some("emulator-5556".into()),
+        };
+        assert_eq!(
+            resolve_target(&serde_json::json!({}), Some(&android)),
+            Ok(Target::Android("emulator-5556".into()))
         );
     }
 

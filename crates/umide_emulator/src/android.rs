@@ -171,6 +171,16 @@ impl AndroidEmulator {
         Ok(())
     }
 
+    /// A ready-to-spawn `adb logcat` follow-mode command for `serial`, for the
+    /// Device Logs panel: SDK-resolved adb (PATH-independent), no console
+    /// window on Windows, `-v time` for a stable line format. The caller pipes
+    /// stdout and owns the child's lifetime (kill on panel close).
+    pub fn logcat_command(serial: &str) -> Command {
+        let mut cmd = quiet_command("adb");
+        cmd.args(["-s", serial, "logcat", "-v", "time"]);
+        cmd
+    }
+
     /// The gRPC port a running emulator is serving on, read from its discovery
     /// file so the panel connects to the *right* device instead of assuming the
     /// default 8554. Each running emulator writes `<temp>/avd/running/pid_*.ini`

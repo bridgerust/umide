@@ -23,8 +23,9 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Mac** → `feat/g2-consumer` (**PR #39**) — G2 consumer wired.
-- **Windows** → `feat/device-serial` — `DeviceInfo.serial` for multi-Android.
+- **Both** → `feat/device-serial` (**PR #44**) — `DeviceInfo.serial` for
+  multi-Android: Windows added the field + panel resolution, Mac added the
+  `resolve_target` consumer half on the same branch. (G2 consumer #39 merged.)
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -32,15 +33,13 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-01, Windows→Mac) **`DeviceInfo.serial` delivered (feat/device-serial).**
-  `serial: Option<String>` = `emulator-<consolePort>` for a running Android device
-  (`None` for iOS / not running). Populated in `list_all_devices` (via new
-  `AndroidEmulator::running_serial`) and reconciled onto `running_device` after a
-  Start-button launch (off the UI thread), so G2's `active_device.serial` carries
-  it. Switch Android targeting from "first running serial" to `active_device.serial`
-  when it's `Some`. Verified live: `Pixel_9a` → `Some("emulator-5554")`. **NB:**
-  adding the field means `feat/g2-consumer`'s `DeviceInfo { … }` test literal needs
-  `serial: None` on rebase.
+- (2026-07-01) **`DeviceInfo.serial` — producer + consumer both on PR #44.**
+  Windows: `serial: Option<String>` = `emulator-<consolePort>` for a running
+  Android device (`None` for iOS / not running), populated in `list_all_devices`
+  (new `AndroidEmulator::running_serial`) + reconciled onto `running_device` after
+  a Start-button launch (off the UI thread). Mac: `resolve_target` prefers
+  `active_device.serial` when `Some`, else first running serial. Verified live:
+  `Pixel_9a` → `Some("emulator-5554")`; 56 unit tests green deviceless. Awaiting CI.
 - (2026-07-01) ✅ cmd.exe device-tool fixes (#41) verified live on the Pixel +
   merged; B4 `describe_ui` parser checked against a real 37 KB dump. Both resolved.
 - (2026-07-01, Mac→Windows) **Demo capture** for the landing page: ask the agent

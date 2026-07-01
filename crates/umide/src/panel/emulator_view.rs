@@ -1095,6 +1095,14 @@ pub fn emulator_panel(
             devices.set(dev_list);
         });
 
+        // G2 producer: mirror the running device into shared panel state so the
+        // AI agent (resolve_target in ai.rs) can target the device the user is
+        // viewing. None when nothing is running.
+        let active_device = window_tab_data.panel.active_device;
+        Effect::new(move |_| {
+            active_device.set(running_device.get());
+        });
+
         return PanelBuilder::new(config, position)
             .add(
                 "Emulators",
@@ -1152,6 +1160,11 @@ pub fn emulator_panel(
             }
             devices.set(dev_list);
         });
+
+        // NOTE (macOS): the G2 producer for `panel.active_device` is intentionally
+        // left to the Mac — it can only be tested on macOS, and the "which device
+        // is focused" choice (Android vs iOS) is theirs. Wire it here mirroring the
+        // shown device. The shared signal + Windows/Linux producer are in place.
 
         let android_panel_visible = RwSignal::new(true);
         let ios_panel_visible = RwSignal::new(true);

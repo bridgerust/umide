@@ -484,4 +484,116 @@ mod tests {
         eprintln!("device_tap -> {}", tap["result"]["content"][0]["text"]);
         assert_eq!(tap["result"]["isError"], false);
     }
+
+    /// The whole feature end-to-end: the REAL `claude` CLI (machine login, no
+    /// API key) driving the device through this MCP server. Needs a running
+    /// emulator + a logged-in `claude`. Run with:
+    ///   cargo test -p umide-app --lib -- --ignored live_claude --nocapture
+    #[test]
+    #[ignore = "needs a running emulator + a logged-in `claude` CLI"]
+    fn live_claude_drives_device_via_mcp() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let server = DeviceServer::start(None).expect("device server");
+        let mcp_config =
+            format!("{{\"mcpServers\":{{{}}}}}", server.mcp_config_entry());
+        let allowed = [
+            "device_screenshot",
+            "describe_ui",
+            "device_tap",
+            "device_swipe",
+            "device_type",
+            "device_key",
+            "device_logs",
+        ]
+        .iter()
+        .map(|t| DeviceServer::tool_ref(t))
+        .collect::<Vec<_>>()
+        .join(",");
+
+        let mut child = Command::new("claude")
+            .args([
+                "--print",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--mcp-config",
+                &mcp_config,
+                "--strict-mcp-config",
+                "--allowedTools",
+                &allowed,
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn claude (is it on PATH + logged in?)");
+
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(
+                b"You control an Android device via the umide-device MCP tools. \
+                  Call device_screenshot to see the screen, say in one line what \
+                  app is showing, then call device_tap with x=540 y=1200. \
+                  Do it now; don't ask for confirmation.",
+            )
+            .unwrap();
+
+        let out = child.wait_with_output().expect("claude finished");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+
+        let mut called = Vec::new();
+        for line in stdout.lines() {
+            if let Ok(v) = serde_json::from_str::<Value>(line) {
+                collect_tool_uses(&v, &mut called);
+            }
+        }
+        eprintln!(
+            "claude exit={:?} called tools: {:?}",
+            out.status.code(),
+            called
+        );
+        let tail = String::from_utf8_lossy(&out.stderr);
+        if !tail.trim().is_empty() {
+            eprintln!(
+                "stderr: {}",
+                tail.lines().take(4).collect::<Vec<_>>().join(" | ")
+            );
+        }
+
+        assert!(
+            called.iter().any(|t| t.contains("device_screenshot")),
+            "claude should have called device_screenshot"
+        );
+        assert!(
+            called.iter().any(|t| t.contains("device_tap")),
+            "claude should have called device_tap"
+        );
+    }
+
+    /// Recursively collect `tool_use` names from a Claude stream-json record.
+    #[cfg(test)]
+    fn collect_tool_uses(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::Object(map) => {
+                if map.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                    if let Some(name) = map.get("name").and_then(|n| n.as_str()) {
+                        out.push(name.to_string());
+                    }
+                }
+                for val in map.values() {
+                    collect_tool_uses(val, out);
+                }
+            }
+            Value::Array(arr) => {
+                for val in arr {
+                    collect_tool_uses(val, out);
+                }
+            }
+            _ => {}
+        }
+    }
 }

@@ -250,6 +250,28 @@
     .foot a:hover { color: var(--text); }
     .foot .fl { display: flex; gap: 22px; }
 
+    /* demo video */
+    .demo-frame { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid var(--glass-brd);
+      box-shadow: 0 40px 120px rgba(0,0,0,0.6); cursor: pointer; max-width: 940px; margin: 0 auto; }
+    .demo-frame img { width: 100%; display: block; filter: brightness(0.55) saturate(1.05); transition: filter 0.3s; }
+    .demo-frame:hover img { filter: brightness(0.68); }
+    .demo-frame::after { content:""; position:absolute; inset:0; background: radial-gradient(circle at center, transparent 34%, rgba(33,37,43,0.4)); pointer-events: none; }
+    .play-btn { position: absolute; inset: 0; margin: auto; width: 90px; height: 90px; border-radius: 50%;
+      display: grid; place-items: center; background: var(--grad); box-shadow: 0 14px 44px rgba(61,164,235,0.55); z-index: 2; transition: transform 0.2s; }
+    .demo-frame:hover .play-btn { transform: scale(1.08); }
+    .play-btn::before { content:""; position:absolute; inset:-16px; border-radius:50%; border:2px solid rgba(61,164,235,0.45); animation: pulse 2.6s ease-out infinite; }
+    .play-btn svg { width: 34px; height: 34px; margin-left: 5px; color: #21252b; }
+    @keyframes pulse { 0% { transform: scale(1); opacity: 0.75; } 100% { transform: scale(1.5); opacity: 0; } }
+    .demo-tag { position: absolute; top: 16px; left: 16px; z-index: 2; font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+      padding: 6px 13px; border-radius: 999px; background: rgba(33,37,43,0.72); border: 1px solid var(--glass-brd); backdrop-filter: blur(6px); }
+    .modal { position: fixed; inset: 0; z-index: 1000; background: rgba(20,22,28,0.88); backdrop-filter: blur(8px); display: none; place-items: center; padding: 24px; }
+    .modal.open { display: grid; }
+    .modal-inner { width: min(1000px, 94vw); aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; border: 1px solid var(--glass-brd);
+      box-shadow: 0 30px 90px rgba(0,0,0,0.7); background: #000; position: relative; }
+    .modal-inner iframe, .modal-inner video { width: 100%; height: 100%; border: 0; display: block; }
+    .modal-close { position: absolute; top: -46px; right: -4px; color: var(--dim); font-size: 32px; line-height: 1; cursor: pointer; background: none; border: none; }
+    .modal-close:hover { color: var(--text); }
+
     /* reveal */
     .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s cubic-bezier(.2,.7,.2,1), transform 0.7s cubic-bezier(.2,.7,.2,1); }
     .reveal.in { opacity: 1; transform: none; }
@@ -281,6 +303,7 @@
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#agents">AI Agents</a>
+      <a href="#demo">Demo</a>
       <a href="https://github.com/bridgerust/umide">GitHub</a>
       <a href="https://github.com/bridgerust/umide/releases">Releases</a>
     </div>
@@ -400,6 +423,18 @@
     </div>
   </section>
 
+  <!-- DEMO VIDEO -->
+  <section class="block wrap" id="demo">
+    <p class="kicker reveal">See it in action</p>
+    <h2 class="h2 reveal">Watch UMIDE build an app</h2>
+    <p class="lead reveal">Prompt an agent, approve its edits, and watch the change land on the embedded device — all without leaving the editor.</p>
+    <div class="demo-frame reveal" id="demo-frame" role="button" tabindex="0" aria-label="Play the UMIDE demo video">
+      <span class="demo-tag">▶ &nbsp;Demo · ~60s</span>
+      <img src="screenshots/emulator-android-running.png" alt="UMIDE demo preview" />
+      <div class="play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+    </div>
+  </section>
+
   <!-- BUILT ON LAPCE -->
   <section class="block wrap">
     <div class="lapce reveal">
@@ -448,7 +483,49 @@
     </div>
   </footer>
 
+  <!-- video lightbox -->
+  <div class="modal" id="video-modal">
+    <div class="modal-inner">
+      <button class="modal-close" id="modal-close" aria-label="Close">×</button>
+      <div id="modal-slot"></div>
+    </div>
+  </div>
+
   <script>
+    // ================================================================
+    //  DEMO VIDEO — set this to publish the demo, then commit:
+    //    • a YouTube video ID   e.g.  "dQw4w9WgXcQ"
+    //    • an mp4 URL or path    e.g.  "screenshots/demo.mp4"
+    //    • leave "" and the play button links to the repo instead.
+    // ================================================================
+    var DEMO_VIDEO = "";
+
+    (function () {
+      var frame = document.getElementById('demo-frame');
+      var modal = document.getElementById('video-modal');
+      var slot = document.getElementById('modal-slot');
+      var closeBtn = document.getElementById('modal-close');
+      if (!frame) return;
+      function isYouTubeId(v) { return /^[a-zA-Z0-9_-]{11}$/.test(v); }
+      function openVideo() {
+        var v = (DEMO_VIDEO || '').trim();
+        if (!v) { window.open('https://github.com/bridgerust/umide', '_blank'); return; }
+        if (/^https?:\/\//.test(v) && !/\.mp4($|\?)/i.test(v) && !isYouTubeId(v)) { window.open(v, '_blank'); return; }
+        if (isYouTubeId(v)) {
+          slot.innerHTML = '<iframe src="https://www.youtube.com/embed/' + v + '?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
+        } else {
+          slot.innerHTML = '<video src="' + v + '" autoplay controls playsinline></video>';
+        }
+        modal.classList.add('open');
+      }
+      function closeVideo() { modal.classList.remove('open'); slot.innerHTML = ''; }
+      frame.addEventListener('click', openVideo);
+      frame.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openVideo(); } });
+      closeBtn.addEventListener('click', closeVideo);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeVideo(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeVideo(); });
+    })();
+
     // thumbnail switcher
     function setMain(img) {
       var m = document.getElementById('main-shot');

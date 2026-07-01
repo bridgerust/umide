@@ -118,6 +118,9 @@ pub enum ApprovalKind {
     /// performs the action itself, UMIDE only decides allow/deny. Nothing is
     /// applied on the UMIDE side — the outcome is mapped to the CLI's contract.
     CliPermission { tool_name: String },
+    /// One-time per-session consent for the assistant to drive the emulator
+    /// (tap/swipe/type/keys). Approve unlocks device input for the session.
+    DeviceControl,
 }
 
 /// The result the UI sends back to the worker after the user decides.
@@ -131,6 +134,15 @@ pub enum ApprovalOutcome {
     EditFailed(String),
     /// The user allowed a CLI permission gate (the CLI will do the action).
     Allowed,
+}
+
+/// Map an approval outcome to a device-control consent decision: anything the
+/// user didn't reject (or that didn't fail to apply) unlocks device input.
+fn consent_granted(outcome: &ApprovalOutcome) -> bool {
+    !matches!(
+        outcome,
+        ApprovalOutcome::Rejected | ApprovalOutcome::EditFailed(_)
+    )
 }
 
 /// A mutating action the agent wants to take, awaiting the user's decision.
@@ -223,6 +235,7 @@ pub struct LlmRunner {
     pub history: Arc<Mutex<Vec<Message>>>,
     pub approvals: ApprovalQueue,
     pub trigger: ExtSendTrigger,
+    pub device_consent: Arc<Mutex<Option<bool>>>,
 }
 
 #[async_trait(?Send)]
@@ -232,6 +245,7 @@ impl AgentRunner for LlmRunner {
             self.workspace.clone(),
             self.approvals.clone(),
             self.trigger,
+            self.device_consent.clone(),
         ));
         let seed = self.history.lock().unwrap().clone();
         let mut agent =
@@ -311,6 +325,7 @@ pub fn spawn_turn(
     queue: EventQueue,
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
+    device_consent: Arc<Mutex<Option<bool>>>,
     cancel: Arc<AtomicBool>,
 ) {
     let err_queue = queue.clone();
@@ -344,6 +359,7 @@ pub fn spawn_turn(
                     history,
                     approvals,
                     trigger,
+                    device_consent,
                 };
                 runner.run(user_text, push, cancel).await;
             });
@@ -643,6 +659,10 @@ pub struct EditorTools {
     reader: ReadOnlyTools,
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
+    /// Per-session consent for driving the emulator: `None` until the user is
+    /// asked once, then `Some(granted)`. Shared across turns (owned by the panel)
+    /// so the agent is gated once per session, not once per turn.
+    device_consent: Arc<Mutex<Option<bool>>>,
 }
 
 impl EditorTools {
@@ -650,12 +670,34 @@ impl EditorTools {
         root: Option<PathBuf>,
         approvals: ApprovalQueue,
         trigger: ExtSendTrigger,
+        device_consent: Arc<Mutex<Option<bool>>>,
     ) -> Self {
         Self {
             reader: ReadOnlyTools::new(root),
             approvals,
             trigger,
+            device_consent,
         }
+    }
+
+    /// Gate on the one-time per-session consent to control the device. Reads and
+    /// screenshots stay ungated; this only fences the *input* tools.
+    async fn ensure_device_consent(&self) -> bool {
+        if let Some(v) = *self.device_consent.lock().unwrap() {
+            return v;
+        }
+        let outcome = self
+            .request_approval(
+                "Let the assistant control the emulator?".into(),
+                "It will tap, swipe, type, and press keys on the running device \
+                 to test and verify — for this session."
+                    .into(),
+                ApprovalKind::DeviceControl,
+            )
+            .await;
+        let granted = consent_granted(&outcome);
+        *self.device_consent.lock().unwrap() = Some(granted);
+        granted
     }
 
     /// Surface an approval card to the UI and block until the user decides.
@@ -938,10 +980,21 @@ impl ToolExecutor for EditorTools {
             "edit_file" => self.edit_file(&call.input).await,
             "run_command" => self.run_command(&call.input).await,
             "screenshot_device" => self.screenshot_device(&call.input),
-            "tap" => self.tap(&call.input),
-            "swipe" => self.swipe(&call.input),
-            "type_text" => self.type_text(&call.input),
-            "press_key" => self.press_key(&call.input),
+            // Device INPUT is gated by a one-time per-session consent; reads
+            // (screenshot/logs) are not.
+            "tap" | "swipe" | "type_text" | "press_key" => {
+                if !self.ensure_device_consent().await {
+                    return ToolOutput::error(
+                        "Device control was declined for this session.",
+                    );
+                }
+                match call.name.as_str() {
+                    "tap" => self.tap(&call.input),
+                    "swipe" => self.swipe(&call.input),
+                    "type_text" => self.type_text(&call.input),
+                    _ => self.press_key(&call.input),
+                }
+            }
             "read_logs" => self.read_logs(&call.input),
             other => ToolOutput::error(format!("unknown tool: {other}")),
         }
@@ -1396,6 +1449,17 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    #[test]
+    fn device_consent_maps_approve_and_reject() {
+        // Approving (Allowed / CommandApproved / EditApplied) unlocks device
+        // input; only Rejected or a failed edit keeps it locked.
+        assert!(consent_granted(&ApprovalOutcome::Allowed));
+        assert!(consent_granted(&ApprovalOutcome::CommandApproved));
+        assert!(consent_granted(&ApprovalOutcome::EditApplied));
+        assert!(!consent_granted(&ApprovalOutcome::Rejected));
+        assert!(!consent_granted(&ApprovalOutcome::EditFailed("io".into())));
     }
 
     #[test]

@@ -1261,11 +1261,14 @@ fn shell_command(cmd: &str) -> std::process::Command {
 /// or a wedged daemon — must never freeze the agent turn indefinitely.
 const DEVICE_CMD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
-/// Run a device shell command with a timeout, retrying **once** on a transient
-/// failure — a timeout or an adb daemon/attach race that typically clears on an
-/// immediate retry. Genuine failures (bad command, missing binary) return as-is.
-fn adb_sh(cmd: &str) -> std::io::Result<std::process::Output> {
-    match output_with_timeout(shell_command(cmd), DEVICE_CMD_TIMEOUT) {
+/// Run a command (built fresh each attempt by `build`) with a timeout, retrying
+/// **once** on a transient failure — a timeout or an adb daemon/attach race that
+/// typically clears immediately. Genuine failures (bad command, missing binary)
+/// return as-is.
+fn run_with_retry(
+    build: impl Fn() -> std::process::Command,
+) -> std::io::Result<std::process::Output> {
+    match output_with_timeout(build(), DEVICE_CMD_TIMEOUT) {
         // Success, or a real failure a retry wouldn't fix — return it.
         Ok(out)
             if out.status.success()
@@ -1280,9 +1283,38 @@ fn adb_sh(cmd: &str) -> std::io::Result<std::process::Output> {
         // Transient adb state or a timeout: back off briefly, then try once more.
         _ => {
             std::thread::sleep(std::time::Duration::from_millis(400));
-            output_with_timeout(shell_command(cmd), DEVICE_CMD_TIMEOUT)
+            output_with_timeout(build(), DEVICE_CMD_TIMEOUT)
         }
     }
+}
+
+/// Run a command string through the platform shell (`sh -c` / `cmd /C`). Use
+/// this only for macOS-only tools (simctl/idb) or commands with no arguments to
+/// escape — on Windows, `cmd /C` re-parses `> | & && '…'` as operators and keeps
+/// quotes, so it must NOT carry device commands with shell metacharacters. For
+/// `adb` prefer [`run_tool`], which bypasses the shell entirely.
+fn adb_sh(cmd: &str) -> std::io::Result<std::process::Output> {
+    run_with_retry(|| shell_command(cmd))
+}
+
+/// Run a tool binary (`adb`, …) **directly** — argv, no host shell — so its
+/// arguments are never re-parsed by `cmd.exe`/`sh`. This is the correct path for
+/// `adb`: on Windows a `cmd /C "<string>"` treats `> | & && '…'` as operators and
+/// leaves quotes in place, mangling device commands (uiautomator `&&`, `input
+/// text '…'`, `logcat | grep`). Same PATH, timeout and transient-retry as
+/// [`adb_sh`], plus `CREATE_NO_WINDOW` so the GUI app flashes no console.
+fn run_tool(program: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
+    run_with_retry(|| {
+        let mut c = std::process::Command::new(program);
+        c.args(args).env("PATH", tool_path_env());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            c.creation_flags(CREATE_NO_WINDOW);
+        }
+        c
+    })
 }
 
 /// adb surfaces a few transient states (daemon-restart race, a device still
@@ -1304,7 +1336,7 @@ fn shq(s: &str) -> String {
 
 /// Serial of the first running Android device (e.g. `emulator-5554`).
 fn android_serial() -> Result<String, String> {
-    let out = adb_sh("adb devices").map_err(|e| {
+    let out = run_tool("adb", &["devices"]).map_err(|e| {
         format!("could not run adb ({e}); is the Android SDK installed?")
     })?;
     let text = String::from_utf8_lossy(&out.stdout);
@@ -1337,9 +1369,13 @@ fn ios_udid() -> Result<String, String> {
     Err("no booted iOS simulator".to_string())
 }
 
-/// Run `adb -s <serial> shell <cmd>` and report success/failure for a card.
-fn adb_input(serial: &str, shell_cmd: &str, summary: String) -> ToolOutput {
-    match adb_sh(&format!("adb -s {serial} shell {shell_cmd}")) {
+/// Run `adb -s <serial> shell <device_cmd>` and report success/failure for a
+/// card. `device_cmd` is the whole command line for the DEVICE's shell (e.g.
+/// `input tap 100 200`, `input text 'a b'`); it is passed as a single argv
+/// element to `adb` — the HOST shell is bypassed, so `cmd.exe` on Windows can't
+/// mangle its quotes/metacharacters. The device's own `sh` parses it.
+fn adb_input(serial: &str, device_cmd: &str, summary: String) -> ToolOutput {
+    match run_tool("adb", &["-s", serial, "shell", device_cmd]) {
         Ok(out) if out.status.success() => ToolOutput::ok(summary),
         Ok(out) => ToolOutput::error(format!(
             "{summary} failed: {}",
@@ -1401,7 +1437,7 @@ fn downscale_png(bytes: &[u8], max_edge: u32) -> Vec<u8> {
 }
 
 fn android_screenshot(serial: &str) -> ToolOutput {
-    match adb_sh(&format!("adb -s {serial} exec-out screencap -p")) {
+    match run_tool("adb", &["-s", serial, "exec-out", "screencap", "-p"]) {
         Ok(out) if out.status.success() && !out.stdout.is_empty() => {
             let png = downscale_png(&out.stdout, SHOT_MAX_EDGE);
             ToolOutput::with_image(format!("screenshot of {serial}"), &png)
@@ -1458,43 +1494,78 @@ fn ios_press_key(udid: &str, key: &str) -> ToolOutput {
 }
 
 fn android_logs(serial: &str, lines: i64, filter: &str) -> ToolOutput {
-    let mut cmd = format!("adb -s {serial} logcat -d -t {lines}");
-    if !filter.is_empty() {
-        cmd.push_str(&format!(" | grep -i {}", shq(filter)));
-    }
-    match adb_sh(&cmd) {
+    // Run bare logcat and filter in Rust: piping to `grep` would go through the
+    // host shell (broken on Windows, where `grep` isn't on PATH and `cmd.exe`
+    // keeps the quotes) — this is identical to `grep -i` and works everywhere.
+    match run_tool(
+        "adb",
+        &["-s", serial, "logcat", "-d", "-t", &lines.to_string()],
+    ) {
         Ok(out) => ToolOutput::ok(format!(
             "logcat (last {lines} lines)\n{}",
-            clip(&String::from_utf8_lossy(&out.stdout), MAX_CMD_OUTPUT)
+            clip(
+                &filter_lines(&String::from_utf8_lossy(&out.stdout), filter),
+                MAX_CMD_OUTPUT
+            )
         )),
         Err(e) => ToolOutput::error(format!("logcat: {e}")),
     }
 }
 
-/// Dump the current Android view hierarchy (`uiautomator dump`) and render it
-/// as a compact, tappable element listing. `uiautomator` writes the XML to a
-/// file on the device; we dump then `cat` it in one shell round-trip.
+/// Keep only lines that contain `needle` (case-insensitive). Empty `needle`
+/// returns the text unchanged. The in-process replacement for `| grep -i`.
+fn filter_lines(text: &str, needle: &str) -> String {
+    if needle.is_empty() {
+        return text.to_string();
+    }
+    let needle = needle.to_lowercase();
+    text.lines()
+        .filter(|l| l.to_lowercase().contains(&needle))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Dump the current Android view hierarchy (`uiautomator dump`) and render it as
+/// a compact, tappable element listing. Done as **two plain adb calls** — dump
+/// the XML to a file on the device, then `cat` it back — with no shell operators
+/// (`&&`, `>`) or quotes, so `cmd.exe` on Windows can't mis-parse the command
+/// (a single `exec-out '… && …'` string fails there).
 fn android_describe_ui(serial: &str) -> ToolOutput {
-    let cmd = format!(
-        "adb -s {serial} exec-out 'uiautomator dump /sdcard/umide_ui.xml \
-         >/dev/null 2>&1 && cat /sdcard/umide_ui.xml'"
-    );
-    match adb_sh(&cmd) {
-        Ok(out) if out.status.success() => {
+    // 1. Write the hierarchy to a file on the device. uiautomator prints its
+    //    status to stdout ("UI hierchary dumped to: …"); we ignore that and read
+    //    the file next. A spawn/timeout error is fatal; a non-zero exit is not
+    //    (some builds warn yet still write the file), so the `<node` check below
+    //    is the real gate.
+    if let Err(e) = run_tool(
+        "adb",
+        &[
+            "-s",
+            serial,
+            "shell",
+            "uiautomator",
+            "dump",
+            "/sdcard/umide_ui.xml",
+        ],
+    ) {
+        return ToolOutput::error(format!("uiautomator dump: {e}"));
+    }
+    // 2. Read the XML back with a plain `exec-out cat` (no operators/quotes).
+    match run_tool(
+        "adb",
+        &["-s", serial, "exec-out", "cat", "/sdcard/umide_ui.xml"],
+    ) {
+        Ok(out) => {
             let xml = String::from_utf8_lossy(&out.stdout);
-            if !xml.contains("<node") {
-                return ToolOutput::error(format!(
+            if xml.contains("<node") {
+                let listing = parse_ui_dump(&xml);
+                ToolOutput::ok(format!("UI elements (x,y = tap center):\n{listing}"))
+            } else {
+                ToolOutput::error(format!(
                     "uiautomator produced no hierarchy: {}",
                     clip(xml.trim(), 200)
-                ));
+                ))
             }
-            let listing = parse_ui_dump(&xml);
-            ToolOutput::ok(format!("UI elements (x,y = tap center):\n{listing}"))
         }
-        Ok(out) => ToolOutput::error(format!(
-            "uiautomator dump failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        )),
         Err(e) => ToolOutput::error(format!("uiautomator: {e}")),
     }
 }
@@ -1790,6 +1861,18 @@ mod tests {
     fn parse_ui_dump_reports_empty_hierarchy() {
         let out = parse_ui_dump("<hierarchy></hierarchy>");
         assert!(out.contains("custom-rendered"));
+    }
+
+    #[test]
+    fn filter_lines_matches_grep_i() {
+        let log =
+            "I Choreographer: skipped\nE MyApp: NullPointerError\nW System: low mem";
+        // Case-insensitive substring, like `grep -i error` (matches "Error").
+        assert_eq!(filter_lines(log, "error"), "E MyApp: NullPointerError");
+        // Empty needle → unchanged.
+        assert_eq!(filter_lines(log, ""), log);
+        // No match → empty.
+        assert_eq!(filter_lines(log, "zzz"), "");
     }
 
     #[test]

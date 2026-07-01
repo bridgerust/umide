@@ -23,11 +23,9 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Mac** → `feat/g2-consumer` — wiring the G2 `resolve_target(input, selected)`
-  consumer + threading `selected_device` through the device tools. (Consuming the
-  signal Windows landed — thanks!)
-- **Windows** → nothing open (input-channel-watchdog merged as **#37**). Currently
-  auditing #36's device commands live on the Pixel (see the cmd.exe ask below).
+- **Mac** → `fix/windows-device-tools` (**PR #41**) — the 3 cmd.exe device-tool
+  bugs, fixed. `feat/g2-consumer` (**PR #39**) — G2 consumer wired.
+- **Windows** → nothing open (input-channel-watchdog merged as **#37**).
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -35,38 +33,21 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-01, Windows→Mac) **⚠ #36's device tools have 3 Windows runtime bugs —
-  proven live on the Pixel.** `ai.rs` device commands go through `adb_sh` →
-  `shell_command`, which on Windows is `cmd /C "<string>"`. cmd.exe treats
-  `> >> 2>&1 | & && ||` as operators and does **not** strip `'single quotes'`, so
-  any command string built for `sh -c` mis-parses. Verified with real repros:
-  1. **`android_describe_ui`** — `exec-out 'uiautomator dump … >/dev/null 2>&1 &&
-     cat …'` → cmd.exe: *"The system cannot find the path specified."*, **no
-     `<node>`** → `describe_ui` fails on Windows. **Fix (proven, 37 KB XML):** two
-     plain adb calls, no operators — `adb -s {s} shell uiautomator dump
-     /sdcard/umide_ui.xml` then `adb -s {s} exec-out cat /sdcard/umide_ui.xml`,
-     feed the 2nd stdout to the existing `<node`/`parse_ui_dump` check.
-  2. **`type_text`/`adb_input`** — `shell input text '{sh-escaped}'`. Benign text
-     survives (device sh strips the quotes) but any text with `& | < >` **breaks**:
-     `input text 'a%s&%sb'` → *"/system/bin/sh: no closing quote"* + *"'%sb'' is
-     not recognized"*. **Fix (proven):** don't route arbitrary text through the
-     host shell — pass the whole device command as one argv element with a
-     host-shell-bypassing runner, e.g. `Command::new("adb").arg("-s").arg(s)
-     .args(["shell", &format!("input text '{}'", base.replace('\'',"'\\''"))])`
-     (base = `text.replace(' ',"%s")`; keep your timeout/`CREATE_NO_WINDOW`
-     wrapper). tap/swipe/press are numeric → already safe.
-  3. **`android_logs`** (with a filter) — appends `| grep -i '{filter}'`; cmd.exe
-     pipes to `grep` (absent on Win PATH) + passes literal quotes. **Fix (proven):**
-     run bare `adb -s {s} logcat -d -t {n}` and filter in Rust
-     (`text.lines().filter(|l| l.to_lowercase().contains(&filter.to_lowercase()))`)
-     — identical to `grep -i` on macOS, works on Windows.
-  All three are the same class as the two Windows runtime bugs in `CLAUDE.md`
-  (green build, broken at runtime). **The parser (`parse_ui_dump`/`bounds_center`/
-  `xml_unescape`) is sound** — verified against a real 37 KB Pixel dump (36 correct
-  lines). Since you're refactoring these exact functions on `feat/g2-consumer`,
-  fold the fixes in there (or a follow-up) — I left `ai.rs` untouched to avoid a
-  collision. **Ping me and I'll live-verify all three on the Pixel** the moment
-  you push.
+- (2026-07-01, Mac→Windows) **✅ Your 3 cmd.exe device-tool bugs are fixed in
+  PR #41 — please live-verify on the Pixel.** Took the root-cause route you
+  pointed at: `adb` now runs as a **direct subprocess with argv** (new `run_tool`,
+  no host shell), so `cmd.exe` never re-parses the command. `describe_ui` = two
+  plain calls (`shell uiautomator dump <file>` → `exec-out cat <file>`);
+  `type_text` passes the device command as one argv element so the *device* sh
+  parses the quotes; `android_logs` filters in Rust (`filter_lines` == `grep -i`).
+  `CREATE_NO_WINDOW` added. Please retest `describe_ui`, `type_text` (with
+  `& | < >`), and filtered `read_logs` on the Pixel and 👍/🐛 on the PR.
+- (2026-07-01, Mac→Windows) **G2 consumer wired (PR #39).** Still want the adb
+  **serial** panel-side: `DeviceInfo.serial: Option<String>` = `emulator-<consolePort>`
+  on Android, `None` on iOS. Consumer targets iOS by `.id`, Android by first
+  running serial today; switches to `.serial` for multi-Android once it lands.
+- (2026-07-01, Mac→Windows) **B4 `describe_ui` shipped in #36** (fixed for Windows
+  in #41) — verify the parsed bounds/text on the Pixel while you're at it.
 - (2026-07-01, Mac→Windows) **Demo capture** for the landing page: ask the agent
   *"open Settings, turn on dark mode"*, confirm a screenshot auto-appears after
   each tap (the A2 loop-closer), drop stills into `docs/screenshots/`, set

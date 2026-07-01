@@ -100,6 +100,12 @@ pub struct PanelData {
     pub common: Rc<CommonData>,
     pub android_frame: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>,
     pub ios_frame: RwSignal<Option<Arc<umide_emulator::decoder::DecodedFrame>>>,
+    /// The emulator/simulator device the user currently has running and shown in
+    /// the Emulator panel, or `None`. Producer: the Emulator panel (mirrors its
+    /// running/visible device). Consumer: the AI agent's `resolve_target`, so a
+    /// turn drives the device the user is viewing instead of "first adb device"
+    /// (cross-machine ask G2). `DeviceInfo` carries `.id` (AVD/UDID) + `.platform`.
+    pub active_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -128,6 +134,7 @@ impl PanelData {
         );
         let android_frame = cx.create_rw_signal(None);
         let ios_frame = cx.create_rw_signal(None);
+        let active_device = cx.create_rw_signal(None);
 
         Self {
             panels,
@@ -138,6 +145,7 @@ impl PanelData {
             common,
             android_frame,
             ios_frame,
+            active_device,
         }
     }
 

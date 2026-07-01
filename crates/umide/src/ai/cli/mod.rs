@@ -19,6 +19,7 @@
 pub mod claude;
 pub mod codex;
 pub mod detect;
+pub mod device_server;
 pub mod framer;
 pub mod gemini;
 pub mod permission_server;

@@ -1,4 +1,42 @@
-# Changelog
+# UMIDE Changelog
+
+UMIDE is a fork of [Lapce](https://github.com/lapce/lapce). This file lists
+UMIDE's releases; the inherited upstream Lapce changelog is preserved below under
+**Upstream (Lapce)**. Full per-release notes are on the
+[Releases page](https://github.com/bridgerust/umide/releases).
+
+## v0.3.0
+
+**A mobile IDE that codes with you.**
+
+- **Embedded Android emulator on Windows & Linux** (preview) — live frames,
+  pointer tap/drag, hardware buttons (Home/Back/Recents/Power), keyboard text, and
+  a screenshot button. macOS keeps the full Android + iOS embedding.
+- **The AI assistant sees and drives your device.** The built-in agent — and
+  **Claude Code** — can screenshot the running emulator, reason, tap/swipe/type,
+  and read logs to test their own changes (the see→act→verify closed loop),
+  targeting the device you're viewing.
+- **Key-free agent CLIs.** Point the assistant at your own **Claude Code**,
+  **Codex**, or **Gemini** login — no API key to paste. Claude Code edits and runs
+  commands with per-action approval and is given UMIDE's mobile-first context so it
+  behaves like a native part of the IDE, not a generic code agent.
+- **Next-level AI panel** — redesigned, markdown rendering (syntax-highlighted
+  code), and **multiple chat sessions** (New Chat + a switcher) persisted per
+  workspace, so tasks don't bleed together.
+- **UMIDE branding** — new app logo (replacing the Lapce mark).
+- Cross-platform device tooling hardening (direct-argv `adb` on Windows) and
+  large CI build-time reductions.
+
+## v0.2.0
+
+- First multi-platform release: **notarized macOS DMG, Windows MSI, Linux `.deb`**.
+- Built-in **AI coding assistant** (BYO-key: Claude/OpenAI/DeepSeek/Gemini),
+  approval-gated, that reads code, proposes edits, and runs commands.
+- Embedded Android Emulator and iOS Simulator panels (macOS).
+
+---
+
+# Upstream (Lapce)
 
 ## Unreleased
 

@@ -76,6 +76,15 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --workspace
 
+      # Run first-party unit tests (agent engine + editor glue). Linux-only: the
+      # logic is OS-independent, the target is already warm from Build, so this is
+      # cheap and keeps the Windows/macOS legs fast. A full `--workspace` test run
+      # is avoided on purpose — a vendored crate ships a broken test — so this
+      # names the crates whose `#[test]`s we actually own and must keep green.
+      - name: Run unit tests
+        if: startsWith(matrix.os, 'ubuntu')
+        run: cargo test -p umide_agent -p umide-app --lib
+
       # Verify the Windows-only portable feature still compiles. Kept last so it
       # doesn't disturb the warm target the doc tests rely on. No `cargo clean`:
       # with debuginfo off (see env) peak disk stays below the previous

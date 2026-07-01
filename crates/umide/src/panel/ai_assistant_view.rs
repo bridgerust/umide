@@ -8,21 +8,31 @@ use std::sync::{Arc, Mutex};
 use floem::{
     View,
     ext_event::{ExtSendTrigger, create_trigger, update_signal_from_channel},
+    peniko::Color,
     prelude::{Key, NamedKey, SignalGet, SignalUpdate},
-    reactive::{ReadSignal, RwSignal},
-    views::{Decorators, Label, Scroll, Stack, dyn_stack, text_input},
+    reactive::{Effect, ReadSignal, RwSignal},
+    views::{
+        Container, Decorators, Empty, Label, Scroll, Stack, dyn_stack, rich_text,
+        text_input,
+    },
 };
 use tokio::sync::oneshot;
 use umide_agent::{AgentEvent, Message, ProviderConfig, ProviderKind};
 
 use crate::ai::cli::detect::CliStatus;
 use crate::ai::cli::{AssistantBackend, CliKind};
+use crate::markdown::{MarkdownContent, parse_markdown};
 use crate::{
     ai,
     config::{UmideConfig, color::UmideColor},
     panel::position::PanelPosition,
     window_tab::WindowTabData,
 };
+
+/// Transparent color, for un-highlighted borders.
+const TRANSPARENT: Color = Color::from_rgba8(0, 0, 0, 0);
+/// Subtle white overlay for hover/active fills.
+const OVERLAY: Color = Color::from_rgba8(255, 255, 255, 22);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum MsgRole {
@@ -75,14 +85,13 @@ pub fn ai_assistant_panel(
     );
     let status = RwSignal::new(if has_key.get_untracked() {
         format!(
-            "{} ready — read-only, so your editor and emulators stay untouched.",
+            "{} ready — edits and commands ask your approval first.",
             initial_kind.label()
         )
     } else {
-        format!(
-            "Add your {} API key below to enable it.",
-            initial_kind.label()
-        )
+        "No API key needed — pick Claude Code or Codex above (your own login), \
+         or add an API key below."
+            .to_string()
     });
 
     // Which assistant backend is selected: a BYO-key LLM provider (default) or
@@ -119,6 +128,36 @@ pub fn ai_assistant_panel(
                 cfg!(not(windows)) && CliStatus::detect(CliKind::Codex).installed(),
             );
             let _ = gtx.send(CliStatus::detect(CliKind::GeminiCli).installed());
+        });
+    }
+
+    // Key-free by default: if no API key is configured, auto-select an installed
+    // agent CLI (Claude Code, then Codex) once detection finishes, so the
+    // assistant just works with the user's existing login — no key to paste.
+    // Only fires while the backend is still the untouched LLM default, so it
+    // never overrides a manual pick.
+    if has_workspace && !has_key.get_untracked() {
+        Effect::new(move |_| {
+            let claude = claude_installed.get();
+            let codex = codex_installed.get();
+            if !matches!(backend.get_untracked(), AssistantBackend::Llm(_)) {
+                return;
+            }
+            let pick = if claude == Some(true) {
+                Some(CliKind::ClaudeCode)
+            } else if codex == Some(true) {
+                Some(CliKind::Codex)
+            } else {
+                None
+            };
+            if let Some(kind) = pick {
+                backend.set(AssistantBackend::Cli(kind));
+                status.set(format!(
+                    "No API key found — using {} (your existing login). Ask \
+                     away, or pick another backend above.",
+                    kind.label()
+                ));
+            }
         });
     }
 
@@ -166,11 +205,15 @@ pub fn ai_assistant_panel(
     }
 
     let transcript = Scroll::new(
-        dyn_stack(
-            move || messages.get(),
-            |m| m.id,
-            move |m| message_view(m, config),
-        )
+        Stack::new((
+            welcome_view(backend, has_key, input, messages, config),
+            dyn_stack(
+                move || messages.get(),
+                |m| m.id,
+                move |m| message_view(m, config),
+            )
+            .style(|s| s.flex_col().width_full()),
+        ))
         .style(|s| s.flex_col().width_full().padding(8.0)),
     )
     .style(|s| s.flex_grow(1.0).width_full())
@@ -182,11 +225,19 @@ pub fn ai_assistant_panel(
     });
 
     let status_line = Label::derived(move || status.get()).style(move |s| {
-        s.width_full()
-            .padding_horiz(8.0)
+        let s = s
+            .width_full()
+            .padding_horiz(10.0)
             .padding_vert(4.0)
             .font_size(11.0)
-            .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+            .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM));
+        // Hide the line entirely when there's nothing to say, so it doesn't leave
+        // a dead strip of chrome.
+        if status.get().trim().is_empty() {
+            s.hide()
+        } else {
+            s
+        }
     });
 
     // `Rc` so the same send action backs both the Send button and Enter-to-send.
@@ -215,9 +266,10 @@ pub fn ai_assistant_panel(
     let input_box = text_input(input)
         .style(move |s| {
             s.flex_grow(1.0)
-                .padding(6.0)
+                .padding_horiz(10.0)
+                .padding_vert(8.0)
                 .border(1.0)
-                .border_radius(6.0)
+                .border_radius(8.0)
                 .border_color(config.get().color(UmideColor::LAPCE_BORDER))
         })
         // Plain Enter (no modifiers) sends; while streaming, ignore it so the
@@ -238,6 +290,17 @@ pub fn ai_assistant_panel(
         } else {
             "Send".to_string()
         }
+    })
+    .style(move |s| {
+        if streaming.get() {
+            s.color(config.get().color(UmideColor::PANEL_FOREGROUND))
+        } else {
+            s.color(
+                config
+                    .get()
+                    .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+            )
+        }
     }),))
     .on_click_stop(move |_| {
         if streaming.get_untracked() {
@@ -247,19 +310,34 @@ pub fn ai_assistant_panel(
         }
     })
     .style(move |s| {
-        s.padding_horiz(12.0)
-            .padding_vert(6.0)
+        let s = s
+            .padding_horiz(16.0)
+            .padding_vert(8.0)
+            .margin_left(6.0)
             .items_center()
-            .border(1.0)
-            .border_radius(6.0)
-            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
-            .cursor(floem::style::CursorStyle::Pointer)
-            .hover(|s| {
-                s.background(floem::peniko::Color::from_rgba8(255, 255, 255, 20))
-            })
+            .border_radius(8.0)
+            .cursor(floem::style::CursorStyle::Pointer);
+        if streaming.get() {
+            // Stop: outlined + neutral, so it reads as a secondary action.
+            s.border(1.0)
+                .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+                .hover(|s| s.background(OVERLAY))
+        } else {
+            // Send: solid primary — the obvious main action.
+            let bg = config
+                .get()
+                .color(UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND);
+            let accent = config.get().color(UmideColor::EDITOR_LINK);
+            s.background(bg).hover(move |s| s.background(accent))
+        }
     });
-    let input_row = Stack::new((input_box, send_button))
-        .style(|s| s.width_full().items_center().padding(6.0));
+    let input_row = Stack::new((input_box, send_button)).style(move |s| {
+        s.width_full()
+            .items_center()
+            .padding(8.0)
+            .border_top(1.0)
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+    });
 
     let approvals_view = {
         let senders = senders.clone();
@@ -345,11 +423,37 @@ pub fn ai_assistant_panel(
         }
     });
 
-    // Backend selector. Left group: BYO-key API providers (approval-gated, the
-    // safe default). Right of the divider: external agent CLIs that run in your
-    // project folder. Claude Code (P1a) is read-only — reads & explains, can't
-    // edit or run commands yet.
-    let provider_row = Stack::new((
+    // Backend selector, grouped so the value prop is obvious. Top row = the
+    // key-free path (agent CLIs that sign in with your own subscription); bottom
+    // row = BYO-key API providers. A dim label prefixes each group.
+    let group_label = move |text: &'static str| {
+        Label::new(text).style(move |s| {
+            s.width(58.0)
+                .font_size(10.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
+        })
+    };
+    let keyfree_row = Stack::new((
+        group_label("No key"),
+        cli_button(
+            CliKind::ClaudeCode,
+            claude_installed,
+            backend,
+            status,
+            config,
+        ),
+        cli_button(CliKind::Codex, codex_installed, backend, status, config),
+        cli_button(
+            CliKind::GeminiCli,
+            gemini_installed,
+            backend,
+            status,
+            config,
+        ),
+    ))
+    .style(|s| s.width_full().items_center());
+    let apikey_row = Stack::new((
+        group_label("API key"),
         provider_button(
             ProviderKind::Anthropic,
             provider_kind,
@@ -382,27 +486,15 @@ pub fn ai_assistant_panel(
             status,
             config,
         ),
-        Label::new("·").style(move |s| {
-            s.padding_horiz(6.0)
-                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
-        }),
-        cli_button(
-            CliKind::ClaudeCode,
-            claude_installed,
-            backend,
-            status,
-            config,
-        ),
-        cli_button(CliKind::Codex, codex_installed, backend, status, config),
-        cli_button(
-            CliKind::GeminiCli,
-            gemini_installed,
-            backend,
-            status,
-            config,
-        ),
     ))
-    .style(|s| s.width_full().items_center().padding(6.0));
+    .style(|s| s.width_full().items_center().margin_top(4.0));
+    let provider_row = Stack::new((keyfree_row, apikey_row)).style(move |s| {
+        s.flex_col()
+            .width_full()
+            .padding(8.0)
+            .border_bottom(1.0)
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+    });
 
     Stack::new((
         provider_row,
@@ -436,9 +528,13 @@ fn provider_button(
             let ok = ProviderConfig::resolve(kind, ai::load_api_key(kind)).is_ok();
             has_key.set(ok);
             status.set(if ok {
-                format!("{} ready — read-only.", kind.label())
+                format!("{} ready — using your saved API key.", kind.label())
             } else {
-                format!("Add your {} API key below to enable it.", kind.label())
+                format!(
+                    "Add your {} API key below — or go key-free with Claude Code \
+                     / Codex above.",
+                    kind.label()
+                )
             });
         })
         .style(move |s| {
@@ -450,12 +546,11 @@ fn provider_button(
                 .cursor(floem::style::CursorStyle::Pointer)
                 .color(config.get().color(UmideColor::PANEL_FOREGROUND));
             if active {
-                s.border(1.0)
-                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
-                    .background(floem::peniko::Color::from_rgba8(255, 255, 255, 28))
+                s.background(OVERLAY)
+                    .border(1.0)
+                    .border_color(config.get().color(UmideColor::EDITOR_LINK))
             } else {
-                s.border(1.0)
-                    .border_color(floem::peniko::Color::from_rgba8(0, 0, 0, 0))
+                s.border(1.0).border_color(TRANSPARENT)
             }
         })
 }
@@ -472,28 +567,34 @@ fn cli_button(
 ) -> impl View {
     Stack::new((Label::new(kind.label()),))
         .on_click_stop(move |_| {
-            if available.get_untracked().unwrap_or(false) {
-                backend.set(AssistantBackend::Cli(kind));
-                status.set(match kind {
-                    CliKind::ClaudeCode => format!(
-                        "{} — runs in your project folder. Reads are automatic; \
-                         every file edit and command is shown to you for approval.",
-                        kind.label()
-                    ),
-                    CliKind::Codex => format!(
-                        "{} — autonomous: reads, edits files, and runs commands \
-                         in your project, sandboxed to the workspace (no network). \
-                         No per-action approval — enable it for the session below.",
-                        kind.label()
-                    ),
-                    CliKind::GeminiCli => format!(
-                        "{} — read-only: reads and searches your project to \
-                         answer; it can't edit files or run shell commands.",
-                        kind.label()
-                    ),
-                });
-            } else {
-                status.set(kind.install_hint().to_string());
+            // Three states: detecting (None), installed (Some(true)), missing
+            // (Some(false)) — so during the ~5s async probe we don't lie and say
+            // it's uninstalled.
+            match available.get_untracked() {
+                None => status.set(format!("Checking for {}…", kind.label())),
+                Some(true) => {
+                    backend.set(AssistantBackend::Cli(kind));
+                    status.set(match kind {
+                        CliKind::ClaudeCode => format!(
+                            "{} — no API key needed (uses your Claude login). \
+                             Reads automatically; every edit & command asks your \
+                             approval.",
+                            kind.label()
+                        ),
+                        CliKind::Codex => format!(
+                            "{} — no API key needed (uses your Codex login). \
+                             Autonomous, sandboxed to the workspace; enable it for \
+                             the session below.",
+                            kind.label()
+                        ),
+                        CliKind::GeminiCli => format!(
+                            "{} — no API key needed (uses your Gemini login). \
+                             Read-only: reads & searches your project.",
+                            kind.label()
+                        ),
+                    });
+                }
+                Some(false) => status.set(kind.install_hint().to_string()),
             }
         })
         .style(move |s| {
@@ -502,21 +603,20 @@ fn cli_button(
                 .padding_horiz(10.0)
                 .padding_vert(4.0)
                 .border_radius(6.0)
-                .cursor(floem::style::CursorStyle::Pointer)
-                .color(config.get().color(UmideColor::PANEL_FOREGROUND));
-            let s = if available.get().unwrap_or(false) {
-                s
+                .cursor(floem::style::CursorStyle::Pointer);
+            // Full-strength only when confirmed installed; dim while detecting or
+            // if missing.
+            let s = if available.get() == Some(true) {
+                s.color(config.get().color(UmideColor::PANEL_FOREGROUND))
             } else {
-                // Dim when unavailable (not installed / no folder open).
-                s.color(floem::peniko::Color::from_rgba8(140, 140, 140, 255))
+                s.color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
             };
             if active {
-                s.border(1.0)
-                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
-                    .background(floem::peniko::Color::from_rgba8(255, 255, 255, 28))
+                s.background(OVERLAY)
+                    .border(1.0)
+                    .border_color(config.get().color(UmideColor::EDITOR_LINK))
             } else {
-                s.border(1.0)
-                    .border_color(floem::peniko::Color::from_rgba8(0, 0, 0, 0))
+                s.border(1.0).border_color(TRANSPARENT)
             }
         })
 }
@@ -678,28 +778,175 @@ fn clear_pending_approvals(
 }
 
 fn message_view(m: ChatMsg, config: ReadSignal<Arc<UmideConfig>>) -> impl View {
-    let role = match m.role {
-        MsgRole::User => "You",
-        MsgRole::Assistant => "Assistant",
-    };
+    let is_user = m.role == MsgRole::User;
+    let role = if is_user { "You" } else { "UMIDE" };
     let text = m.text;
     let tools = m.tools;
+
+    // The reply body is rendered as real markdown (bold, inline code, lists, and
+    // syntax-highlighted code blocks) via the editor's own markdown renderer, so
+    // the assistant reads like docs — not a wall of raw text.
+    let body = dyn_stack(
+        move || {
+            parse_markdown(&text.get(), 1.5, &config.get())
+                .into_iter()
+                .enumerate()
+                .collect::<Vec<_>>()
+        },
+        |(i, _)| *i,
+        move |(_, content)| match content {
+            MarkdownContent::Text(layout) => {
+                Container::new(rich_text(move || layout.clone()))
+                    .style(|s| s.width_full())
+            }
+            MarkdownContent::Separator => {
+                Container::new(Empty::new().style(move |s| {
+                    s.width_full()
+                        .margin_vert(5.0)
+                        .height(1.0)
+                        .background(config.get().color(UmideColor::LAPCE_BORDER))
+                }))
+            }
+            MarkdownContent::Image { .. } => Container::new(Empty::new()),
+        },
+    )
+    .style(|s| s.flex_col().width_full());
+
+    // Compact "⚙ tool …" trail under a reply, dimmed so it doesn't compete.
+    let tools_view =
+        Label::derived(move || tools.get().join("\n")).style(move |s| {
+            let s = s
+                .width_full()
+                .font_size(11.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM));
+            if tools.get().is_empty() {
+                s.hide()
+            } else {
+                s.margin_top(4.0)
+            }
+        });
+
     Stack::new((
         Label::new(role).style(move |s| {
-            s.font_size(11.0)
-                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+            s.font_size(10.0)
+                .margin_bottom(3.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
         }),
-        Label::derived(move || text.get()).style(move |s| {
-            s.width_full()
-                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
-        }),
-        Label::derived(move || tools.get().join("\n")).style(move |s| {
-            s.width_full()
-                .font_size(11.0)
-                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
-        }),
+        body,
+        tools_view,
     ))
-    .style(|s| s.flex_col().width_full().padding_vert(6.0))
+    .style(move |s| {
+        let s = s
+            .flex_col()
+            .width_full()
+            .padding(10.0)
+            .margin_vert(4.0)
+            .border_radius(10.0);
+        // User turns get a tinted card; the assistant sits on a bordered surface
+        // so the two speakers are visually distinct at a glance.
+        if is_user {
+            s.background(config.get().color(UmideColor::PANEL_CURRENT_BACKGROUND))
+        } else {
+            s.border(1.0)
+                .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+        }
+    })
+}
+
+/// One-line summary of the active backend + how it's authenticated, so the user
+/// always knows whether they're key-free (a CLI's own login) or on an API key.
+fn mode_line(backend: AssistantBackend, has_key: bool) -> String {
+    match backend {
+        AssistantBackend::Cli(k) => {
+            format!("● {} — your existing login, no API key needed.", k.label())
+        }
+        AssistantBackend::Llm(k) if has_key => {
+            format!("● {} — using your saved API key.", k.label())
+        }
+        AssistantBackend::Llm(k) => format!(
+            "● {} needs an API key — or pick Claude Code / Codex above to go \
+             key-free.",
+            k.label()
+        ),
+    }
+}
+
+/// The empty-state shown before the first message: what the assistant is, the
+/// current auth mode, and a few tappable example prompts. Hidden once the
+/// conversation starts.
+fn welcome_view(
+    backend: RwSignal<AssistantBackend>,
+    has_key: RwSignal<bool>,
+    input: RwSignal<String>,
+    messages: RwSignal<Vec<ChatMsg>>,
+    config: ReadSignal<Arc<UmideConfig>>,
+) -> impl View {
+    let examples = [
+        "Explain what this file does",
+        "Add a dark-mode toggle, then show me on the device",
+        "Run the tests and fix what's failing",
+    ];
+    let chips = dyn_stack(
+        move || examples.iter().copied().enumerate().collect::<Vec<_>>(),
+        |(i, _)| *i,
+        move |(_, ex)| {
+            Label::new(ex)
+                .on_click_stop(move |_| input.set(ex.to_string()))
+                .style(move |s| {
+                    s.width_full()
+                        .padding_horiz(10.0)
+                        .padding_vert(7.0)
+                        .margin_top(6.0)
+                        .border(1.0)
+                        .border_radius(8.0)
+                        .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+                        .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+                        .cursor(floem::style::CursorStyle::Pointer)
+                        .hover(|s| s.background(OVERLAY))
+                })
+        },
+    )
+    .style(|s| s.flex_col().width_full().margin_top(4.0));
+
+    Stack::new((
+        Label::new("Your coding copilot").style(move |s| {
+            s.font_size(16.0)
+                .font_bold()
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+        }),
+        Label::new(
+            "Reads your code, edits with your approval, and can see & drive the \
+             running emulator to test its own work.",
+        )
+        .style(move |s| {
+            s.width_full()
+                .margin_top(6.0)
+                .font_size(12.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
+        }),
+        Label::derived(move || mode_line(backend.get(), has_key.get())).style(
+            move |s| {
+                s.width_full()
+                    .margin_top(12.0)
+                    .font_size(12.0)
+                    .color(config.get().color(UmideColor::EDITOR_LINK))
+            },
+        ),
+        Label::new("Try one:").style(move |s| {
+            s.margin_top(14.0)
+                .font_size(11.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
+        }),
+        chips,
+    ))
+    .style(move |s| {
+        let s = s.flex_col().width_full().padding(16.0);
+        if messages.get().is_empty() {
+            s
+        } else {
+            s.hide()
+        }
+    })
 }
 
 /// What a send will launch, resolved (and validated) before any UI mutation so

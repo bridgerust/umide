@@ -56,20 +56,32 @@ const DEFAULT_IDLE: Duration = Duration::from_secs(360);
 /// takes precedence over any saved allow-grant.
 const READ_ONLY_DENY: &str = "Bash Edit Write MultiEdit NotebookEdit Task";
 
-/// Appended to Claude's system prompt in the read-only fallback (used only when
-/// the approval bridge can't start), so it advises instead of attempting
-/// edits/commands that the headless default mode then denies.
-const READ_ONLY_NOTE: &str = "You are running inside the UMIDE editor in \
-read-only mode: you can read and search the project to answer questions and \
-explain code, but you must NOT edit files or run shell commands. If a change is \
-needed, describe it (show the diff or commands) for the developer to apply.";
+/// Mobile-first UMIDE framing prepended to the CLI agent's system prompt, so it
+/// behaves like a native part of a mobile IDE — not a generic code agent that
+/// happens to be pointed at a folder. Mirrors the built-in `SYSTEM_PROMPT`.
+const UMIDE_CONTEXT: &str = "You are an AI agent working inside UMIDE, a \
+Rust-based IDE for cross-platform MOBILE development (React Native and Flutter). \
+The open project is a mobile app — prefer mobile-dev idioms, tooling, and \
+workflows (components/screens/navigation, native modules, RN/Flutter build & \
+reload). UMIDE embeds a live Android emulator (and, on macOS, an iOS simulator) \
+directly in the editor, so changes are meant to be seen and tested on a real \
+running device without leaving the IDE. When you change UI or behavior, think in \
+that see→act→verify loop the way a mobile developer would: after a change, reload \
+the app, look at the running screen, and check device logs to confirm the result. ";
 
-/// Appended to Claude's system prompt in the normal (write) mode, so it knows
-/// its edits/commands are surfaced to the developer for approval.
-const WRITE_NOTE: &str = "You are running inside the UMIDE editor. You can read \
-the project, edit files, and run commands — but every edit and command is shown \
-to the developer for approval before it takes effect, so act normally and they \
-will confirm. Reads are automatic.";
+/// Read-only-fallback note (used only when the approval bridge can't start), so
+/// the agent advises instead of attempting edits/commands the headless default
+/// mode then denies. Prefixed with [`UMIDE_CONTEXT`] at call time.
+const READ_ONLY_NOTE: &str = "You are in read-only mode: read and search the \
+project to answer questions and explain code, but you must NOT edit files or run \
+shell commands. If a change is needed, describe it (show the diff or commands) \
+for the developer to apply.";
+
+/// Normal (write) mode note, so the agent knows its edits/commands are surfaced
+/// to the developer for approval. Prefixed with [`UMIDE_CONTEXT`] at call time.
+const WRITE_NOTE: &str = "You can read the project, edit files, and run commands \
+— but every edit and command is shown to the developer for approval before it \
+takes effect, so act normally and they will confirm. Reads are automatic.";
 
 /// Gemini read-only tool whitelist: these run without confirmation; mutating
 /// tools (write_file/replace/run_shell_command) then need a confirmation that
@@ -169,7 +181,7 @@ impl CliRunner {
                         a.push("--permission-prompt-tool".into());
                         a.push(p.tool_ref());
                         a.push("--append-system-prompt".into());
-                        a.push(WRITE_NOTE.into());
+                        a.push(format!("{UMIDE_CONTEXT}{WRITE_NOTE}"));
                     }
                     None => {
                         // Read-only fallback (bridge couldn't bind). Deny the
@@ -183,7 +195,7 @@ impl CliRunner {
                         a.push("--disallowedTools".into());
                         a.push(READ_ONLY_DENY.into());
                         a.push("--append-system-prompt".into());
-                        a.push(READ_ONLY_NOTE.into());
+                        a.push(format!("{UMIDE_CONTEXT}{READ_ONLY_NOTE}"));
                     }
                 }
                 if let Some(id) = resume {

@@ -19,6 +19,7 @@ use floem::{
 use tokio::sync::oneshot;
 use umide_agent::{AgentEvent, Message, ProviderConfig, ProviderKind};
 
+use super::ai_sessions;
 use crate::ai::cli::detect::CliStatus;
 use crate::ai::cli::{AssistantBackend, CliKind};
 use crate::markdown::{MarkdownContent, parse_markdown};
@@ -40,6 +41,21 @@ enum MsgRole {
     Assistant,
 }
 
+impl MsgRole {
+    fn to_stored(self) -> ai_sessions::Role {
+        match self {
+            MsgRole::User => ai_sessions::Role::User,
+            MsgRole::Assistant => ai_sessions::Role::Assistant,
+        }
+    }
+    fn from_stored(r: ai_sessions::Role) -> Self {
+        match r {
+            ai_sessions::Role::User => MsgRole::User,
+            ai_sessions::Role::Assistant => MsgRole::Assistant,
+        }
+    }
+}
+
 /// One transcript bubble. Inner fields are signals so streamed deltas update the
 /// rendered view in place without rebuilding the whole list.
 #[derive(Clone)]
@@ -48,6 +64,27 @@ struct ChatMsg {
     role: MsgRole,
     text: RwSignal<String>,
     tools: RwSignal<Vec<String>>,
+}
+
+/// Rebuild live transcript bubbles (with fresh signals) from a stored chat,
+/// allocating ids from `next_id`.
+fn rebuild_messages(
+    stored: &[ai_sessions::StoredMessage],
+    next_id: RwSignal<u64>,
+) -> Vec<ChatMsg> {
+    stored
+        .iter()
+        .map(|m| {
+            let id = next_id.get_untracked();
+            next_id.set(id + 1);
+            ChatMsg {
+                id,
+                role: MsgRole::from_stored(m.role),
+                text: RwSignal::new(m.text.clone()),
+                tools: RwSignal::new(m.tools.clone()),
+            }
+        })
+        .collect()
 }
 
 /// A mutating action awaiting the user's Approve/Reject.
@@ -176,6 +213,145 @@ pub fn ai_assistant_panel(
     let pending: RwSignal<Vec<ApprovalCard>> = RwSignal::new(Vec::new());
     let senders: Rc<RefCell<HashMap<u64, oneshot::Sender<ai::ApprovalOutcome>>>> =
         Rc::new(RefCell::new(HashMap::new()));
+
+    // --- Chat sessions ------------------------------------------------------
+    // Several distinct chats, each with its own continuous context. The live
+    // signals above (`messages`/`history`/`cli_session`/…) always hold the
+    // ACTIVE chat; switching is snapshot-the-current, load-the-target. So
+    // context still mends WITHIN a chat — you just get more than one, saved per
+    // workspace across restarts.
+    let sessions: RwSignal<Vec<ai_sessions::StoredSession>> = {
+        let mut loaded = ai_sessions::load(workspace.as_deref());
+        if loaded.is_empty() {
+            loaded.push(ai_sessions::StoredSession::new(0));
+        }
+        RwSignal::new(loaded)
+    };
+    let next_session_id = RwSignal::new(
+        sessions
+            .get_untracked()
+            .iter()
+            .map(|s| s.id)
+            .max()
+            .unwrap_or(0)
+            + 1,
+    );
+    let active_id = RwSignal::new(sessions.get_untracked()[0].id);
+    let show_switcher = RwSignal::new(false);
+
+    // Hydrate the live view + LLM context from the most-recent saved chat.
+    {
+        let first = sessions.get_untracked()[0].clone();
+        if !first.messages.is_empty() {
+            messages.set(rebuild_messages(&first.messages, next_id));
+            *history.lock().unwrap() = first.history();
+            *cli_session.lock().unwrap() = first.cli_session.clone();
+        }
+    }
+
+    // Fold the live view back into the active chat (called before switching away
+    // and after each turn), keeping its title current.
+    let snapshot = {
+        let cli_session = cli_session.clone();
+        Rc::new(move || {
+            let msgs: Vec<ai_sessions::StoredMessage> = messages
+                .get_untracked()
+                .iter()
+                .map(|m| ai_sessions::StoredMessage {
+                    role: m.role.to_stored(),
+                    text: m.text.get_untracked(),
+                    tools: m.tools.get_untracked(),
+                })
+                .collect();
+            let cli = cli_session.lock().unwrap().clone();
+            let id = active_id.get_untracked();
+            sessions.update(|list| {
+                if let Some(s) = list.iter_mut().find(|s| s.id == id) {
+                    s.messages = msgs;
+                    s.cli_session = cli;
+                    s.retitle();
+                }
+            });
+        })
+    };
+
+    // Start a fresh chat: save the current one, clear everything to a clean
+    // slate (fresh history + resume id + consents), keep the chosen backend.
+    let new_chat: Rc<dyn Fn()> = {
+        let snapshot = snapshot.clone();
+        let ws = workspace.clone();
+        let cli_session = cli_session.clone();
+        let device_consent = device_consent.clone();
+        let history = history.clone();
+        let senders = senders.clone();
+        Rc::new(move || {
+            if streaming.get_untracked() {
+                return; // don't reshuffle state mid-turn
+            }
+            snapshot();
+            let id = next_session_id.get_untracked();
+            next_session_id.set(id + 1);
+            sessions.update(|l| l.insert(0, ai_sessions::StoredSession::new(id)));
+            active_id.set(id);
+            messages.set(Vec::new());
+            active.set(None);
+            *history.lock().unwrap() = Vec::new();
+            *cli_session.lock().unwrap() = None;
+            *device_consent.lock().unwrap() = None;
+            codex_consent.set(false);
+            pending.set(Vec::new());
+            senders.borrow_mut().clear();
+            input.set(String::new());
+            status.set(String::new());
+            show_switcher.set(false);
+            ai_sessions::save(ws.as_deref(), &sessions.get_untracked());
+        })
+    };
+
+    // Return to an earlier chat, restoring its transcript + context.
+    let switch_to: Rc<dyn Fn(u64)> = {
+        let snapshot = snapshot.clone();
+        let ws = workspace.clone();
+        let cli_session = cli_session.clone();
+        let device_consent = device_consent.clone();
+        let history = history.clone();
+        let senders = senders.clone();
+        Rc::new(move |id: u64| {
+            show_switcher.set(false);
+            if streaming.get_untracked() || id == active_id.get_untracked() {
+                return;
+            }
+            snapshot();
+            let Some(t) = sessions.get_untracked().into_iter().find(|s| s.id == id)
+            else {
+                return;
+            };
+            messages.set(rebuild_messages(&t.messages, next_id));
+            active.set(None);
+            *history.lock().unwrap() = t.history();
+            *cli_session.lock().unwrap() = t.cli_session.clone();
+            *device_consent.lock().unwrap() = None; // re-ask on a resumed chat
+            codex_consent.set(false);
+            pending.set(Vec::new());
+            senders.borrow_mut().clear();
+            active_id.set(id);
+            ai_sessions::save(ws.as_deref(), &sessions.get_untracked());
+        })
+    };
+
+    // Persist after every completed turn (the falling edge of `streaming`).
+    {
+        let snapshot = snapshot.clone();
+        let ws = workspace.clone();
+        scope.create_effect(move |was: Option<bool>| {
+            let now = streaming.get();
+            if was == Some(true) && !now {
+                snapshot();
+                ai_sessions::save(ws.as_deref(), &sessions.get_untracked());
+            }
+            now
+        });
+    }
 
     {
         let queue = queue.clone();
@@ -496,7 +672,102 @@ pub fn ai_assistant_panel(
             .border_color(config.get().color(UmideColor::LAPCE_BORDER))
     });
 
+    // Session header: "＋ New Chat" + the active chat's title, which toggles the
+    // switcher below it.
+    let header = {
+        let new_chat = new_chat.clone();
+        let new_btn = Label::new("＋  New Chat")
+            .on_click_stop(move |_| new_chat())
+            .style(move |s| {
+                s.padding_horiz(10.0)
+                    .padding_vert(5.0)
+                    .border(1.0)
+                    .border_radius(8.0)
+                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+                    .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+                    .cursor(floem::style::CursorStyle::Pointer)
+                    .hover(|s| s.background(OVERLAY))
+            });
+        let title = Label::derived(move || {
+            let id = active_id.get();
+            let t = sessions
+                .get()
+                .iter()
+                .find(|s| s.id == id)
+                .map(|s| s.title.clone())
+                .unwrap_or_else(|| "New chat".to_string());
+            format!("{t}   ▾")
+        })
+        .on_click_stop(move |_| show_switcher.update(|v| *v = !*v))
+        .style(move |s| {
+            s.flex_grow(1.0)
+                .margin_left(8.0)
+                .padding_horiz(8.0)
+                .padding_vert(5.0)
+                .border_radius(8.0)
+                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+                .cursor(floem::style::CursorStyle::Pointer)
+                .hover(|s| s.background(OVERLAY))
+        });
+        Stack::new((new_btn, title)).style(move |s| {
+            s.width_full()
+                .items_center()
+                .padding(8.0)
+                .border_bottom(1.0)
+                .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+        })
+    };
+
+    // Recent-chats switcher: newest first, click to resume; the active one is
+    // accent-marked. Collapsed until the title is clicked.
+    let switcher = Scroll::new(
+        dyn_stack(
+            move || sessions.get(),
+            |s| s.id,
+            move |s| {
+                let id = s.id;
+                let switch_to = switch_to.clone();
+                Label::derived(move || {
+                    sessions
+                        .get()
+                        .iter()
+                        .find(|s| s.id == id)
+                        .map(|s| s.title.clone())
+                        .unwrap_or_default()
+                })
+                .on_click_stop(move |_| switch_to(id))
+                .style(move |st| {
+                    let st = st
+                        .width_full()
+                        .padding_horiz(12.0)
+                        .padding_vert(7.0)
+                        .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+                        .cursor(floem::style::CursorStyle::Pointer)
+                        .hover(|st| st.background(OVERLAY));
+                    if id == active_id.get() {
+                        st.background(OVERLAY).border_left(2.0).border_color(
+                            config.get().color(UmideColor::EDITOR_LINK),
+                        )
+                    } else {
+                        st.border_left(2.0).border_color(TRANSPARENT)
+                    }
+                })
+            },
+        )
+        .style(|s| s.flex_col().width_full()),
+    )
+    .style(move |s| {
+        let s = s
+            .width_full()
+            .max_height(220.0)
+            .border_bottom(1.0)
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER));
+        if show_switcher.get() { s } else { s.hide() }
+    });
+
     Stack::new((
+        header,
+        switcher,
         provider_row,
         transcript,
         approvals_view,

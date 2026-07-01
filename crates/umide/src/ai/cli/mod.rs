@@ -20,6 +20,7 @@ pub mod claude;
 pub mod codex;
 pub mod detect;
 pub mod framer;
+pub mod gemini;
 pub mod permission_server;
 pub mod proc_group;
 pub mod runner;

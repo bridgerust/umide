@@ -27,6 +27,7 @@ use umide_agent::AgentEvent;
 use super::claude::ClaudeParser;
 use super::codex::CodexParser;
 use super::framer::CliFramer;
+use super::gemini::GeminiParser;
 use super::permission_server::PermissionServer;
 use super::{CliKind, proc_group};
 use crate::ai::{AgentRunner, ApprovalQueue, CancelHandle, Push};
@@ -68,6 +69,19 @@ const WRITE_NOTE: &str = "You are running inside the UMIDE editor. You can read 
 the project, edit files, and run commands — but every edit and command is shown \
 to the developer for approval before it takes effect, so act normally and they \
 will confirm. Reads are automatic.";
+
+/// Gemini read-only tool whitelist: these run without confirmation; mutating
+/// tools (write_file/replace/run_shell_command) then need a confirmation that
+/// headless can't give, so they're effectively blocked.
+const GEMINI_READ_TOOLS: &[&str] = &[
+    "read_file",
+    "read_many_files",
+    "glob",
+    "search_file_content",
+    "list_directory",
+    "google_web_search",
+    "web_fetch",
+];
 
 /// Why the read loop stopped.
 enum Stop {
@@ -118,9 +132,7 @@ impl CliRunner {
         match self.kind {
             CliKind::ClaudeCode => Box::new(ClaudeParser::new()),
             CliKind::Codex => Box::new(CodexParser::new()),
-            // Gemini lands in a later phase; the panel only offers a CLI once its
-            // backend is wired, so this fallback is never hit today.
-            CliKind::GeminiCli => Box::new(ClaudeParser::new()),
+            CliKind::GeminiCli => Box::new(GeminiParser::new()),
         }
     }
 
@@ -196,7 +208,22 @@ impl CliRunner {
                 a.push("workspace-write".into());
                 a
             }
-            CliKind::GeminiCli => Vec::new(),
+            CliKind::GeminiCli => {
+                // Read-only first cut: default approval mode + a read-tool
+                // whitelist (those run without confirmation; mutating tools need
+                // a confirmation headless can't give, so they're blocked). Prompt
+                // is fed on stdin. Write mode (yolo + Docker sandbox) and
+                // multi-turn `--resume` are follow-ups pending live verification.
+                let mut a = vec![
+                    "--output-format".to_string(),
+                    "stream-json".into(),
+                    "--approval-mode".into(),
+                    "default".into(),
+                    "--allowed-tools".into(),
+                ];
+                a.extend(GEMINI_READ_TOOLS.iter().map(|t| t.to_string()));
+                a
+            }
         }
     }
 }

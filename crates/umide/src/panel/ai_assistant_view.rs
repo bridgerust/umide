@@ -101,6 +101,8 @@ pub fn ai_assistant_panel(
         CliStatus::detect(CliKind::ClaudeCode).installed() && has_workspace;
     let codex_installed =
         CliStatus::detect(CliKind::Codex).installed() && has_workspace;
+    let gemini_installed =
+        CliStatus::detect(CliKind::GeminiCli).installed() && has_workspace;
 
     // Lossless cross-thread bridge: the worker pushes AgentEvents into `queue`
     // and pulses `trigger`; a UI-thread effect tracks the trigger and drains the
@@ -372,6 +374,13 @@ pub fn ai_assistant_panel(
             config,
         ),
         cli_button(CliKind::Codex, codex_installed, backend, status, config),
+        cli_button(
+            CliKind::GeminiCli,
+            gemini_installed,
+            backend,
+            status,
+            config,
+        ),
     ))
     .style(|s| s.width_full().items_center().padding(6.0));
 
@@ -454,7 +463,11 @@ fn cli_button(
                          No per-action approval — enable it for the session below.",
                         kind.label()
                     ),
-                    CliKind::GeminiCli => kind.label().to_string(),
+                    CliKind::GeminiCli => format!(
+                        "{} — read-only: reads and searches your project to \
+                         answer; it can't edit files or run shell commands.",
+                        kind.label()
+                    ),
                 });
             } else {
                 status.set(kind.install_hint().to_string());

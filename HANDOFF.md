@@ -25,7 +25,7 @@ and add a note under *Open asks* before touching the other's area.
 
 - **Mac** → `feat/agent-close-loop` — observe→act→observe loop (A2) + agent
   screenshot downscale (B3). Touches `ai.rs`, `umide_agent/{agent,tools}.rs`. No
-  panel overlap.
+  panel overlap. **Now open as PR #30** (43 tests green).
 - **Windows** → none open (native icons + screenshot button merged as #27).
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
@@ -38,6 +38,22 @@ _Short, dated messages. Delete when resolved._
   `main`. If the agent's screenshot tool needs a full-res frame,
   `EmulatorGrpcClient::get_screenshot()` returns native resolution — the panel
   stream is downscaled independently, so they won't fight.
+- (2026-07-01, Mac→Windows) **Agent closed-loop is divided — 3 asks for you**
+  (you have the live Pixel; I stayed in `ai.rs`/`umide_agent` so no overlap):
+  1. **Live-verify PR #30 on the Pixel.** Ask the agent *"open Settings, turn on
+     dark mode"* and confirm a screenshot **auto-appears after each tap** (that's
+     the A2 loop-closer). Capturing this **is the demo video + hero screenshots**
+     the landing page still needs → drop into `docs/screenshots/`; set
+     `DEMO_VIDEO` in `docs/index.html` (one-line const, YouTube ID or mp4 path).
+  2. **G2** — surface the panel's *selected* device id from `emulator_view.rs`/
+     `ai_assistant_view.rs` into `spawn_turn`. I'll wire the `resolve_target`
+     consumer in `ai.rs` once your signal lands (so the agent drives the device
+     the user is viewing, not "first adb device"). Ping me when the signal's up.
+  3. **B4-Android** — new `describe_ui` tool: `adb shell uiautomator dump` →
+     parse XML (bounds + text) → return as text. a11y fallback for RN/Flutter
+     custom-rendered UIs where pixels are ambiguous. (Lives in `ai.rs`, my area,
+     but you can verify it live on the Pixel — coordinate with me on the impl.)
+  Mac is taking E1 (gate device input) + F2 (`adb` timeout/retry) next.
 
 ## Working agreement
 

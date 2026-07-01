@@ -1194,8 +1194,45 @@ fn shell_command(cmd: &str) -> std::process::Command {
     command
 }
 
+/// Wall-clock cap for a single device shell command (`adb`/`simctl`/`idb`).
+/// Device tools must stay responsive: a hung `adb` — device mid-boot, offline,
+/// or a wedged daemon — must never freeze the agent turn indefinitely.
+const DEVICE_CMD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Run a device shell command with a timeout, retrying **once** on a transient
+/// failure — a timeout or an adb daemon/attach race that typically clears on an
+/// immediate retry. Genuine failures (bad command, missing binary) return as-is.
 fn adb_sh(cmd: &str) -> std::io::Result<std::process::Output> {
-    shell_command(cmd).output()
+    match output_with_timeout(shell_command(cmd), DEVICE_CMD_TIMEOUT) {
+        // Success, or a real failure a retry wouldn't fix — return it.
+        Ok(out)
+            if out.status.success()
+                || !adb_stderr_is_transient(&String::from_utf8_lossy(
+                    &out.stderr,
+                )) =>
+        {
+            Ok(out)
+        }
+        // Spawn error that isn't a timeout (e.g. binary not found): no retry.
+        Err(e) if e.kind() != std::io::ErrorKind::TimedOut => Err(e),
+        // Transient adb state or a timeout: back off briefly, then try once more.
+        _ => {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            output_with_timeout(shell_command(cmd), DEVICE_CMD_TIMEOUT)
+        }
+    }
+}
+
+/// adb surfaces a few transient states (daemon-restart race, a device still
+/// attaching, a dropped connection) that usually clear on an immediate retry.
+/// Match only those, so a genuinely bad command isn't retried pointlessly.
+fn adb_stderr_is_transient(stderr: &str) -> bool {
+    let e = stderr.to_lowercase();
+    e.contains("device offline")
+        || e.contains("error: closed")
+        || e.contains("daemon not running")
+        || e.contains("protocol fault")
+        || e.contains("device still connecting")
 }
 
 /// Single-quote a value for safe inclusion in a `sh -c` command.
@@ -1449,6 +1486,24 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    #[test]
+    fn adb_transient_errors_are_retried() {
+        // Daemon/attach races → retry.
+        assert!(adb_stderr_is_transient("error: device offline"));
+        assert!(adb_stderr_is_transient("error: closed"));
+        assert!(adb_stderr_is_transient(
+            "adb: error: failed to start daemon: daemon not running"
+        ));
+        assert!(adb_stderr_is_transient(
+            "protocol fault (couldn't read status)"
+        ));
+        // Real failures → no retry.
+        assert!(!adb_stderr_is_transient(
+            "Exception occurred while executing 'input'"
+        ));
+        assert!(!adb_stderr_is_transient(""));
     }
 
     #[test]

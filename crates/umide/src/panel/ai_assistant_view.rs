@@ -91,6 +91,9 @@ pub fn ai_assistant_panel(
     let backend = RwSignal::new(AssistantBackend::Llm(initial_kind));
     // The CLI conversation id, threaded across turns for `--resume`.
     let cli_session: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    // One-time per-session consent for the LLM agent to drive the emulator
+    // (tap/swipe/type/keys). `None` until asked once, then `Some(granted)`.
+    let device_consent: Arc<Mutex<Option<bool>>> = Arc::new(Mutex::new(None));
     // Session-scoped consent for Codex's autonomous (sandboxed, no per-action
     // approval) writes. Reset every session; required before the first Codex turn.
     let codex_consent = RwSignal::new(false);
@@ -198,6 +201,7 @@ pub fn ai_assistant_panel(
         backend,
         codex_consent,
         cli_session.clone(),
+        device_consent.clone(),
         input,
         messages,
         active,
@@ -553,6 +557,9 @@ fn approval_card(
                 ai::ApprovalKind::CliPermission { .. } => {
                     ai::ApprovalOutcome::Allowed
                 }
+                // One-time per-session device-control consent: approving
+                // unlocks tap/swipe/type/keys for the rest of the session.
+                ai::ApprovalKind::DeviceControl => ai::ApprovalOutcome::Allowed,
             };
             resolve(outcome);
         })
@@ -713,6 +720,7 @@ fn send_handler(
     backend: RwSignal<AssistantBackend>,
     codex_consent: RwSignal<bool>,
     cli_session: Arc<Mutex<Option<String>>>,
+    device_consent: Arc<Mutex<Option<bool>>>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
     active: RwSignal<Option<ChatMsg>>,
@@ -805,6 +813,7 @@ fn send_handler(
                 queue.clone(),
                 approvals.clone(),
                 trigger,
+                device_consent.clone(),
                 cancel.clone(),
             ),
             Launch::Cli(cli_kind, ws) => ai::spawn_cli_turn(

@@ -43,9 +43,11 @@ What you can do:
 (build, test, lint, etc.). Both require the user to approve a diff or command \
 before they take effect.
 - Drive the running emulator/simulator to test your changes: `screenshot_device` \
-to SEE the screen, `tap`, `swipe`, `type_text`, `press_key` to interact, and \
-`read_logs` to read the device log. These work on both Android (adb) and iOS \
-(simctl + idb); they auto-detect the running device, or pass `platform` \
+to SEE the screen, `tap`, `swipe`, `type_text`, `press_key` to interact, \
+`read_logs` to read the device log, and `describe_ui` to list on-screen \
+elements as text with tap coordinates (an accessibility fallback when a \
+screenshot is ambiguous; Android-only). These work on both Android (adb) and \
+iOS (simctl + idb); they auto-detect the running device, or pass `platform` \
 (\"android\"/\"ios\") to choose.
 
 Your superpower is the closed loop: after changing code and reloading the app, \
@@ -119,6 +121,9 @@ pub enum ApprovalKind {
     /// performs the action itself, UMIDE only decides allow/deny. Nothing is
     /// applied on the UMIDE side — the outcome is mapped to the CLI's contract.
     CliPermission { tool_name: String },
+    /// One-time per-session consent for the assistant to drive the emulator
+    /// (tap/swipe/type/keys). Approve unlocks device input for the session.
+    DeviceControl,
 }
 
 /// The result the UI sends back to the worker after the user decides.
@@ -132,6 +137,15 @@ pub enum ApprovalOutcome {
     EditFailed(String),
     /// The user allowed a CLI permission gate (the CLI will do the action).
     Allowed,
+}
+
+/// Map an approval outcome to a device-control consent decision: anything the
+/// user didn't reject (or that didn't fail to apply) unlocks device input.
+fn consent_granted(outcome: &ApprovalOutcome) -> bool {
+    !matches!(
+        outcome,
+        ApprovalOutcome::Rejected | ApprovalOutcome::EditFailed(_)
+    )
 }
 
 /// A mutating action the agent wants to take, awaiting the user's decision.
@@ -224,6 +238,7 @@ pub struct LlmRunner {
     pub history: Arc<Mutex<Vec<Message>>>,
     pub approvals: ApprovalQueue,
     pub trigger: ExtSendTrigger,
+    pub device_consent: Arc<Mutex<Option<bool>>>,
 }
 
 #[async_trait(?Send)]
@@ -233,6 +248,7 @@ impl AgentRunner for LlmRunner {
             self.workspace.clone(),
             self.approvals.clone(),
             self.trigger,
+            self.device_consent.clone(),
         ));
         let seed = self.history.lock().unwrap().clone();
         let mut agent =
@@ -312,6 +328,7 @@ pub fn spawn_turn(
     queue: EventQueue,
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
+    device_consent: Arc<Mutex<Option<bool>>>,
     cancel: Arc<AtomicBool>,
 ) {
     let err_queue = queue.clone();
@@ -345,6 +362,7 @@ pub fn spawn_turn(
                     history,
                     approvals,
                     trigger,
+                    device_consent,
                 };
                 runner.run(user_text, push, cancel).await;
             });
@@ -644,6 +662,10 @@ pub struct EditorTools {
     reader: ReadOnlyTools,
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
+    /// Per-session consent for driving the emulator: `None` until the user is
+    /// asked once, then `Some(granted)`. Shared across turns (owned by the panel)
+    /// so the agent is gated once per session, not once per turn.
+    device_consent: Arc<Mutex<Option<bool>>>,
 }
 
 impl EditorTools {
@@ -651,12 +673,34 @@ impl EditorTools {
         root: Option<PathBuf>,
         approvals: ApprovalQueue,
         trigger: ExtSendTrigger,
+        device_consent: Arc<Mutex<Option<bool>>>,
     ) -> Self {
         Self {
             reader: ReadOnlyTools::new(root),
             approvals,
             trigger,
+            device_consent,
         }
+    }
+
+    /// Gate on the one-time per-session consent to control the device. Reads and
+    /// screenshots stay ungated; this only fences the *input* tools.
+    async fn ensure_device_consent(&self) -> bool {
+        if let Some(v) = *self.device_consent.lock().unwrap() {
+            return v;
+        }
+        let outcome = self
+            .request_approval(
+                "Let the assistant control the emulator?".into(),
+                "It will tap, swipe, type, and press keys on the running device \
+                 to test and verify — for this session."
+                    .into(),
+                ApprovalKind::DeviceControl,
+            )
+            .await;
+        let granted = consent_granted(&outcome);
+        *self.device_consent.lock().unwrap() = Some(granted);
+        granted
     }
 
     /// Surface an approval card to the UI and block until the user decides.
@@ -891,6 +935,17 @@ impl EditorTools {
             Err(e) => ToolOutput::error(e),
         }
     }
+
+    fn describe_ui(&self, input: &serde_json::Value) -> ToolOutput {
+        match resolve_target(input) {
+            Ok(Target::Android(serial)) => android_describe_ui(&serial),
+            Ok(Target::Ios(_)) => ToolOutput::error(
+                "describe_ui is Android-only for now — use screenshot_device on \
+                 iOS.",
+            ),
+            Err(e) => ToolOutput::error(e),
+        }
+    }
 }
 
 #[async_trait]
@@ -939,11 +994,23 @@ impl ToolExecutor for EditorTools {
             "edit_file" => self.edit_file(&call.input).await,
             "run_command" => self.run_command(&call.input).await,
             "screenshot_device" => self.screenshot_device(&call.input),
-            "tap" => self.tap(&call.input),
-            "swipe" => self.swipe(&call.input),
-            "type_text" => self.type_text(&call.input),
-            "press_key" => self.press_key(&call.input),
+            // Device INPUT is gated by a one-time per-session consent; reads
+            // (screenshot/logs) are not.
+            "tap" | "swipe" | "type_text" | "press_key" => {
+                if !self.ensure_device_consent().await {
+                    return ToolOutput::error(
+                        "Device control was declined for this session.",
+                    );
+                }
+                match call.name.as_str() {
+                    "tap" => self.tap(&call.input),
+                    "swipe" => self.swipe(&call.input),
+                    "type_text" => self.type_text(&call.input),
+                    _ => self.press_key(&call.input),
+                }
+            }
             "read_logs" => self.read_logs(&call.input),
+            "describe_ui" => self.describe_ui(&call.input),
             other => ToolOutput::error(format!("unknown tool: {other}")),
         }
     }
@@ -1086,6 +1153,19 @@ fn device_specs() -> Vec<ToolDef> {
             }),
             cache_control: None,
         },
+        ToolDef {
+            name: "describe_ui".into(),
+            description: "List the on-screen UI elements as text — each labelled \
+                or tappable element with its center coordinate, label, class and \
+                id. An accessibility fallback for when a screenshot is ambiguous \
+                (custom-rendered React Native / Flutter UIs). Android-only."
+                .into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": { "platform": platform() }
+            }),
+            cache_control: None,
+        },
     ]
 }
 
@@ -1176,8 +1256,45 @@ fn shell_command(cmd: &str) -> std::process::Command {
     command
 }
 
+/// Wall-clock cap for a single device shell command (`adb`/`simctl`/`idb`).
+/// Device tools must stay responsive: a hung `adb` — device mid-boot, offline,
+/// or a wedged daemon — must never freeze the agent turn indefinitely.
+const DEVICE_CMD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Run a device shell command with a timeout, retrying **once** on a transient
+/// failure — a timeout or an adb daemon/attach race that typically clears on an
+/// immediate retry. Genuine failures (bad command, missing binary) return as-is.
 fn adb_sh(cmd: &str) -> std::io::Result<std::process::Output> {
-    shell_command(cmd).output()
+    match output_with_timeout(shell_command(cmd), DEVICE_CMD_TIMEOUT) {
+        // Success, or a real failure a retry wouldn't fix — return it.
+        Ok(out)
+            if out.status.success()
+                || !adb_stderr_is_transient(&String::from_utf8_lossy(
+                    &out.stderr,
+                )) =>
+        {
+            Ok(out)
+        }
+        // Spawn error that isn't a timeout (e.g. binary not found): no retry.
+        Err(e) if e.kind() != std::io::ErrorKind::TimedOut => Err(e),
+        // Transient adb state or a timeout: back off briefly, then try once more.
+        _ => {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            output_with_timeout(shell_command(cmd), DEVICE_CMD_TIMEOUT)
+        }
+    }
+}
+
+/// adb surfaces a few transient states (daemon-restart race, a device still
+/// attaching, a dropped connection) that usually clear on an immediate retry.
+/// Match only those, so a genuinely bad command isn't retried pointlessly.
+fn adb_stderr_is_transient(stderr: &str) -> bool {
+    let e = stderr.to_lowercase();
+    e.contains("device offline")
+        || e.contains("error: closed")
+        || e.contains("daemon not running")
+        || e.contains("protocol fault")
+        || e.contains("device still connecting")
 }
 
 /// Single-quote a value for safe inclusion in a `sh -c` command.
@@ -1354,6 +1471,120 @@ fn android_logs(serial: &str, lines: i64, filter: &str) -> ToolOutput {
     }
 }
 
+/// Dump the current Android view hierarchy (`uiautomator dump`) and render it
+/// as a compact, tappable element listing. `uiautomator` writes the XML to a
+/// file on the device; we dump then `cat` it in one shell round-trip.
+fn android_describe_ui(serial: &str) -> ToolOutput {
+    let cmd = format!(
+        "adb -s {serial} exec-out 'uiautomator dump /sdcard/umide_ui.xml \
+         >/dev/null 2>&1 && cat /sdcard/umide_ui.xml'"
+    );
+    match adb_sh(&cmd) {
+        Ok(out) if out.status.success() => {
+            let xml = String::from_utf8_lossy(&out.stdout);
+            if !xml.contains("<node") {
+                return ToolOutput::error(format!(
+                    "uiautomator produced no hierarchy: {}",
+                    clip(xml.trim(), 200)
+                ));
+            }
+            let listing = parse_ui_dump(&xml);
+            ToolOutput::ok(format!("UI elements (x,y = tap center):\n{listing}"))
+        }
+        Ok(out) => ToolOutput::error(format!(
+            "uiautomator dump failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        )),
+        Err(e) => ToolOutput::error(format!("uiautomator: {e}")),
+    }
+}
+
+/// Parse a uiautomator XML dump into one line per labelled or interactive node:
+/// `(cx,cy) [tap] "label" <Class> #id`. Nodes with no label and no interaction
+/// are dropped so the output stays a useful, skimmable map rather than the raw
+/// tree. Output is capped so a deep hierarchy can't flood the context.
+fn parse_ui_dump(xml: &str) -> String {
+    // Each `<node ...>` (container or leaf) carries its own attributes, so a
+    // flat scan over opening tags captures every element regardless of nesting.
+    // Attribute values are XML-escaped, so `>` never appears inside one.
+    let node_re = regex::Regex::new(r"<node\s+([^>]*?)/?>")
+        .expect("static node regex is valid");
+    let attr_re = regex::Regex::new(r#"([\w:-]+)="([^"]*)""#)
+        .expect("static attr regex is valid");
+
+    let mut lines = Vec::new();
+    for node in node_re.captures_iter(xml) {
+        let mut attrs = std::collections::HashMap::new();
+        for a in attr_re.captures_iter(&node[1]) {
+            attrs.insert(a[1].to_string(), xml_unescape(&a[2]));
+        }
+        let get = |k: &str| attrs.get(k).map(String::as_str).unwrap_or("");
+        let text = get("text").trim();
+        let desc = get("content-desc").trim();
+        let clickable = get("clickable") == "true";
+        let label = if !text.is_empty() { text } else { desc };
+        // Keep only what a user could read or act on.
+        if label.is_empty() && !clickable {
+            continue;
+        }
+        let Some((cx, cy)) = bounds_center(get("bounds")) else {
+            continue;
+        };
+        let mut line = format!("({cx},{cy})");
+        if clickable {
+            line.push_str(" [tap]");
+        }
+        if !label.is_empty() {
+            line.push_str(&format!(" \"{}\"", clip(label, 80)));
+        }
+        let class = get("class").rsplit('.').next().unwrap_or("");
+        if !class.is_empty() {
+            line.push_str(&format!(" <{class}>"));
+        }
+        let rid = get("resource-id");
+        if !rid.is_empty() {
+            line.push_str(&format!(" #{}", rid.rsplit('/').next().unwrap_or(rid)));
+        }
+        lines.push(line);
+    }
+    if lines.is_empty() {
+        return "No labelled or interactive elements found (the screen may be \
+                fully custom-rendered — use screenshot_device)."
+            .to_string();
+    }
+    const MAX: usize = 200;
+    let total = lines.len();
+    if total > MAX {
+        lines.truncate(MAX);
+        lines.push(format!("… ({} more elements omitted)", total - MAX));
+    }
+    lines.join("\n")
+}
+
+/// Center `(x,y)` of a uiautomator `bounds` value `"[x1,y1][x2,y2]"`.
+fn bounds_center(bounds: &str) -> Option<(i64, i64)> {
+    let nums: Vec<i64> = bounds
+        .split(|c: char| c != '-' && !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    match nums.as_slice() {
+        [x1, y1, x2, y2] => Some(((x1 + x2) / 2, (y1 + y2) / 2)),
+        _ => None,
+    }
+}
+
+/// Unescape the five XML entities that appear in uiautomator attribute values.
+/// `&amp;` is replaced last so an escaped entity isn't double-decoded.
+fn xml_unescape(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
 fn ios_logs(udid: &str, lines: i64, filter: &str) -> ToolOutput {
     let mut cmd = format!(
         "xcrun simctl spawn {udid} log show --last 1m --style compact 2>/dev/null"
@@ -1518,6 +1749,76 @@ mod tests {
         small.write_to(&mut buf, image::ImageFormat::Png).unwrap();
         let bytes = buf.into_inner();
         assert_eq!(downscale_png(&bytes, 1280), bytes);
+    }
+
+    #[test]
+    fn bounds_center_computes_midpoint() {
+        assert_eq!(bounds_center("[0,0][100,200]"), Some((50, 100)));
+        assert_eq!(bounds_center("[10,20][30,60]"), Some((20, 40)));
+        assert_eq!(bounds_center("garbage"), None);
+        assert_eq!(bounds_center("[1,2][3]"), None); // only 3 numbers
+    }
+
+    #[test]
+    fn parse_ui_dump_lists_labelled_and_tappable_nodes() {
+        let xml = r#"<?xml version='1.0'?>
+<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][1080,2400]">
+    <node text="Settings" resource-id="com.app:id/title"
+          class="android.widget.TextView" clickable="false"
+          bounds="[40,100][300,180]" />
+    <node content-desc="Search &amp; more" class="android.widget.Button"
+          clickable="true" bounds="[900,100][1000,200]" />
+    <node text="" content-desc="" class="android.view.View"
+          clickable="false" bounds="[0,300][1080,400]" />
+  </node>
+</hierarchy>"#;
+        let out = parse_ui_dump(xml);
+        // Labelled TextView is listed with its center + short class + short id.
+        assert!(out.contains("(170,140)"));
+        assert!(out.contains("\"Settings\""));
+        assert!(out.contains("<TextView>"));
+        assert!(out.contains("#title"));
+        // Clickable button: [tap] marker + unescaped content-desc.
+        assert!(out.contains("[tap]"));
+        assert!(out.contains("\"Search & more\""));
+        // The empty, non-clickable spacer node is dropped.
+        assert!(!out.contains("(540,350)"));
+    }
+
+    #[test]
+    fn parse_ui_dump_reports_empty_hierarchy() {
+        let out = parse_ui_dump("<hierarchy></hierarchy>");
+        assert!(out.contains("custom-rendered"));
+    }
+
+    #[test]
+    fn adb_transient_errors_are_retried() {
+        // Daemon/attach races → retry.
+        assert!(adb_stderr_is_transient("error: device offline"));
+        assert!(adb_stderr_is_transient("error: closed"));
+        assert!(adb_stderr_is_transient(
+            "adb: error: failed to start daemon: daemon not running"
+        ));
+        assert!(adb_stderr_is_transient(
+            "protocol fault (couldn't read status)"
+        ));
+        // Real failures → no retry.
+        assert!(!adb_stderr_is_transient(
+            "Exception occurred while executing 'input'"
+        ));
+        assert!(!adb_stderr_is_transient(""));
+    }
+
+    #[test]
+    fn device_consent_maps_approve_and_reject() {
+        // Approving (Allowed / CommandApproved / EditApplied) unlocks device
+        // input; only Rejected or a failed edit keeps it locked.
+        assert!(consent_granted(&ApprovalOutcome::Allowed));
+        assert!(consent_granted(&ApprovalOutcome::CommandApproved));
+        assert!(consent_granted(&ApprovalOutcome::EditApplied));
+        assert!(!consent_granted(&ApprovalOutcome::Rejected));
+        assert!(!consent_granted(&ApprovalOutcome::EditFailed("io".into())));
     }
 
     #[test]

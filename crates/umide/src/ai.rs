@@ -1219,12 +1219,15 @@ fn resolve_target(
             umide_emulator::DevicePlatform::Ios => {
                 return Ok(Target::Ios(dev.id.clone()));
             }
-            // An Android `.id` is the AVD name, not an adb serial, so we still
-            // resolve the running serial — but scoped to Android because that's
-            // what the user selected. TODO: prefer a panel-provided adb serial
-            // to disambiguate multiple Android devices (pending DeviceInfo.serial).
+            // Prefer the panel-resolved adb serial (`emulator-<port>`) when the
+            // producer has it — that targets the *exact* device the user is
+            // viewing even with several Android emulators up. Fall back to the
+            // first running serial (the `.id` is only the AVD name, not a serial).
             umide_emulator::DevicePlatform::Android => {
-                return android_serial().map(Target::Android);
+                return match &dev.serial {
+                    Some(serial) => Ok(Target::Android(serial.clone())),
+                    None => android_serial().map(Target::Android),
+                };
             }
         }
     }
@@ -1868,6 +1871,7 @@ mod tests {
             name: "iPhone 15".into(),
             platform: DevicePlatform::Ios,
             state: DeviceState::Running,
+            serial: None, // iOS has no adb serial
         };
         // No explicit arg → target the selected iOS sim directly by its UDID
         // (this branch resolves without touching a real device).
@@ -1883,6 +1887,82 @@ mod tests {
             resolve_target(&serde_json::json!({"platform": "android"}), Some(&ios))
                 .is_err()
         );
+        // A selected Android device with a panel-resolved serial targets that
+        // exact serial (no device needed — the serial is taken as-is).
+        let android = DeviceInfo {
+            id: "Pixel_9a".into(),
+            name: "Pixel 9a".into(),
+            platform: DevicePlatform::Android,
+            state: DeviceState::Running,
+            serial: Some("emulator-5556".into()),
+        };
+        assert_eq!(
+            resolve_target(&serde_json::json!({}), Some(&android)),
+            Ok(Target::Android("emulator-5556".into()))
+        );
+    }
+
+    /// End-to-end smoke test against a real running Android emulator/device.
+    /// Ignored by default (CI has no device); run with one booted:
+    ///   cargo test -p umide-app --lib live_android -- --ignored --nocapture
+    #[test]
+    #[ignore = "requires a running Android device/emulator"]
+    fn live_android_device_tools() {
+        let serial = android_serial().expect("a running Android device");
+        eprintln!("• android_serial → {serial}");
+
+        // Real screencap → PNG bytes (with_image, not an error).
+        let shot = android_screenshot(&serial);
+        assert!(!shot.is_error, "screenshot errored: {}", shot.summary);
+        let has_png = shot
+            .content
+            .iter()
+            .any(|c| matches!(c, umide_agent::ToolResultContent::Image { .. }));
+        assert!(has_png, "screenshot returned no image");
+        eprintln!("• android_screenshot → {} (image ✓)", shot.summary);
+
+        // Real uiautomator dump → parsed, tappable element listing.
+        let ui = ui_text(&android_describe_ui(&serial));
+        assert!(
+            ui.contains('(') && ui.contains(','),
+            "describe_ui had no coordinates:\n{ui}"
+        );
+        eprintln!(
+            "• android_describe_ui → {} lines, e.g.\n    {}",
+            ui.lines().count(),
+            ui.lines().next().unwrap_or("")
+        );
+
+        // type_text with the exact chars that broke cmd.exe on Windows — must
+        // run cleanly via the direct-argv path (#41).
+        let typed =
+            adb_input(&serial, "input text 'a&b<c>d|e'", "type special".into());
+        assert!(!typed.is_error, "type_text errored: {}", typed.summary);
+        eprintln!("• adb_input (special chars) → ok");
+
+        // Filtered logs (Rust-side filter, no `grep`).
+        let logs = android_logs(&serial, 60, "activitymanager");
+        assert!(!logs.is_error, "read_logs errored: {}", logs.summary);
+        eprintln!("• android_logs (filtered) → {}", logs.summary);
+
+        // G2: a selected Android device with a serial targets that exact serial.
+        let dev = umide_emulator::DeviceInfo {
+            id: "Pixel_9a".into(),
+            name: "Pixel 9a".into(),
+            platform: umide_emulator::DevicePlatform::Android,
+            state: umide_emulator::DeviceState::Running,
+            serial: Some(serial.clone()),
+        };
+        assert_eq!(
+            resolve_target(&serde_json::json!({}), Some(&dev)),
+            Ok(Target::Android(serial))
+        );
+        eprintln!("• resolve_target(selected) → the viewed device ✓");
+    }
+
+    fn ui_text(out: &ToolOutput) -> String {
+        assert!(!out.is_error, "describe_ui errored: {}", out.summary);
+        text_of(out)
     }
 
     #[test]

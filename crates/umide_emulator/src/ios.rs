@@ -103,6 +103,7 @@ impl IosSimulator {
                                 name,
                                 platform: DevicePlatform::Ios,
                                 state,
+                                serial: None, // iOS has no adb serial
                             });
                         }
                     }

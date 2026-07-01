@@ -638,6 +638,7 @@ fn android_panel_portable(
         start_emulator_input, start_emulator_stream, view_to_device,
     };
     use floem::event::{Event, EventListener};
+    use floem::ext_event::update_signal_from_channel;
     use floem::kurbo::Size;
     use floem::prelude::{Key, NamedKey};
     use floem::style::Position;
@@ -660,6 +661,28 @@ fn android_panel_portable(
             start_emulator_stream(ENDPOINT.to_string(), frame_signal, native_size);
             input_handle.set(Some(start_emulator_input(ENDPOINT.to_string())));
             stream_started.set(true);
+        }
+    });
+
+    // A device launched from the Start button isn't booted yet, so its adb
+    // serial (`emulator-<port>`) can't be known at click time. The Start handler
+    // resolves it off the UI thread once boot completes and delivers `(avd_id,
+    // serial)` here; we reconcile it into `running_device` so G2's
+    // `active_device` carries the serial for the AI agent to target. Keyed by
+    // AVD id and guarded on the current device, so a Stop (or a different Start)
+    // before boot can't resurrect a stale device.
+    let (serial_tx, serial_rx) = std::sync::mpsc::channel::<(String, String)>();
+    let resolved_serial: RwSignal<Option<(String, String)>> = RwSignal::new(None);
+    update_signal_from_channel(resolved_serial.write_only(), serial_rx);
+    Effect::new(move |_| {
+        if let Some((avd_id, serial)) = resolved_serial.get() {
+            if let Some(mut dev) = running_device.get_untracked() {
+                if dev.id == avd_id && dev.serial.as_deref() != Some(serial.as_str())
+                {
+                    dev.serial = Some(serial);
+                    running_device.set(Some(dev));
+                }
+            }
         }
     });
 
@@ -726,6 +749,8 @@ fn android_panel_portable(
         let device_cloned_start = device.clone();
         let device_cloned_stop = device.clone();
         let device_cloned_resume = device.clone();
+        // Per-item sender so the async launch can report the resolved adb serial.
+        let serial_tx = serial_tx.clone();
         let is_running = device.state == DeviceState::Running;
         let is_starting = device.state == DeviceState::Starting;
         let is_disconnected = device.state == DeviceState::Disconnected;
@@ -747,14 +772,25 @@ fn android_panel_portable(
                     // ~30s polling adb, which would freeze floem (B2). The frame
                     // stream's connect_with_retry waits for the device to boot.
                     let to_launch = device_cloned_start.clone();
-                    std::thread::spawn(move || {
-                        if let Err(e) = launch_device(&to_launch) {
-                            tracing::error!(
-                                "Failed to launch {}: {}",
-                                to_launch.name,
-                                e
-                            );
+                    let serial_tx = serial_tx.clone();
+                    std::thread::spawn(move || match launch_device(&to_launch) {
+                        Ok(()) => {
+                            // Booted — resolve the adb serial and hand it back to
+                            // the UI thread to fill into the running device.
+                            if let Some(serial) =
+                                umide_emulator::AndroidEmulator::running_serial(
+                                    &to_launch.id,
+                                )
+                            {
+                                let _ =
+                                    serial_tx.send((to_launch.id.clone(), serial));
+                            }
                         }
+                        Err(e) => tracing::error!(
+                            "Failed to launch {}: {}",
+                            to_launch.name,
+                            e
+                        ),
                     });
                     let mut d = device_cloned_start.clone();
                     d.state = DeviceState::Running;
@@ -1161,10 +1197,16 @@ pub fn emulator_panel(
             devices.set(dev_list);
         });
 
-        // NOTE (macOS): the G2 producer for `panel.active_device` is intentionally
-        // left to the Mac — it can only be tested on macOS, and the "which device
-        // is focused" choice (Android vs iOS) is theirs. Wire it here mirroring the
-        // shown device. The shared signal + Windows/Linux producer are in place.
+        // G2 producer (macOS): mirror the device the user is viewing into shared
+        // panel state so the AI agent (`resolve_target` in `ai.rs`) targets it.
+        // Both an Android emulator and an iOS simulator can run at once here, so
+        // prefer Android — matching `resolve_target`'s auto-detect order; the
+        // model can still override per-tool with an explicit `platform` arg. The
+        // adb serial (for multi-Android) rides along from `list_all_devices`.
+        let active_device = window_tab_data.panel.active_device;
+        Effect::new(move |_| {
+            active_device.set(running_android.get().or_else(|| running_ios.get()));
+        });
 
         let android_panel_visible = RwSignal::new(true);
         let ios_panel_visible = RwSignal::new(true);

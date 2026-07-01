@@ -646,6 +646,21 @@ fn android_panel_portable(
 
     const ENDPOINT: &str = "http://localhost:8554";
 
+    // The gRPC endpoint of the device being viewed: its discovered port (so the
+    // panel connects to the *right* emulator, not just the default 8554) or the
+    // 8554 fallback. The serial resolves after boot; before then — or if the
+    // discovery file is absent — we use 8554, which is what the panel launches
+    // with. (A running emulator detected at app start already carries its
+    // serial, so an external emulator on a non-default port connects correctly.)
+    let endpoint_for = move || -> String {
+        running_device
+            .get_untracked()
+            .and_then(|d| d.serial)
+            .and_then(|s| umide_emulator::AndroidEmulator::grpc_port(&s))
+            .map(|port| format!("http://localhost:{port}"))
+            .unwrap_or_else(|| ENDPOINT.to_string())
+    };
+
     // Start the gRPC frame stream and the input command connection exactly once
     // when an Android device first runs. Both stay alive for the panel's
     // lifetime — a future polish is per-launch lifecycle, but for the preview
@@ -658,8 +673,9 @@ fn android_panel_portable(
     let native_size: RwSignal<Option<(u32, u32)>> = RwSignal::new(None);
     Effect::new(move |_| {
         if running_device.get().is_some() && !stream_started.get_untracked() {
-            start_emulator_stream(ENDPOINT.to_string(), frame_signal, native_size);
-            input_handle.set(Some(start_emulator_input(ENDPOINT.to_string())));
+            let endpoint = endpoint_for();
+            start_emulator_stream(endpoint.clone(), frame_signal, native_size);
+            input_handle.set(Some(start_emulator_input(endpoint)));
             stream_started.set(true);
         }
     });
@@ -1103,9 +1119,9 @@ fn android_panel_portable(
                     // Screenshot — save a native-res PNG and reveal it.
                     clickable_icon(
                         || UmideIcons::DEVICE_SCREENSHOT,
-                        || {
+                        move || {
                             capture_screenshot(
-                                ENDPOINT.to_string(),
+                                endpoint_for(),
                                 default_screenshot_path(),
                             );
                         },

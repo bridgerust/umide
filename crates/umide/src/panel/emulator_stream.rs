@@ -155,6 +155,97 @@ pub fn start_emulator_stream(
     });
 }
 
+/// A default screenshot destination: the user's Pictures folder (or home, or
+/// the temp dir), with a unique timestamped name.
+pub fn default_screenshot_path() -> std::path::PathBuf {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from);
+    let dir = home
+        .as_ref()
+        .map(|h| h.join("Pictures"))
+        .filter(|p| p.is_dir())
+        .or_else(|| home.clone())
+        .unwrap_or_else(std::env::temp_dir);
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    dir.join(format!("umide-emulator-{ts}.png"))
+}
+
+/// Capture one native-resolution screenshot from the emulator at `endpoint`,
+/// save it as a PNG to `out`, and reveal it in the file manager. Runs on a
+/// background thread and returns immediately (a fresh short-lived gRPC
+/// connection, so it's independent of the live stream).
+pub fn capture_screenshot(endpoint: String, out: std::path::PathBuf) {
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(e) => {
+                tracing::error!("screenshot: failed to start runtime: {e}");
+                return;
+            }
+        };
+        rt.block_on(async move {
+            let mut client = match EmulatorGrpcClient::connect_with_retry(
+                &endpoint,
+                Duration::from_secs(10),
+            )
+            .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("screenshot gRPC connect failed: {e}");
+                    return;
+                }
+            };
+            let frame = match client.get_screenshot().await {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::error!("screenshot: get_screenshot failed: {e}");
+                    return;
+                }
+            };
+            let Some(png) = frame.to_png() else {
+                tracing::error!("screenshot: PNG encode failed");
+                return;
+            };
+            if let Err(e) = std::fs::write(&out, &png) {
+                tracing::error!("screenshot: write {}: {e}", out.display());
+                return;
+            }
+            tracing::info!("saved emulator screenshot: {}", out.display());
+            reveal_in_file_manager(&out);
+        });
+    });
+}
+
+/// Open the platform file manager with `path` selected, so the user can find the
+/// screenshot just saved.
+fn reveal_in_file_manager(path: &std::path::Path) {
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path.display()))
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("-R")
+            .arg(path)
+            .spawn();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Some(dir) = path.parent() {
+            let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+        }
+    }
+}
+
 /// An input event to forward to the emulator over gRPC.
 enum InputEvent {
     TouchDown(i32, i32),

@@ -23,8 +23,11 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Windows** → `feat/device-mcp` (**PR #46**) — device-tools MCP server for the
-  Claude Code CLI backend (core; proven live). (DeviceInfo.serial #44 merged.)
+- **Mac** → right-dock layout redesign (not pushed yet — push early please, it
+  gates Windows' Device Logs panel registration, see below).
+- **Windows** → mobile-first tooling: RN/Flutter project detection + `adb logcat`
+  streaming backend (collision-free parts first; panel UI waits for your dock
+  push).
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -32,39 +35,26 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-01, Windows→Mac) **Device-tools MCP for Claude Code — core proven,
-  wiring is yours (fits your agent-UI refinement).** New `ai/cli/device_server.rs`
-  (**PR #46**) exposes the emulator device tools to the Claude Code backend so the
-  in-panel session drives the device **with no API key** — verified LIVE on the
-  Pixel: the real `claude` CLI called `device_screenshot` → reasoned → `device_tap`
-  (`claude exit=0`). Reuses your `ai.rs` device fns via `super::super::` (no `ai.rs`
-  change). **4 seams to expose it from the panel (all your area — I stayed out):**
-  1. `runner.rs` — in `CliRunner::run` (~:249) start `DeviceServer::start(serial)`
-     next to `PermissionServer`; in `build_args` Claude branch (~:166) merge its
-     `mcp_config_entry()` into the ONE `--mcp-config` JSON's `mcpServers` map
-     (`--strict-mcp-config` means it must be in that JSON); add a serial field to
-     `CliRunner`.
-  2. `ai.rs` — add `selected_device: Option<DeviceInfo>` to `spawn_cli_turn`
-     (~:385), forward to `CliRunner::new` (~:419). Resolve the Android serial from
-     it (reuse `resolve_target`/`.serial`).
-  3. `ai_assistant_view.rs:824` — pass `active_device.get_untracked()` into the
-     `Launch::Cli` arm (mirror the LLM arm at `:821`).
-  4. `permission_server.rs` `is_read_only` (~:245) — add `mcp__umide-device__
-     device_screenshot`/`…describe_ui`/`…device_logs` (auto-allow reads); writes
-     (`tap`/`swipe`/`type`/`key`) keep prompting. Nicer card titles in `describe`
-     optional.
-  5. **`runner.rs` `WRITE_NOTE`/`READ_ONLY_NOTE` (~:62,69) — give the CLI backend
-     the mobile-first context it's missing.** Today they say only "inside the
-     UMIDE editor" + approval model; the built-in `SYSTEM_PROMPT` (ai.rs:35) knows
-     UMIDE is a React-Native/Flutter mobile IDE with an embedded emulator and a
-     see→act "closed loop." Once the device tools are wired, Claude Code will
-     *have* them but no framing to use them — add ~1–2 sentences mirroring
-     `SYSTEM_PROMPT`: mobile-first (RN/Flutter), an embedded Android emulator, use
-     the umide-device tools to screenshot/tap/read-logs and test changes on the
-     running device (the closed loop). Otherwise it acts like a generic code agent
-     with mystery tools.
-  `DeviceServer::start(serial)` takes the pinned serial (`None` = first running).
-  Ping me and I'll live-verify the wired in-panel flow on the Pixel.
+- (2026-07-02, Windows→Mac) **NEW DIRECTION (user, post-v0.3.0): make UMIDE feel
+  mobile-first, not "general IDE + emulators."** The everyday loop (open project →
+  run on device → read NATIVE logs → fix) must never require Android Studio/Xcode.
+  Split:
+  - **Windows building now (collision-free):** RN/Flutter **project detection**
+    (package.json/pubspec probing at workspace open → `ProjectKind` + status-bar
+    badge) and the **`adb logcat` streaming backend** (umide_emulator).
+  - **Windows blocked on your dock push:** the **Device Logs bottom panel** UI —
+    a new `PanelKind` touches `kind.rs`/`data.rs`/`view.rs`, which your right-dock
+    redesign is reshaping. **Push your redesign branch early** (even WIP) and I'll
+    register the panel on top of it instead of colliding.
+  - **Yours (macOS-only):** the iOS half of Device Logs — `xcrun simctl spawn
+    <udid> log stream` into the same panel; and **AI project-context injection**
+    (feed `ProjectKind` into SYSTEM_PROMPT/WRITE_NOTE so the agent stops
+    re-discovering the stack every session — I'll expose the signal, you consume,
+    same split as G2).
+- (2026-07-01) ✅ Device-MCP wiring + mobile context shipped in your #53; core #46.
+  Claude Code drives the device key-free. Demo assets captured on Windows (v0.3.0
+  hero screenshots + emulator GIF) — publishing PR pending; demo video re-take
+  parked.
 - (2026-07-01, Mac→Windows) **Multi-Android live check** (from #44): two emulators
   up, confirm the agent drives the one you're viewing. Blocked here on a provider
   key (agent path) — will do it once a key's available or via Claude Code once the

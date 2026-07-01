@@ -29,9 +29,13 @@ Before finishing any change, check whether these need updating and keep them in 
 ## Product positioning (keep accurate everywhere)
 - **macOS**: full product — editor + embedded Android/iOS emulators + AI assistant.
 - **Windows/Linux**: editor + AI assistant + **embedded, interactive Android emulator
-  (preview)** — live frames + pointer tap/drag (M3). iOS Simulator stays macOS-only
-  permanently. Still preview-grade: hardware buttons (Home/Back/Power) and keyboard text
-  are not yet wired into the portable panel, and a live device run on Windows is pending.
+  (preview)** — live frames + pointer tap/drag + hardware buttons (Home/Back/Power) +
+  keyboard text (M3 + PR #24). iOS Simulator stays macOS-only permanently. Still
+  preview-grade: a live device run on Windows is pending.
+- **AI assistant** (all OSes): BYO-key API providers (Claude/OpenAI/DeepSeek/Gemini,
+  approval-gated) **and** external agent CLIs — **Claude Code** (reads auto; edits/commands
+  with per-action approval), **Codex** (sandboxed workspace-write + session consent; macOS/
+  Linux), **Gemini** (read-only). CLI backends are opt-in and never auto-selected.
 
 ## Repo conventions
 - **Sole commit author**: `dev-josias <kologojosias@gmail.com>`. Do not introduce other
@@ -51,11 +55,23 @@ Before finishing any change, check whether these need updating and keep them in 
 ## Current status (keep this fresh — it is the cross-machine handoff)
 - **v0.2.0 shipped**: notarized macOS DMG, Windows MSI, Linux `.deb` on GitHub Releases.
 - **v0.3.0 in progress (unreleased)**: Windows build enabled + the embedded Android panel
-  un-gated for Windows/Linux with pointer input. Source version bumped to `0.3.0`
+  un-gated for Windows/Linux. Source version bumped to `0.3.0`
   (Cargo.toml/umide.spec/Info.plist); the `docs/index.html` download badge stays `0.2.0`
-  until a `v0.3.0` tag is cut. Work lives on branch `feat/windows-build-emulator-panel`,
-  pushed and open as **PR #21**. (On the Windows box `origin` was switched to HTTPS via
+  until a `v0.3.0` tag is cut. (On the Windows box `origin` was switched to HTTPS via
   `gh` — the SSH key is unauthenticated there; `gh auth setup-git` provides push creds.)
+  Landed on `main` toward v0.3.0:
+  - **Emulator panel (PR #21, #24, #26)**: pointer tap/drag + **hardware buttons
+    (Home/Back/Power) + keyboard text**; idle-screen freeze fixed (frame stream reconnects).
+    Verified on a real `Pixel_9a` AVD on Windows.
+  - **AI assistant — agent-CLI backends (PR #25)**: the panel can be driven by **Claude
+    Code** (reads auto; edits/commands via a per-action approval bridge — an in-process MCP
+    `--permission-prompt-tool` server into UMIDE's ApprovalQueue), **Codex** (sandboxed
+    `workspace-write` + session consent; gated off on Windows — no sandbox there), and
+    **Gemini** (read-only). Seam: `AssistantBackend = Llm | Cli(CliKind)` +
+    `AgentRunner`/`CliRunner` in `crates/umide/src/ai/cli/`. Claude+Codex verified live;
+    Gemini parser verified from the CLI's source, **live run pending a `gemini` login**.
+    Landed a 36-agent adversarial review's must-fixes. Smoke examples: `cli_smoke`,
+    `cli_perm_smoke`, `codex_smoke`, `gemini_smoke`.
 - **floem** is pinned at `bridgerust/floem@e07fcd5ff148…` (branch `feat/external-texture`
   = upstream-latest + the wgpu external-texture / `VideoFrame` primitive + aspect letterbox).
   It is fetched from git automatically — you only need a local floem clone to iterate on

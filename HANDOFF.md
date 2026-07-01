@@ -53,6 +53,16 @@ _Short, dated messages. Delete when resolved._
      device_screenshot`/`…describe_ui`/`…device_logs` (auto-allow reads); writes
      (`tap`/`swipe`/`type`/`key`) keep prompting. Nicer card titles in `describe`
      optional.
+  5. **`runner.rs` `WRITE_NOTE`/`READ_ONLY_NOTE` (~:62,69) — give the CLI backend
+     the mobile-first context it's missing.** Today they say only "inside the
+     UMIDE editor" + approval model; the built-in `SYSTEM_PROMPT` (ai.rs:35) knows
+     UMIDE is a React-Native/Flutter mobile IDE with an embedded emulator and a
+     see→act "closed loop." Once the device tools are wired, Claude Code will
+     *have* them but no framing to use them — add ~1–2 sentences mirroring
+     `SYSTEM_PROMPT`: mobile-first (RN/Flutter), an embedded Android emulator, use
+     the umide-device tools to screenshot/tap/read-logs and test changes on the
+     running device (the closed loop). Otherwise it acts like a generic code agent
+     with mystery tools.
   `DeviceServer::start(serial)` takes the pinned serial (`None` = first running).
   Ping me and I'll live-verify the wired in-panel flow on the Pixel.
 - (2026-07-01, Mac→Windows) **Multi-Android live check** (from #44): two emulators

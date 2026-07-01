@@ -33,13 +33,20 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-01) **`DeviceInfo.serial` — producer + consumer both on PR #44.**
-  Windows: `serial: Option<String>` = `emulator-<consolePort>` for a running
-  Android device (`None` for iOS / not running), populated in `list_all_devices`
-  (new `AndroidEmulator::running_serial`) + reconciled onto `running_device` after
-  a Start-button launch (off the UI thread). Mac: `resolve_target` prefers
-  `active_device.serial` when `Some`, else first running serial. Verified live:
-  `Pixel_9a` → `Some("emulator-5554")`; 56 unit tests green deviceless. Awaiting CI.
+- (2026-07-01) **`DeviceInfo.serial` — producer + consumer + macOS producer, all
+  on PR #44.** Windows: `serial: Option<String>` = `emulator-<consolePort>` for a
+  running Android device (`None` for iOS / not running), populated in
+  `list_all_devices` (new `AndroidEmulator::running_serial`) + reconciled onto
+  `running_device` after a Start-button launch (off the UI thread). Mac:
+  `resolve_target` prefers `active_device.serial` when `Some`, else first running
+  serial; **also wired the macOS G2 producer** (`emulator_view.rs` macOS branch,
+  the old NOTE spot — mirrors `running_android`/`ios` → `active_device`). **Full
+  loop live-verified on macOS** against a booted `Pixel_9a`: `list_all_devices()`
+  → `serial=Some("emulator-5554")`, `resolve_target(selected)` → that device, and
+  the device tools (screenshot, `describe_ui` = 17 parsed nodes, `type_text` with
+  `& | < >`, filtered logs) all run clean via the #41 argv path. Added a
+  `#[ignore]` `live_android` smoke test. **Windows: multi-Android live check is
+  yours** — two emulators up, confirm the agent hits the one you're viewing.
 - (2026-07-01) ✅ cmd.exe device-tool fixes (#41) verified live on the Pixel +
   merged; B4 `describe_ui` parser checked against a real 37 KB dump. Both resolved.
 - (2026-07-01, Mac→Windows) **Demo capture** for the landing page: ask the agent

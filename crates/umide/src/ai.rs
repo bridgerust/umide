@@ -239,6 +239,7 @@ pub struct LlmRunner {
     pub approvals: ApprovalQueue,
     pub trigger: ExtSendTrigger,
     pub device_consent: Arc<Mutex<Option<bool>>>,
+    pub selected_device: Option<umide_emulator::DeviceInfo>,
 }
 
 #[async_trait(?Send)]
@@ -249,6 +250,7 @@ impl AgentRunner for LlmRunner {
             self.approvals.clone(),
             self.trigger,
             self.device_consent.clone(),
+            self.selected_device.clone(),
         ));
         let seed = self.history.lock().unwrap().clone();
         let mut agent =
@@ -329,6 +331,7 @@ pub fn spawn_turn(
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
     device_consent: Arc<Mutex<Option<bool>>>,
+    selected_device: Option<umide_emulator::DeviceInfo>,
     cancel: Arc<AtomicBool>,
 ) {
     let err_queue = queue.clone();
@@ -363,6 +366,7 @@ pub fn spawn_turn(
                     approvals,
                     trigger,
                     device_consent,
+                    selected_device,
                 };
                 runner.run(user_text, push, cancel).await;
             });
@@ -666,6 +670,10 @@ pub struct EditorTools {
     /// asked once, then `Some(granted)`. Shared across turns (owned by the panel)
     /// so the agent is gated once per session, not once per turn.
     device_consent: Arc<Mutex<Option<bool>>>,
+    /// The device the user is viewing in the Emulator panel at turn start, if
+    /// any. Device tools target it (so the agent drives what the user sees)
+    /// unless the model passes an explicit `platform`. `None` → auto-detect.
+    selected_device: Option<umide_emulator::DeviceInfo>,
 }
 
 impl EditorTools {
@@ -674,12 +682,14 @@ impl EditorTools {
         approvals: ApprovalQueue,
         trigger: ExtSendTrigger,
         device_consent: Arc<Mutex<Option<bool>>>,
+        selected_device: Option<umide_emulator::DeviceInfo>,
     ) -> Self {
         Self {
             reader: ReadOnlyTools::new(root),
             approvals,
             trigger,
             device_consent,
+            selected_device,
         }
     }
 
@@ -809,7 +819,7 @@ impl EditorTools {
     // simctl (screenshot/logs) and idb (input).
 
     fn screenshot_device(&self, input: &serde_json::Value) -> ToolOutput {
-        match resolve_target(input) {
+        match resolve_target(input, self.selected_device.as_ref()) {
             Ok(Target::Android(serial)) => android_screenshot(&serial),
             Ok(Target::Ios(udid)) => ios_screenshot(&udid),
             Err(e) => ToolOutput::error(e),
@@ -824,7 +834,7 @@ impl EditorTools {
             return ToolOutput::error("tap needs integer `x` and `y`");
         };
         let summary = format!("tap ({x}, {y})");
-        match resolve_target(input) {
+        match resolve_target(input, self.selected_device.as_ref()) {
             Ok(Target::Android(serial)) => {
                 adb_input(&serial, &format!("input tap {x} {y}"), summary)
             }
@@ -851,7 +861,7 @@ impl EditorTools {
             .unwrap_or(300)
             .clamp(50, 5000);
         let summary = format!("swipe ({},{})→({},{})", c[0], c[1], c[2], c[3]);
-        match resolve_target(input) {
+        match resolve_target(input, self.selected_device.as_ref()) {
             Ok(Target::Android(serial)) => adb_input(
                 &serial,
                 &format!("input swipe {} {} {} {} {dur}", c[0], c[1], c[2], c[3]),
@@ -883,7 +893,7 @@ impl EditorTools {
             return ToolOutput::error("type_text needs a `text` string");
         };
         let summary = format!("typed {} chars", text.chars().count());
-        match resolve_target(input) {
+        match resolve_target(input, self.selected_device.as_ref()) {
             Ok(Target::Android(serial)) => {
                 // adb `input text` uses %s for spaces; single-quote the rest.
                 let escaped = text.replace('\'', "'\\''").replace(' ', "%s");
@@ -898,7 +908,7 @@ impl EditorTools {
         let Some(key) = input.get("key").and_then(|v| v.as_str()) else {
             return ToolOutput::error("press_key needs a `key` string");
         };
-        match resolve_target(input) {
+        match resolve_target(input, self.selected_device.as_ref()) {
             Ok(Target::Android(serial)) => {
                 let code = match key.to_ascii_lowercase().as_str() {
                     "back" => "KEYCODE_BACK",
@@ -929,7 +939,7 @@ impl EditorTools {
             .unwrap_or(120)
             .clamp(1, 1000);
         let filter = input.get("filter").and_then(|v| v.as_str()).unwrap_or("");
-        match resolve_target(input) {
+        match resolve_target(input, self.selected_device.as_ref()) {
             Ok(Target::Android(serial)) => android_logs(&serial, lines, filter),
             Ok(Target::Ios(udid)) => ios_logs(&udid, lines, filter),
             Err(e) => ToolOutput::error(e),
@@ -937,7 +947,7 @@ impl EditorTools {
     }
 
     fn describe_ui(&self, input: &serde_json::Value) -> ToolOutput {
-        match resolve_target(input) {
+        match resolve_target(input, self.selected_device.as_ref()) {
             Ok(Target::Android(serial)) => android_describe_ui(&serial),
             Ok(Target::Ios(_)) => ToolOutput::error(
                 "describe_ui is Android-only for now — use screenshot_device on \
@@ -1174,34 +1184,62 @@ fn device_specs() -> Vec<ToolDef> {
 // ---------------------------------------------------------------------------
 
 /// Which device a tool call targets.
+#[derive(Debug, PartialEq, Eq)]
 enum Target {
     Android(String), // adb serial, e.g. emulator-5554
     Ios(String),     // simulator UDID
 }
 
-/// Resolve the target from an optional `platform` arg, else auto-detect a
-/// running Android emulator first, then a booted iOS simulator.
-fn resolve_target(input: &serde_json::Value) -> Result<Target, String> {
+/// Resolve which device a tool call targets. Precedence:
+/// 1. an explicit `platform` arg from the model (an override);
+/// 2. otherwise the device the user is viewing in the panel (`selected`), so the
+///    agent drives what the user sees rather than "first adb device";
+/// 3. otherwise auto-detect — a running Android emulator first, then a booted
+///    iOS simulator.
+fn resolve_target(
+    input: &serde_json::Value,
+    selected: Option<&umide_emulator::DeviceInfo>,
+) -> Result<Target, String> {
+    // 1. Explicit model override always wins.
     match input.get("platform").and_then(|v| v.as_str()) {
-        Some("android") => android_serial().map(Target::Android),
-        Some("ios") => ios_udid().map(Target::Ios),
-        Some(other) => Err(format!(
-            "unknown platform '{other}' (use 'android' or 'ios')"
-        )),
-        None => {
-            if let Ok(s) = android_serial() {
-                return Ok(Target::Android(s));
+        Some("android") => return android_serial().map(Target::Android),
+        Some("ios") => return ios_udid().map(Target::Ios),
+        Some(other) => {
+            return Err(format!(
+                "unknown platform '{other}' (use 'android' or 'ios')"
+            ));
+        }
+        None => {}
+    }
+    // 2. Target the device the user is viewing in the Emulator panel.
+    if let Some(dev) = selected {
+        match dev.platform {
+            // An iOS `DeviceInfo.id` IS the simulator UDID, so target it
+            // directly — this picks the right sim when several are booted.
+            umide_emulator::DevicePlatform::Ios => {
+                return Ok(Target::Ios(dev.id.clone()));
             }
-            if let Ok(u) = ios_udid() {
-                return Ok(Target::Ios(u));
+            // An Android `.id` is the AVD name, not an adb serial, so we still
+            // resolve the running serial — but scoped to Android because that's
+            // what the user selected. TODO: prefer a panel-provided adb serial
+            // to disambiguate multiple Android devices (pending DeviceInfo.serial).
+            umide_emulator::DevicePlatform::Android => {
+                return android_serial().map(Target::Android);
             }
-            Err(
-                "no running Android emulator or booted iOS simulator — start \
-                 one in the Emulator panel"
-                    .to_string(),
-            )
         }
     }
+    // 3. Nothing selected: auto-detect Android first, then iOS.
+    if let Ok(s) = android_serial() {
+        return Ok(Target::Android(s));
+    }
+    if let Ok(u) = ios_udid() {
+        return Ok(Target::Ios(u));
+    }
+    Err(
+        "no running Android emulator or booted iOS simulator — start \
+         one in the Emulator panel"
+            .to_string(),
+    )
 }
 
 /// PATH augmented with the Android SDK platform-tools (and, on Unix, Homebrew
@@ -1820,6 +1858,31 @@ mod tests {
         small.write_to(&mut buf, image::ImageFormat::Png).unwrap();
         let bytes = buf.into_inner();
         assert_eq!(downscale_png(&bytes, 1280), bytes);
+    }
+
+    #[test]
+    fn resolve_target_honors_selected_device() {
+        use umide_emulator::{DeviceInfo, DevicePlatform, DeviceState};
+        let ios = DeviceInfo {
+            id: "UDID-123".into(),
+            name: "iPhone 15".into(),
+            platform: DevicePlatform::Ios,
+            state: DeviceState::Running,
+        };
+        // No explicit arg → target the selected iOS sim directly by its UDID
+        // (this branch resolves without touching a real device).
+        assert_eq!(
+            resolve_target(&serde_json::json!({}), Some(&ios)),
+            Ok(Target::Ios("UDID-123".into()))
+        );
+        // An explicit `platform` arg overrides the selection: asking for android
+        // ignores the selected iOS sim and tries to resolve an android serial
+        // (which, with no device in the test env, errors — proving the override
+        // took precedence rather than returning the iOS target).
+        assert!(
+            resolve_target(&serde_json::json!({"platform": "android"}), Some(&ios))
+                .is_err()
+        );
     }
 
     #[test]

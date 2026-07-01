@@ -109,16 +109,23 @@ Before finishing any change, check whether these need updating and keep them in 
     `Arc`), and the stream is downscaled to a 1280px long edge while **touch input still
     maps to native pixels** (probed once into a `native_size` signal — verified live: a
     swipe on the downscaled panel still opens the shade).
+  - **Hardware buttons + keyboard (PR #24, open)**: the portable panel now has Home/Back/
+    Recents/Power buttons in the sidebar (via `EmulatorInput::key` "GoHome"/"GoBack"/
+    "AppSwitch"/"Power") and forwards keyboard `KeyDown` (the `video_frame` is `focusable`).
+    Required fixing `EmulatorGrpcClient::send_key` to send a **keydown+keyup** pair — a lone
+    `keypress` is ignored by the emulator for non-character keys, which is why keys never
+    reached the device (the macOS panel dodges this by shelling out to `adb`). Verified live:
+    Home from the app drawer returns to the home screen. Keyboard text typing rides the same
+    fixed path but wasn't visually confirmed (device text-field automation was finicky) —
+    worth a 2-second manual check.
 - **Next milestones / before tagging v0.3.0**:
   1. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
      the MSI/`release-lto` path isn't exercised by ordinary CI. Then flip the `docs/index.html`
      badge to `0.3.0`.
-  2. **Hardware buttons + keyboard** in the portable panel (Home/Back/Power via
-     `EmulatorInput::key_code`; text via `key`) — the macOS sidebar has these; the portable
-     panel currently wires pointer only.
-  3. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
+  2. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
      AI providers (note: `ai.rs` tool PATH on Windows is now fixed, but the providers
-     themselves haven't been exercised on Windows).
+     themselves haven't been exercised on Windows). NB: the Mac is working on AI agent
+     integration — coordinate before touching AI code.
 
 ## Working across machines (Mac + Windows)
 Claude Code conversation history is **local to each machine — it does not sync**. A chat

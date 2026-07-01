@@ -154,6 +154,11 @@ pub struct CommonData {
     // the current focused view which will receive keyboard events
     pub keyboard_focus: RwSignal<Option<ViewId>>,
     pub window_common: Rc<WindowCommonData>,
+    /// The detected mobile project kind of this workspace (React Native /
+    /// Flutter), probed once at workspace open. `None` for non-mobile
+    /// workspaces and remote (SSH/WSL) workspaces. Drives the status-bar badge
+    /// and, later, AI project context + run-on-device.
+    pub project_kind: RwSignal<Option<crate::project::ProjectKind>>,
 }
 
 impl std::fmt::Debug for CommonData {
@@ -361,6 +366,17 @@ impl WindowTabData {
             text_layout.size().height
         });
 
+        // Mobile project detection: two cheap file probes, local workspaces
+        // only (remote paths can't be read from here). Feeds the status-bar
+        // badge; later the AI agent's project context and run-on-device.
+        let project_kind = cx.create_rw_signal(
+            workspace
+                .path
+                .as_deref()
+                .filter(|_| workspace.kind.is_local())
+                .and_then(crate::project::detect_project_kind),
+        );
+
         let common = Rc::new(CommonData {
             workspace: workspace.clone(),
             scope: cx,
@@ -388,6 +404,7 @@ impl WindowTabData {
             breakpoints: cx.create_rw_signal(BTreeMap::new()),
             keyboard_focus: cx.create_rw_signal(None),
             window_common: window_common.clone(),
+            project_kind,
         });
 
         let main_split = MainSplitData::new(cx, common.clone());

@@ -38,6 +38,7 @@ pub fn status(
     let editor = window_tab_data.main_split.active_editor;
     let panel = window_tab_data.panel.clone();
     let palette = window_tab_data.palette.clone();
+    let project_kind = window_tab_data.common.project_kind;
     let diagnostic_count = Memo::new(move |_| {
         let mut errors = 0;
         let mut warnings = 0;
@@ -164,6 +165,39 @@ pub fn status(
                     EventPropagation::Continue
                 },
             ),
+            // Mobile project badge: shows the detected React Native / Flutter
+            // kind of the workspace; hidden for non-mobile workspaces.
+            Stack::new((
+                svg(move || config.get().ui_svg(UmideIcons::EMULATOR)).style(
+                    move |s| {
+                        let config = config.get();
+                        let icon_size = config.ui.icon_size() as f32;
+                        s.size(icon_size, icon_size)
+                            .color(config.color(UmideColor::LAPCE_ICON_ACTIVE))
+                    },
+                ),
+                Label::derived(move || {
+                    project_kind
+                        .get()
+                        .map(|k| k.label().to_string())
+                        .unwrap_or_default()
+                })
+                .style(move |s| {
+                    s.margin_left(10.0)
+                        .color(config.get().color(UmideColor::STATUS_FOREGROUND))
+                        .selectable(false)
+                }),
+            ))
+            .style(move |s| {
+                s.display(if project_kind.get().is_none() {
+                    Display::None
+                } else {
+                    Display::Flex
+                })
+                .height_pct(100.0)
+                .padding_horiz(10.0)
+                .align_items(Some(AlignItems::Center))
+            }),
             {
                 let panel = panel.clone();
                 Stack::new((

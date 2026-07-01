@@ -63,9 +63,17 @@ impl PermissionServer {
 
     /// The `--mcp-config` JSON for Claude to reach this server.
     pub fn mcp_config_json(&self) -> String {
+        format!("{{\"mcpServers\":{{{}}}}}", self.mcp_config_entry())
+    }
+
+    /// This server's entry for the `mcpServers` map, as `"umide": { … }` (no
+    /// braces), so it can be merged with the device server's entry into one
+    /// `--mcp-config` object (Claude runs `--strict-mcp-config`, so both servers
+    /// must live in that single JSON).
+    pub fn mcp_config_entry(&self) -> String {
         format!(
-            "{{\"mcpServers\":{{\"{SERVER_NAME}\":{{\"type\":\"http\",\
-             \"url\":\"http://127.0.0.1:{}/mcp\"}}}}}}",
+            "\"{SERVER_NAME}\":{{\"type\":\"http\",\
+             \"url\":\"http://127.0.0.1:{}/mcp\"}}",
             self.port
         )
     }
@@ -242,6 +250,8 @@ fn deny(message: &str) -> Value {
 }
 
 /// Tools that cannot mutate the workspace or run commands — auto-approved.
+/// Includes the device-MCP *read* tools (observe the emulator); the device
+/// *write* tools (tap/swipe/type/key) fall through to the approval prompt.
 fn is_read_only(tool: &str) -> bool {
     matches!(
         tool,
@@ -256,6 +266,9 @@ fn is_read_only(tool: &str) -> bool {
             | "BashOutput"
             | "ListMcpResources"
             | "ReadMcpResource"
+            | "mcp__umide-device__device_screenshot"
+            | "mcp__umide-device__describe_ui"
+            | "mcp__umide-device__device_logs"
     )
 }
 

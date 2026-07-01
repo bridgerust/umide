@@ -382,6 +382,7 @@ pub fn spawn_turn(
 /// `trigger`/`cancel` behave exactly as for the LLM path. `session` carries the
 /// CLI's conversation id across turns so the agent keeps multi-turn context.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_cli_turn(
     kind: cli::CliKind,
     workspace: PathBuf,
@@ -390,8 +391,16 @@ pub fn spawn_cli_turn(
     queue: EventQueue,
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
+    selected_device: Option<umide_emulator::DeviceInfo>,
     cancel: Arc<AtomicBool>,
 ) {
+    // The device-MCP tools drive Android over adb, so pin the panel-selected
+    // Android serial (`None` ⇒ the device server targets the first running one).
+    let serial = selected_device.and_then(|d| {
+        matches!(d.platform, umide_emulator::DevicePlatform::Android)
+            .then_some(d.serial)
+            .flatten()
+    });
     let err_queue = queue.clone();
     let spawned = std::thread::Builder::new()
         .name("umide-agent-cli".into())
@@ -417,7 +426,7 @@ pub fn spawn_cli_turn(
             let cancel = CancelHandle::new(cancel);
             rt.block_on(async move {
                 let mut runner = cli::runner::CliRunner::new(
-                    kind, workspace, session, approvals, trigger,
+                    kind, workspace, session, approvals, trigger, serial,
                 );
                 runner.run(user_text, push, cancel).await;
             });

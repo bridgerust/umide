@@ -125,6 +125,9 @@ impl UmideIcons {
     pub const DEVICE_RECENTS: &'static str = "device_recents";
     pub const DEVICE_POWER: &'static str = "device_power";
     pub const DEVICE_SCREENSHOT: &'static str = "device_screenshot";
+    pub const DEVICE_VOLUME_UP: &'static str = "device_volume_up";
+    pub const DEVICE_VOLUME_DOWN: &'static str = "device_volume_down";
+    pub const DEVICE_ROTATE: &'static str = "device_rotate";
 
     pub const SYMBOL_KIND_ARRAY: &'static str = "symbol_kind.array";
     pub const SYMBOL_KIND_BOOLEAN: &'static str = "symbol_kind.boolean";

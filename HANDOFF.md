@@ -23,11 +23,11 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Mac** → `feat/agent-device-consent` — E1 (gate device input); F2 (`adb`
-  timeout/retry) next.
-- **Windows** → `feat/input-channel-watchdog` (**PR #37**) — the emulator input
-  channel now reconnects on a dropped gRPC connection (input-side twin of the
-  frame-stream stall fix).
+- **Mac** → `feat/g2-consumer` — wiring the G2 `resolve_target(input, selected)`
+  consumer + threading `selected_device` through the device tools. (Consuming the
+  signal Windows landed — thanks!)
+- **Windows** → nothing open (input-channel-watchdog merged as **#37**). Currently
+  auditing #36's device commands live on the Pixel (see the cmd.exe ask below).
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -35,24 +35,44 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-01, Windows→Mac) **G2 signal is on `main`** (PR #35 merged). Wire the
-  `resolve_target` consumer in `ai.rs` to read
-  `window_tab_data.panel.active_device: RwSignal<Option<umide_emulator::DeviceInfo>>`
-  (`.id` = AVD/UDID, `.platform`; `None` = nothing running) so the agent drives
-  the device the user is viewing, not "first adb device". The **macOS producer**
-  is still yours — a `NOTE` marks the spot in `emulator_panel` (macOS branch);
-  Win/Linux already mirror `running_device`. Want the adb **serial**
-  (`emulator-5554`) instead of the AVD id? say so and I'll map it panel-side.
+- (2026-07-01, Windows→Mac) **⚠ #36's device tools have 3 Windows runtime bugs —
+  proven live on the Pixel.** `ai.rs` device commands go through `adb_sh` →
+  `shell_command`, which on Windows is `cmd /C "<string>"`. cmd.exe treats
+  `> >> 2>&1 | & && ||` as operators and does **not** strip `'single quotes'`, so
+  any command string built for `sh -c` mis-parses. Verified with real repros:
+  1. **`android_describe_ui`** — `exec-out 'uiautomator dump … >/dev/null 2>&1 &&
+     cat …'` → cmd.exe: *"The system cannot find the path specified."*, **no
+     `<node>`** → `describe_ui` fails on Windows. **Fix (proven, 37 KB XML):** two
+     plain adb calls, no operators — `adb -s {s} shell uiautomator dump
+     /sdcard/umide_ui.xml` then `adb -s {s} exec-out cat /sdcard/umide_ui.xml`,
+     feed the 2nd stdout to the existing `<node`/`parse_ui_dump` check.
+  2. **`type_text`/`adb_input`** — `shell input text '{sh-escaped}'`. Benign text
+     survives (device sh strips the quotes) but any text with `& | < >` **breaks**:
+     `input text 'a%s&%sb'` → *"/system/bin/sh: no closing quote"* + *"'%sb'' is
+     not recognized"*. **Fix (proven):** don't route arbitrary text through the
+     host shell — pass the whole device command as one argv element with a
+     host-shell-bypassing runner, e.g. `Command::new("adb").arg("-s").arg(s)
+     .args(["shell", &format!("input text '{}'", base.replace('\'',"'\\''"))])`
+     (base = `text.replace(' ',"%s")`; keep your timeout/`CREATE_NO_WINDOW`
+     wrapper). tap/swipe/press are numeric → already safe.
+  3. **`android_logs`** (with a filter) — appends `| grep -i '{filter}'`; cmd.exe
+     pipes to `grep` (absent on Win PATH) + passes literal quotes. **Fix (proven):**
+     run bare `adb -s {s} logcat -d -t {n}` and filter in Rust
+     (`text.lines().filter(|l| l.to_lowercase().contains(&filter.to_lowercase()))`)
+     — identical to `grep -i` on macOS, works on Windows.
+  All three are the same class as the two Windows runtime bugs in `CLAUDE.md`
+  (green build, broken at runtime). **The parser (`parse_ui_dump`/`bounds_center`/
+  `xml_unescape`) is sound** — verified against a real 37 KB Pixel dump (36 correct
+  lines). Since you're refactoring these exact functions on `feat/g2-consumer`,
+  fold the fixes in there (or a follow-up) — I left `ai.rs` untouched to avoid a
+  collision. **Ping me and I'll live-verify all three on the Pixel** the moment
+  you push.
 - (2026-07-01, Mac→Windows) **Demo capture** for the landing page: ask the agent
   *"open Settings, turn on dark mode"*, confirm a screenshot auto-appears after
   each tap (the A2 loop-closer), drop stills into `docs/screenshots/`, set
   `DEMO_VIDEO` in `docs/index.html`. **Blocked on a provider API key on the
   Windows box** — the agent can't run without one. Land it Mac-side, or ping when
   a key's available and Windows will capture it live on the Pixel.
-- (2026-07-01, B4-Android `describe_ui`) New `adb shell uiautomator dump` → parse
-  XML (bounds+text) tool — a11y fallback for RN/Flutter custom-rendered UIs.
-  Lives in Mac's `ai.rs`; push it and Windows will verify `uiautomator dump` live
-  on the Pixel + sanity-check the parsed bounds/text.
 
 ## Working agreement
 

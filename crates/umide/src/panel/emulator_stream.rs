@@ -74,62 +74,81 @@ pub fn start_emulator_stream(
         };
 
         rt.block_on(async move {
-            let mut client = match EmulatorGrpcClient::connect_with_retry(
-                &endpoint,
-                Duration::from_secs(60),
-            )
-            .await
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!("emulator gRPC connect failed: {e}");
-                    return;
-                }
-            };
+            // Native resolution + the downscale size derived from it, probed
+            // once and reused across reconnects.
+            let mut stream_size: Option<(u32, u32)> = None;
 
-            // Probe native resolution once (for input mapping) and derive the
-            // downscaled stream size from it, so the aspect ratio is exact
-            // regardless of how the emulator interprets a bounding box.
-            let (sw, sh) = match client.get_screenshot().await {
-                Ok(frame) => {
-                    let _ = ntx.send((frame.width, frame.height));
-                    downscaled(frame.width, frame.height, MAX_STREAM_DIM)
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "native-size probe failed: {e}; streaming native res"
-                    );
-                    (0, 0) // 0,0 = native
-                }
-            };
-
-            // The gRPC client streams decoded frames over a bounded channel;
-            // a full channel naturally drops older frames (latest-frame-wins).
-            let (gtx, mut grx) = tokio::sync::mpsc::channel::<DecodedFrame>(2);
-            tokio::spawn(async move {
-                if let Err(e) = client.stream_screenshots(gtx, sw, sh).await {
-                    tracing::error!("emulator frame stream ended: {e}");
-                }
-            });
-
-            // Watchdog: if the stream stalls (connected but no frames arrive,
-            // e.g. a half-open socket) stop instead of hanging this thread +
-            // runtime forever.
+            // Reconnect loop. The emulator emits a frame only when the screen
+            // *changes*, so an idle screen legitimately produces none — which is
+            // indistinguishable from a dead socket. Rather than treat a stall as
+            // fatal (which froze the panel until a manual Stop→Start), drop the
+            // stalled stream and reconnect; a fresh stream delivers the current
+            // frame immediately, so the panel recovers on its own.
             loop {
-                match tokio::time::timeout(Duration::from_secs(10), grx.recv()).await
+                let mut client = match EmulatorGrpcClient::connect_with_retry(
+                    &endpoint,
+                    Duration::from_secs(60),
+                )
+                .await
                 {
-                    Ok(Some(frame)) => {
-                        if tx.send(Arc::new(frame)).is_err() {
-                            break; // UI side gone — stop streaming
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!("emulator gRPC connect failed: {e}");
+                        return;
+                    }
+                };
+
+                // Probe native resolution once (first connect), for input
+                // mapping, and derive the downscaled stream size so the aspect
+                // ratio is exact regardless of how the emulator scales.
+                if stream_size.is_none() {
+                    stream_size = Some(match client.get_screenshot().await {
+                        Ok(frame) => {
+                            let _ = ntx.send((frame.width, frame.height));
+                            downscaled(frame.width, frame.height, MAX_STREAM_DIM)
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "native-size probe failed: {e}; streaming native"
+                            );
+                            (0, 0) // 0,0 = native
+                        }
+                    });
+                }
+                let (sw, sh) = stream_size.unwrap();
+
+                // The gRPC client streams decoded frames over a bounded channel;
+                // a full channel naturally drops older frames (latest-wins).
+                let (gtx, mut grx) = tokio::sync::mpsc::channel::<DecodedFrame>(2);
+                let stream_task = tokio::spawn(async move {
+                    if let Err(e) = client.stream_screenshots(gtx, sw, sh).await {
+                        tracing::debug!("emulator frame stream ended: {e}");
+                    }
+                });
+
+                let mut ui_gone = false;
+                loop {
+                    match tokio::time::timeout(Duration::from_secs(20), grx.recv())
+                        .await
+                    {
+                        Ok(Some(frame)) => {
+                            if tx.send(Arc::new(frame)).is_err() {
+                                ui_gone = true; // panel dropped
+                                break;
+                            }
+                        }
+                        Ok(None) => break, // stream ended — reconnect
+                        Err(_) => {
+                            tracing::debug!(
+                                "emulator stream: no frame for 20s, reconnecting"
+                            );
+                            break; // stall or idle — reconnect
                         }
                     }
-                    Ok(None) => break, // stream ended
-                    Err(_) => {
-                        tracing::warn!(
-                            "emulator stream: no frame for 10s, stopping"
-                        );
-                        break;
-                    }
+                }
+                stream_task.abort();
+                if ui_gone {
+                    return; // UI side gone — stop for good
                 }
             }
         });

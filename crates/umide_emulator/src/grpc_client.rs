@@ -254,25 +254,31 @@ impl EmulatorGrpcClient {
         Ok(())
     }
 
-    /// Send a key event using a key string (e.g. "GoHome", "GoBack", "Power", "AppSwitch")
+    /// Send a key event using a key string (e.g. "GoHome", "GoBack", "Power", "AppSwitch").
+    ///
+    /// Sent as a keydown followed by a keyup: a lone `keypress` event is ignored
+    /// by the emulator for non-character keys (Home/Back/Power/…), the same way
+    /// the DOM only fires `keypress` for character keys.
     pub async fn send_key(&mut self, key: &str) -> Result<(), GrpcError> {
         use emulator_proto::{
             keyboard_event::{KeyCodeType, KeyEventType},
             KeyboardEvent,
         };
 
-        let event = KeyboardEvent {
-            code_type: KeyCodeType::Evdev as i32,
-            event_type: KeyEventType::Keypress as i32,
-            key_code: 0,
-            key: key.to_string(),
-            text: String::new(),
-        };
+        for event_type in [KeyEventType::Keydown, KeyEventType::Keyup] {
+            let event = KeyboardEvent {
+                code_type: KeyCodeType::Evdev as i32,
+                event_type: event_type as i32,
+                key_code: 0,
+                key: key.to_string(),
+                text: String::new(),
+            };
 
-        self.client
-            .send_key(event)
-            .await
-            .map_err(|e| GrpcError::StreamError(e.to_string()))?;
+            self.client
+                .send_key(event)
+                .await
+                .map_err(|e| GrpcError::StreamError(e.to_string()))?;
+        }
 
         Ok(())
     }

@@ -119,6 +119,12 @@ impl UmideIcons {
 
     pub const EMULATOR: &'static str = "emulator";
 
+    // Emulator hardware-control buttons (portable panel sidebar).
+    pub const DEVICE_HOME: &'static str = "device_home";
+    pub const DEVICE_BACK: &'static str = "device_back";
+    pub const DEVICE_RECENTS: &'static str = "device_recents";
+    pub const DEVICE_POWER: &'static str = "device_power";
+
     pub const SYMBOL_KIND_ARRAY: &'static str = "symbol_kind.array";
     pub const SYMBOL_KIND_BOOLEAN: &'static str = "symbol_kind.boolean";
     pub const SYMBOL_KIND_CLASS: &'static str = "symbol_kind.class";

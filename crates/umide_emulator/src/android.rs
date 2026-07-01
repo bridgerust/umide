@@ -171,6 +171,39 @@ impl AndroidEmulator {
         Ok(())
     }
 
+    /// The gRPC port a running emulator is serving on, read from its discovery
+    /// file so the panel connects to the *right* device instead of assuming the
+    /// default 8554. Each running emulator writes `<temp>/avd/running/pid_*.ini`
+    /// with `port.serial=<consolePort>` and `grpc.port=<port>`; we match on the
+    /// serial's console port. `None` (→ caller falls back to 8554) if the file
+    /// isn't found, e.g. the emulator predates discovery files.
+    pub fn grpc_port(serial: &str) -> Option<u16> {
+        let console: u32 = serial.strip_prefix("emulator-")?.parse().ok()?;
+        let dir = std::env::temp_dir().join("avd").join("running");
+        for entry in std::fs::read_dir(dir).ok()?.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("ini") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let mut this_serial: Option<u32> = None;
+            let mut this_grpc: Option<u16> = None;
+            for line in text.lines() {
+                if let Some(v) = line.strip_prefix("port.serial=") {
+                    this_serial = v.trim().parse().ok();
+                } else if let Some(v) = line.strip_prefix("grpc.port=") {
+                    this_grpc = v.trim().parse().ok();
+                }
+            }
+            if this_serial == Some(console) {
+                return this_grpc;
+            }
+        }
+        None
+    }
+
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
         let output = quiet_command("emulator").arg("-list-avds").output()?;
 
@@ -393,5 +426,21 @@ impl MobileDevice for AndroidEmulator {
     async fn send_touch(&mut self, x: i32, y: i32) -> Result<()> {
         println!("Sending touch to {}: ({}, {})", self.device_id, x, y);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grpc_port_rejects_non_emulator_serials() {
+        // No `emulator-<port>` prefix / non-numeric console port → None (the
+        // caller then falls back to the default 8554). No device needed.
+        assert_eq!(AndroidEmulator::grpc_port("weird"), None);
+        assert_eq!(AndroidEmulator::grpc_port("emulator-abc"), None);
+        // A well-formed serial for a device that isn't running → None (no
+        // discovery file matches the console port).
+        assert_eq!(AndroidEmulator::grpc_port("emulator-1"), None);
     }
 }

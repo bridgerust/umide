@@ -109,15 +109,20 @@ Before finishing any change, check whether these need updating and keep them in 
     `Arc`), and the stream is downscaled to a 1280px long edge while **touch input still
     maps to native pixels** (probed once into a `native_size` signal — verified live: a
     swipe on the downscaled panel still opens the shade).
-  - **Hardware buttons + keyboard (PR #24, open)**: the portable panel now has Home/Back/
+  - **Hardware buttons + keyboard (PR #24, merged)**: the portable panel has Home/Back/
     Recents/Power buttons in the sidebar (via `EmulatorInput::key` "GoHome"/"GoBack"/
-    "AppSwitch"/"Power") and forwards keyboard `KeyDown` (the `video_frame` is `focusable`).
-    Required fixing `EmulatorGrpcClient::send_key` to send a **keydown+keyup** pair — a lone
-    `keypress` is ignored by the emulator for non-character keys, which is why keys never
-    reached the device (the macOS panel dodges this by shelling out to `adb`). Verified live:
-    Home from the app drawer returns to the home screen. Keyboard text typing rides the same
-    fixed path but wasn't visually confirmed (device text-field automation was finicky) —
-    worth a 2-second manual check.
+    "AppSwitch"/"Power") and forwards keyboard `KeyDown` (the `video_frame` is `focusable`,
+    so clicking into it routes typing to the device). Required fixing
+    `EmulatorGrpcClient::send_key` to send a **keydown+keyup** pair — a lone `keypress` is
+    ignored by the emulator for non-character keys, which is why keys never reached the
+    device (the macOS panel dodges this by shelling out to `adb`). All verified live on
+    Windows: Home returns to the home screen, and typing into a device text field (a
+    new-contact Name field) shows the characters — keyboard text works too.
+  - **Idle-freeze fix (PR #24, merged)**: the frame stream now reconnects on a stall/end
+    instead of the #22 watchdog stopping it for good. The emulator only emits a frame when
+    the screen *changes*, so an idle screen produced none → the 10s watchdog killed the
+    stream and the panel froze (looked like "taps stopped working"). Now `emulator_stream.rs`
+    reconnects (a fresh stream repaints immediately); verified live.
 - **Next milestones / before tagging v0.3.0**:
   1. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
      the MSI/`release-lto` path isn't exercised by ordinary CI. Then flip the `docs/index.html`

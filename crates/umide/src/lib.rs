@@ -30,6 +30,7 @@ pub mod markdown;
 pub mod palette;
 pub mod panel;
 pub mod plugin;
+pub mod project;
 pub mod proxy;
 pub mod rename;
 pub mod settings;

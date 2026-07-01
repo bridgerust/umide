@@ -81,32 +81,28 @@ Before finishing any change, check whether these need updating and keep them in 
     Gemini parser verified from the CLI's source, **live run pending a `gemini` login**.
     Landed a 36-agent adversarial review's must-fixes. Smoke examples: `cli_smoke`,
     `cli_perm_smoke`, `codex_smoke`, `gemini_smoke`.
-- **Agent CLOSED LOOP — in progress, work DIVIDED Mac ⇄ Windows.** A code audit of the
-  agent subsystem (see→reason→act→see on the embedded emulator) graded it 18 Implemented /
-  4 Partial / 4 Missing. The one structural gap — the loop never auto-observed after acting —
-  is now fixed:
-  - **PR #30 (Mac, `feat/agent-close-loop`)**: **A2** auto re-observe (new
-    `ToolExecutor::auto_observe` hook — `agent.rs` `run_loop` appends a fresh device
-    screenshot after `tap`/`swipe`/`type_text`/`press_key`; `EditorTools::auto_observe` in
-    `ai.rs`, skips if the model already screenshotted). **B3** downscale agent screenshots to
-    ≤1280px (`downscale_png` in `ai.rs`, agent-side ONLY — the panel's screenshot button +
-    live stream stay native-res). **F3** MockBackend loop test. 43 tests green.
-  - **WINDOWS SHARE** (you have the live Pixel emulator — please pick up):
-    1. **Live-verify PR #30** on the Pixel: ask the agent *"open Settings, turn on dark
-       mode"* and confirm a screenshot auto-appears after each tap → the real closed-loop
-       proof **and** capture that as the **demo video + hero screenshots** the landing page
-       still needs (drop into `docs/screenshots/`; set `DEMO_VIDEO` in `docs/index.html`).
-    2. **G2** — surface the panel's selected device id (`emulator_view.rs`/
-       `ai_assistant_view.rs`) into `spawn_turn`; Mac then wires the `resolve_target`
-       consumer in `ai.rs` (so the agent drives the device the user is viewing, not the first
-       adb device).
-    3. **B4-Android** — a `describe_ui` tool via `adb shell uiautomator dump` (a11y fallback
-       for RN/Flutter custom-rendered UIs).
-  - **MAC SHARE** (agent engine — `umide_agent` + `ai.rs`, next, after #30): **E1** gate
-    device input (per-session consent, like Codex), **F2** `adb` timeout + backend retry.
-  - **Coordination**: Mac owns `umide_agent/*` + `crates/umide/src/ai.rs`; Windows owns the
-    emulator panel files. Don't both edit `ai.rs` at once — Windows lands the panel signal,
-    Mac wires the `ai.rs` consumer after.
+- **Agent CLOSED LOOP — landed (see→reason→act→see on the embedded emulator).** A code
+  audit graded the subsystem 18 Implemented / 4 Partial / 4 Missing; the gaps are now closed:
+  - **A2/B3/F3 (#30)**: auto re-observe after a device action (`ToolExecutor::auto_observe`
+    hook; `agent.rs` appends a fresh screenshot after `tap`/`swipe`/`type_text`/`press_key`,
+    skipped if the model already screenshotted), agent-side screenshot downscale to ≤1280px
+    (`downscale_png`; panel button + live stream stay native-res), MockBackend loop test.
+  - **E1 + F2 + B4 (#36)**: **E1** one-time per-session device-control consent
+    (`ApprovalKind::DeviceControl`; gates tap/swipe/type/keys once). **F2** `adb` 20s timeout
+    + single transient-retry (`run_with_retry`). **B4** `describe_ui` — `uiautomator dump` →
+    compact tappable-element listing (a11y fallback for RN/Flutter custom UIs).
+  - **G2 (#35 Windows producer + #39 Mac consumer)**: the agent targets the device the user
+    is viewing (`panel.active_device` → `resolve_target`: explicit `platform` arg wins, else
+    selected device — iOS by UDID, Android scoped; else auto-detect).
+  - **Windows device-tool fix (#41)**: `adb` now runs via **direct argv** (`run_tool`, no host
+    shell) — `cmd /C` was re-parsing `&&`/quotes/`|` and breaking `describe_ui`, `type_text`
+    (special chars), and filtered `read_logs` (`grep`) on Windows. Found live on the Pixel.
+  - **Remaining follow-ups**: macOS `active_device` producer (Win/Linux mirror
+    `running_device`; a `NOTE` marks the macOS spot); consume a panel-provided
+    `DeviceInfo.serial` for multi-Android disambiguation (Windows to add); **live-verify on the
+    Pixel + capture the demo video/hero screenshots** (Windows — blocked on a provider key).
+  - **Coordination**: Mac owns `umide_agent/*` + `crates/umide/src/ai.rs` +
+    `ai_assistant_view.rs`; Windows owns the emulator panel files.
 - **floem** is pinned at `bridgerust/floem@e07fcd5ff148…` (branch `feat/external-texture`
   = upstream-latest + the wgpu external-texture / `VideoFrame` primitive + aspect letterbox).
   It is fetched from git automatically — you only need a local floem clone to iterate on

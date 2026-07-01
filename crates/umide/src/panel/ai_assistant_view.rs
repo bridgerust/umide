@@ -202,6 +202,7 @@ pub fn ai_assistant_panel(
         codex_consent,
         cli_session.clone(),
         device_consent.clone(),
+        window_tab_data.panel.active_device,
         input,
         messages,
         active,
@@ -721,6 +722,7 @@ fn send_handler(
     codex_consent: RwSignal<bool>,
     cli_session: Arc<Mutex<Option<String>>>,
     device_consent: Arc<Mutex<Option<bool>>>,
+    active_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
     active: RwSignal<Option<ChatMsg>>,
@@ -814,6 +816,9 @@ fn send_handler(
                 approvals.clone(),
                 trigger,
                 device_consent.clone(),
+                // Snapshot the device the user is viewing right now, so the
+                // agent's emulator tools drive that device for this turn.
+                active_device.get_untracked(),
                 cancel.clone(),
             ),
             Launch::Cli(cli_kind, ws) => ai::spawn_cli_turn(

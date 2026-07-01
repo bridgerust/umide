@@ -25,6 +25,13 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  # CI runs on cold runners, so incremental only adds small-file I/O (costly on
+  # NTFS) with no reuse; disable it. And skip debuginfo entirely — nothing here
+  # runs under a debugger, and generating MSVC PDBs is a large, Windows-
+  # disproportionate slice of every compile+link (debug_assertions stay on).
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   build:
@@ -60,16 +67,22 @@ jobs:
       - name: Build
         run: cargo build --frozen
 
+      # Run doc tests here — while `target/` is warm from the build above — so
+      # they reuse the just-compiled dependency graph instead of recompiling it.
+      # Previously this ran last, AFTER a Windows-only `cargo clean`, which wiped
+      # the whole target dir and forced the doc-test step to rebuild the entire
+      # ~977-crate workspace cold: ~570s on Windows vs ~4s elsewhere (the single
+      # biggest cause of the Windows job being ~7x slower than Linux).
+      - name: Run doc tests
+        run: cargo test --doc --workspace
+
+      # Verify the Windows-only portable feature still compiles. Kept last so it
+      # doesn't disturb the warm target the doc tests rely on. No `cargo clean`:
+      # with debuginfo off (see env) peak disk stays below the previous
+      # build+portable peak that already fit.
       - name: Build as portable
         if: startsWith(matrix.os, 'windows')
         run: cargo build --frozen --features umide-app/portable
-
-      - name: Free space on Windows
-        if: startsWith(matrix.os, 'windows')
-        run: cargo clean
-
-      - name: Run doc tests
-        run: cargo test --doc --workspace
 
   fmt:
     name: Rustfmt

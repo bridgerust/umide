@@ -634,7 +634,8 @@ fn android_panel_portable(
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
     use crate::panel::emulator_stream::{
-        EmulatorInput, start_emulator_input, start_emulator_stream, view_to_device,
+        EmulatorInput, capture_screenshot, default_screenshot_path,
+        start_emulator_input, start_emulator_stream, view_to_device,
     };
     use floem::event::{Event, EventListener};
     use floem::kurbo::Size;
@@ -682,32 +683,25 @@ fn android_panel_portable(
         view_to_device(p.x, p.y, sz.width, sz.height, dw, dh)
     };
 
-    // A hardware-control button: an emoji glyph that forwards a named device key
-    // over gRPC (e.g. "GoHome") — the same path as touch, no adb shell. No-op
-    // until the input command channel has connected.
-    let hw_button = move |glyph: &'static str, key: &'static str| {
-        Stack::new((Label::new(glyph).style(|s| s.font_size(14.0)),))
-            .on_click_stop(move |_| {
-                if let Some(input) = input_handle.get_untracked() {
-                    input.key(key);
-                }
-            })
-            .style(move |s| {
-                s.width(28.0)
-                    .height(28.0)
-                    .items_center()
-                    .justify_center()
-                    .border_radius(4.0)
-                    .cursor(floem::style::CursorStyle::Pointer)
-                    .border(1.0)
-                    .border_color(config.get().color(UmideColor::LAPCE_BORDER))
-                    .hover(|s| {
-                        s.background(floem::peniko::Color::from_rgba8(
-                            255, 255, 255, 20,
-                        ))
-                    })
-            })
-    };
+    // A hardware-control button: a themed monochrome icon (rendered exactly like
+    // the Stop/Hide buttons) that forwards a named device key over gRPC (e.g.
+    // "GoHome") — the same path as touch, no adb shell. No-op until the input
+    // command channel has connected.
+    let hw_button =
+        move |icon: &'static str, tooltip: &'static str, key: &'static str| {
+            clickable_icon(
+                move || icon,
+                move || {
+                    if let Some(input) = input_handle.get_untracked() {
+                        input.key(key);
+                    }
+                },
+                || false,
+                || false,
+                move || tooltip,
+                config,
+            )
+        };
 
     // Map a floem key press to the device key string the emulator's gRPC
     // `sendKey` accepts (DOM-style names for the named keys; the raw character
@@ -1014,10 +1008,25 @@ fn android_panel_portable(
                     Label::new("Hide").style(|s| s.font_size(10.0)),
                     Label::new("").style(|s| s.height(10.0)),
                     // Hardware buttons — forwarded to the device over gRPC.
-                    hw_button("🏠", "GoHome"),
-                    hw_button("◀", "GoBack"),
-                    hw_button("⊞", "AppSwitch"),
-                    hw_button("⏻", "Power"),
+                    hw_button(UmideIcons::DEVICE_HOME, "Home", "GoHome"),
+                    hw_button(UmideIcons::DEVICE_BACK, "Back", "GoBack"),
+                    hw_button(UmideIcons::DEVICE_RECENTS, "Recents", "AppSwitch"),
+                    hw_button(UmideIcons::DEVICE_POWER, "Power", "Power"),
+                    Label::new("").style(|s| s.height(6.0)),
+                    // Screenshot — save a native-res PNG and reveal it.
+                    clickable_icon(
+                        || UmideIcons::DEVICE_SCREENSHOT,
+                        || {
+                            capture_screenshot(
+                                ENDPOINT.to_string(),
+                                default_screenshot_path(),
+                            );
+                        },
+                        || false,
+                        || false,
+                        || "Screenshot",
+                        config,
+                    ),
                 ))
                 .style(move |s| {
                     let config_val = config.get();

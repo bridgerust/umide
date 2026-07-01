@@ -67,12 +67,18 @@ Before finishing any change, check whether these need updating and keep them in 
 
 ## Current status (keep this fresh — it is the cross-machine handoff)
 - **v0.2.0 shipped**: notarized macOS DMG, Windows MSI, Linux `.deb` on GitHub Releases.
-- **v0.3.0 in progress (unreleased)**: Windows build enabled + the embedded Android panel
-  un-gated for Windows/Linux. Source version bumped to `0.3.0`
-  (Cargo.toml/umide.spec/Info.plist); the `docs/index.html` download badge stays `0.2.0`
-  until a `v0.3.0` tag is cut. (On the Windows box `origin` was switched to HTTPS via
-  `gh` — the SSH key is unauthenticated there; `gh auth setup-git` provides push creds.)
-  Landed on `main` toward v0.3.0:
+- **v0.3.0 SHIPPED (2026-07-01)**: tagged `v0.3.0`, published to GitHub Releases —
+  notarized macOS DMG, **unsigned** Windows MSI (Authenticode cert is a 0.3.x follow-up;
+  noted on the download page) + `.zip`, Linux `.deb` + tarball. `docs/index.html` badge is
+  `v0.3.0`. Headline features: embedded Android panel un-gated for Windows/Linux; the AI
+  assistant **sees and drives the emulator** (closed loop) with the built-in agent and
+  **Claude Code** (device-MCP, #53); Claude Code gets UMIDE mobile-first context; **key-free
+  agent CLIs**; a **next-level AI panel redesign** (#48) with markdown + **multiple chat
+  sessions** persisted per workspace (#52); UMIDE logo (#54).
+  - **v0.3.x follow-ups**: Windows Authenticode signing; live-verify the device-MCP flow on
+    the Pixel (Claude 401 on the Mac blocked a local run); Codex/Gemini UMIDE context (no
+    clean system-prompt hook in their invocation yet); Gemini live run pending a login.
+  Earlier work that landed on `main` toward v0.3.0:
   - **Emulator panel (PR #21, #24, #26)**: pointer tap/drag + **hardware buttons
     (Home/Back/Power) + keyboard text**; idle-screen freeze fixed (frame stream reconnects).
     Verified on a real `Pixel_9a` AVD on Windows.

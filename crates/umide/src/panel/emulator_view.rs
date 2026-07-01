@@ -634,7 +634,8 @@ fn android_panel_portable(
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
     use crate::panel::emulator_stream::{
-        EmulatorInput, start_emulator_input, start_emulator_stream, view_to_device,
+        EmulatorInput, capture_screenshot, default_screenshot_path,
+        start_emulator_input, start_emulator_stream, view_to_device,
     };
     use floem::event::{Event, EventListener};
     use floem::kurbo::Size;
@@ -1011,6 +1012,21 @@ fn android_panel_portable(
                     hw_button(UmideIcons::DEVICE_BACK, "Back", "GoBack"),
                     hw_button(UmideIcons::DEVICE_RECENTS, "Recents", "AppSwitch"),
                     hw_button(UmideIcons::DEVICE_POWER, "Power", "Power"),
+                    Label::new("").style(|s| s.height(6.0)),
+                    // Screenshot — save a native-res PNG and reveal it.
+                    clickable_icon(
+                        || UmideIcons::DEVICE_SCREENSHOT,
+                        || {
+                            capture_screenshot(
+                                ENDPOINT.to_string(),
+                                default_screenshot_path(),
+                            );
+                        },
+                        || false,
+                        || false,
+                        || "Screenshot",
+                        config,
+                    ),
                 ))
                 .style(move |s| {
                     let config_val = config.get();

@@ -51,9 +51,10 @@ const GRACE: Duration = Duration::from_millis(1500);
 /// a legitimately long agent-run command (builds, test suites) is not killed.
 const DEFAULT_IDLE: Duration = Duration::from_secs(360);
 
-/// Tools denied in the read-only P1a phase (execution + mutation). Space-
-/// separated; `--disallowedTools` takes precedence over any saved allow-grant.
-const READ_ONLY_DENY: &str = "Bash Edit Write MultiEdit NotebookEdit";
+/// Tools denied in the read-only fallback (execution + mutation, plus `Task`
+/// so a subagent can't run them either). Space-separated; `--disallowedTools`
+/// takes precedence over any saved allow-grant.
+const READ_ONLY_DENY: &str = "Bash Edit Write MultiEdit NotebookEdit Task";
 
 /// Appended to Claude's system prompt in the read-only fallback (used only when
 /// the approval bridge can't start), so it advises instead of attempting
@@ -171,9 +172,14 @@ impl CliRunner {
                         a.push(WRITE_NOTE.into());
                     }
                     None => {
-                        // Read-only fallback: deny execution + mutation. Deny
-                        // overrides any saved allow-grant, so behavior is the
-                        // same on every machine.
+                        // Read-only fallback (bridge couldn't bind). Deny the
+                        // execution + mutation tools AND force default mode +
+                        // strict MCP config, so a user's acceptEdits/bypass
+                        // permissionMode or configured MCP tools can't mutate
+                        // unprompted just because the approval bridge is down.
+                        a.push("--permission-mode".into());
+                        a.push("default".into());
+                        a.push("--strict-mcp-config".into());
                         a.push("--disallowedTools".into());
                         a.push(READ_ONLY_DENY.into());
                         a.push("--append-system-prompt".into());
@@ -260,10 +266,10 @@ impl AgentRunner for CliRunner {
             .unwrap_or_else(|_| PathBuf::from(self.kind.binary_name()));
 
         // Configure on a std Command so we can set the process group, then move
-        // to tokio.
-        let mut std_cmd = std::process::Command::new(bin);
+        // to tokio. `build_std_command` runs npm `.cmd`/`.bat` shims through
+        // `cmd /C` on Windows (a bare CreateProcess on a `.cmd` fails, os 193).
+        let mut std_cmd = build_std_command(&bin, &args);
         std_cmd
-            .args(&args)
             .current_dir(&self.workspace)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -340,6 +346,12 @@ impl AgentRunner for CliRunner {
                         *last_activity.lock().unwrap() = Instant::now();
                         let mut records = Vec::new();
                         framer.push(&buf[..n], &mut records);
+                        if framer.overflowed() {
+                            tracing::warn!(
+                                "{}: dropped an oversized/torn record",
+                                self.kind.label()
+                            );
+                        }
                         for v in &records {
                             parser.on_record(v, &push);
                         }
@@ -366,7 +378,12 @@ impl AgentRunner for CliRunner {
 
         // Resolve the child + classify how we stopped.
         let (exit, term): (Option<ExitStatus>, Term) = match stop {
-            Stop::Exited(s) => (Some(s), Term::Normal),
+            Stop::Exited(s) => {
+                // The exit can win the select! race before the final `result`
+                // record is read — drain the rest of stdout so it isn't lost.
+                drain_stdout(&mut stdout, &mut framer, parser.as_mut(), &push).await;
+                (Some(s), Term::Normal)
+            }
             Stop::Eof => (child.wait().await.ok(), Term::Normal),
             Stop::ReadError => {
                 kill_and_reap(pid, &mut child).await;
@@ -382,8 +399,11 @@ impl AgentRunner for CliRunner {
             }
         };
 
+        // Bounded join (not abort) so the last stderr reads flush into the tail
+        // before we build the error message. The child is gone by now, so its
+        // stderr closes and the task ends promptly.
         if let Some(t) = stderr_task {
-            t.abort();
+            let _ = tokio::time::timeout(Duration::from_millis(200), t).await;
         }
 
         let stderr_msg = {
@@ -420,13 +440,76 @@ impl AgentRunner for CliRunner {
 }
 
 /// Terminate the child's process group (SIGTERM → grace → SIGKILL) and reap it,
-/// so neither the child nor its sub-shells orphan.
+/// so neither the child nor its sub-shells orphan. The grace is polled, not a
+/// flat sleep, so a child that stops promptly returns without the full delay.
 async fn kill_and_reap(pid: Option<u32>, child: &mut tokio::process::Child) {
     if let Some(pid) = pid {
-        proc_group::kill_group(pid, false);
-        tokio::time::sleep(GRACE).await;
-        proc_group::kill_group(pid, true);
+        proc_group::kill_group(pid, false); // SIGTERM
+        let step = Duration::from_millis(50);
+        let mut waited = Duration::ZERO;
+        while waited < GRACE {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                break;
+            }
+            tokio::time::sleep(step).await;
+            waited += step;
+        }
+        if matches!(child.try_wait(), Ok(None)) {
+            proc_group::kill_group(pid, true); // SIGKILL
+        }
     }
     let _ = child.start_kill();
     let _ = child.wait().await;
+}
+
+/// Build the child command, routing npm `.cmd`/`.bat` shims through `cmd /C` on
+/// Windows (a bare `CreateProcess` on a batch shim fails with os error 193, so
+/// `claude`/`codex`/`gemini` installed via npm can't otherwise start there).
+/// Rust ≥1.77 applies the correct batch-argument escaping for the trailing args.
+fn build_std_command(
+    bin: &std::path::Path,
+    args: &[String],
+) -> std::process::Command {
+    #[cfg(windows)]
+    {
+        let is_batch = bin
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"))
+            .unwrap_or(false);
+        if is_batch {
+            let mut c = std::process::Command::new("cmd");
+            c.arg("/C").arg(bin).args(args);
+            return c;
+        }
+    }
+    let mut c = std::process::Command::new(bin);
+    c.args(args);
+    c
+}
+
+/// Read whatever stdout the process left buffered (up to EOF or a short bound)
+/// and feed it through the framer/parser, so a `result` record that arrived
+/// right as the process exited is not dropped.
+async fn drain_stdout(
+    stdout: &mut tokio::process::ChildStdout,
+    framer: &mut CliFramer,
+    parser: &mut dyn CliParser,
+    push: &Push,
+) {
+    let mut buf = [0u8; 8192];
+    loop {
+        match tokio::time::timeout(Duration::from_millis(200), stdout.read(&mut buf))
+            .await
+        {
+            Ok(Ok(0)) | Ok(Err(_)) | Err(_) => break,
+            Ok(Ok(n)) => {
+                let mut records = Vec::new();
+                framer.push(&buf[..n], &mut records);
+                for v in &records {
+                    parser.on_record(v, push);
+                }
+            }
+        }
+    }
 }

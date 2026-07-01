@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use floem::{
     View,
-    ext_event::{ExtSendTrigger, create_trigger},
+    ext_event::{ExtSendTrigger, create_trigger, update_signal_from_channel},
     prelude::{Key, NamedKey, SignalGet, SignalUpdate},
     reactive::{ReadSignal, RwSignal},
     views::{Decorators, Label, Scroll, Stack, dyn_stack, text_input},
@@ -95,14 +95,29 @@ pub fn ai_assistant_panel(
     // approval) writes. Reset every session; required before the first Codex turn.
     let codex_consent = RwSignal::new(false);
     let has_workspace = workspace.is_some();
-    // Detect installed agent CLIs once (shells out to `--version`); greys out
-    // backends that aren't available.
-    let claude_installed =
-        CliStatus::detect(CliKind::ClaudeCode).installed() && has_workspace;
-    let codex_installed =
-        CliStatus::detect(CliKind::Codex).installed() && has_workspace;
-    let gemini_installed =
-        CliStatus::detect(CliKind::GeminiCli).installed() && has_workspace;
+    // Detect installed agent CLIs OFF the UI thread (each shells out to
+    // `--version`, up to ~5s if a CLI hangs). Tabs start disabled and enable as
+    // results arrive, so detection never stalls the panel at open. Codex is
+    // gated off on Windows — its workspace-write sandbox has no Windows backend,
+    // so we don't offer a backend whose confinement we can't enforce there.
+    let claude_installed = RwSignal::new(None::<bool>);
+    let codex_installed = RwSignal::new(None::<bool>);
+    let gemini_installed = RwSignal::new(None::<bool>);
+    if has_workspace {
+        let (ctx, crx) = std::sync::mpsc::channel();
+        let (dtx, drx) = std::sync::mpsc::channel();
+        let (gtx, grx) = std::sync::mpsc::channel();
+        update_signal_from_channel(claude_installed.write_only(), crx);
+        update_signal_from_channel(codex_installed.write_only(), drx);
+        update_signal_from_channel(gemini_installed.write_only(), grx);
+        std::thread::spawn(move || {
+            let _ = ctx.send(CliStatus::detect(CliKind::ClaudeCode).installed());
+            let _ = dtx.send(
+                cfg!(not(windows)) && CliStatus::detect(CliKind::Codex).installed(),
+            );
+            let _ = gtx.send(CliStatus::detect(CliKind::GeminiCli).installed());
+        });
+    }
 
     // Lossless cross-thread bridge: the worker pushes AgentEvents into `queue`
     // and pulses `trigger`; a UI-thread effect tracks the trigger and drains the
@@ -129,7 +144,7 @@ pub fn ai_assistant_panel(
             let events: Vec<AgentEvent> =
                 { queue.lock().unwrap().drain(..).collect() };
             for ev in events {
-                apply_event(ev, active, status, streaming);
+                apply_event(ev, active, status, streaming, pending, &senders);
             }
             let reqs: Vec<ai::ApprovalRequest> =
                 { approvals.lock().unwrap().drain(..).collect() };
@@ -394,6 +409,9 @@ pub fn ai_assistant_panel(
         input_row,
     ))
     .style(|s| s.flex_col().size_pct(100.0, 100.0))
+    // If the panel/window is torn down mid-turn, cancel so an agent CLI isn't
+    // left editing the workspace unobserved.
+    .on_cleanup(move || cancel.store(true, Ordering::Relaxed))
 }
 
 /// A provider tab in the selector row; highlights when it's the active provider.
@@ -442,14 +460,14 @@ fn provider_button(
 /// hint instead of selecting it.
 fn cli_button(
     kind: CliKind,
-    available: bool,
+    available: RwSignal<Option<bool>>,
     backend: RwSignal<AssistantBackend>,
     status: RwSignal<String>,
     config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     Stack::new((Label::new(kind.label()),))
         .on_click_stop(move |_| {
-            if available {
+            if available.get_untracked().unwrap_or(false) {
                 backend.set(AssistantBackend::Cli(kind));
                 status.set(match kind {
                     CliKind::ClaudeCode => format!(
@@ -481,7 +499,7 @@ fn cli_button(
                 .border_radius(6.0)
                 .cursor(floem::style::CursorStyle::Pointer)
                 .color(config.get().color(UmideColor::PANEL_FOREGROUND));
-            let s = if available {
+            let s = if available.get().unwrap_or(false) {
                 s
             } else {
                 // Dim when unavailable (not installed / no folder open).
@@ -593,6 +611,8 @@ fn apply_event(
     active: RwSignal<Option<ChatMsg>>,
     status: RwSignal<String>,
     streaming: RwSignal<bool>,
+    pending: RwSignal<Vec<ApprovalCard>>,
+    senders: &Rc<RefCell<HashMap<u64, oneshot::Sender<ai::ApprovalOutcome>>>>,
 ) {
     match ev {
         AgentEvent::TextDelta(t) => {
@@ -624,11 +644,28 @@ fn apply_event(
                 usage.cache_read_input_tokens
             ));
         }
-        AgentEvent::Done => streaming.set(false),
+        AgentEvent::Done => {
+            streaming.set(false);
+            clear_pending_approvals(pending, senders);
+        }
         AgentEvent::Error(e) => {
             status.set(format!("error: {e}"));
             streaming.set(false);
+            clear_pending_approvals(pending, senders);
         }
+    }
+}
+
+/// On turn end, drop any still-pending approval cards + their senders. Dropping
+/// a `Sender` unblocks the worker/bridge waiting on it (it reads a deny), so no
+/// handler thread is left parked and no stale card lingers as a no-op.
+fn clear_pending_approvals(
+    pending: RwSignal<Vec<ApprovalCard>>,
+    senders: &Rc<RefCell<HashMap<u64, oneshot::Sender<ai::ApprovalOutcome>>>>,
+) {
+    senders.borrow_mut().clear();
+    if !pending.get_untracked().is_empty() {
+        pending.set(Vec::new());
     }
 }
 

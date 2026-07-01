@@ -55,7 +55,9 @@ impl CliStatus {
 
 /// Run `<bin> --version` with a short bound and return the first trimmed line.
 fn read_version(bin: &std::path::Path) -> Option<String> {
-    let mut child = Command::new(bin)
+    // npm shims (`claude.cmd` etc.) must run through `cmd /C` on Windows.
+    let mut cmd = version_command(bin);
+    let mut child = cmd
         .arg("--version")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -122,6 +124,25 @@ fn detect_auth(kind: CliKind) -> AuthHint {
     }
 
     AuthHint::Unknown
+}
+
+/// A `Command` for `<bin> --version`, routing npm `.cmd`/`.bat` shims through
+/// `cmd /C` on Windows (bare `CreateProcess` on a batch shim fails, os 193).
+fn version_command(bin: &std::path::Path) -> Command {
+    #[cfg(windows)]
+    {
+        let is_batch = bin
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"))
+            .unwrap_or(false);
+        if is_batch {
+            let mut c = Command::new("cmd");
+            c.arg("/C").arg(bin);
+            return c;
+        }
+    }
+    Command::new(bin)
 }
 
 fn home_dir() -> Option<PathBuf> {

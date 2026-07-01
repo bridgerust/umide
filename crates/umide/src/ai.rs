@@ -259,6 +259,46 @@ impl AgentRunner for LlmRunner {
     }
 }
 
+/// Guards a worker turn so the UI is never left "thinking" forever: if the
+/// worker body panics (or returns without a terminal event), `Drop` emits an
+/// `Error`, which resets `streaming` in the panel. `finish()` disarms it on a
+/// clean completion.
+struct TurnGuard {
+    push: Push,
+    done: bool,
+}
+
+impl TurnGuard {
+    fn new(push: Push) -> Self {
+        Self { push, done: false }
+    }
+    fn finish(&mut self) {
+        self.done = true;
+    }
+}
+
+impl Drop for TurnGuard {
+    fn drop(&mut self) {
+        if !self.done {
+            self.push.emit(AgentEvent::Error(
+                "The assistant stopped unexpectedly.".into(),
+            ));
+        }
+    }
+}
+
+/// Push a terminal error into the UI when a worker thread can't even start.
+fn report_spawn_failure(
+    queue: &EventQueue,
+    trigger: ExtSendTrigger,
+    e: &std::io::Error,
+) {
+    queue.lock().unwrap().push_back(AgentEvent::Error(format!(
+        "Could not start the assistant: {e}"
+    )));
+    register_ext_trigger(trigger);
+}
+
 /// Run one agent turn off-thread, streaming events into `queue` and surfacing
 /// approval requests into `approvals`; `trigger` wakes the UI for both. Setting
 /// `cancel` aborts the turn (the in-flight request and the tool loop).
@@ -273,13 +313,16 @@ pub fn spawn_turn(
     trigger: ExtSendTrigger,
     cancel: Arc<AtomicBool>,
 ) {
-    std::thread::Builder::new()
+    let err_queue = queue.clone();
+    let spawned = std::thread::Builder::new()
         .name("umide-agent".into())
         .spawn(move || {
             let push = Push::new(move |ev: AgentEvent| {
                 queue.lock().unwrap().push_back(ev);
                 register_ext_trigger(trigger);
             });
+            // Emits a terminal Error on panic/early-return so `streaming` resets.
+            let mut guard = TurnGuard::new(push.clone());
 
             let rt = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -288,6 +331,7 @@ pub fn spawn_turn(
                 Ok(rt) => rt,
                 Err(e) => {
                     push.emit(AgentEvent::Error(format!("runtime: {e}")));
+                    guard.finish();
                     return;
                 }
             };
@@ -303,8 +347,11 @@ pub fn spawn_turn(
                 };
                 runner.run(user_text, push, cancel).await;
             });
-        })
-        .expect("spawn agent thread");
+            guard.finish();
+        });
+    if let Err(e) = spawned {
+        report_spawn_failure(&err_queue, trigger, &e);
+    }
 }
 
 /// Like [`spawn_turn`], but backed by an external agent CLI (Claude Code, …).
@@ -322,13 +369,15 @@ pub fn spawn_cli_turn(
     trigger: ExtSendTrigger,
     cancel: Arc<AtomicBool>,
 ) {
-    std::thread::Builder::new()
+    let err_queue = queue.clone();
+    let spawned = std::thread::Builder::new()
         .name("umide-agent-cli".into())
         .spawn(move || {
             let push = Push::new(move |ev: AgentEvent| {
                 queue.lock().unwrap().push_back(ev);
                 register_ext_trigger(trigger);
             });
+            let mut guard = TurnGuard::new(push.clone());
 
             let rt = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -337,6 +386,7 @@ pub fn spawn_cli_turn(
                 Ok(rt) => rt,
                 Err(e) => {
                     push.emit(AgentEvent::Error(format!("runtime: {e}")));
+                    guard.finish();
                     return;
                 }
             };
@@ -348,8 +398,11 @@ pub fn spawn_cli_turn(
                 );
                 runner.run(user_text, push, cancel).await;
             });
-        })
-        .expect("spawn agent cli thread");
+            guard.finish();
+        });
+    if let Err(e) = spawned {
+        report_spawn_failure(&err_queue, trigger, &e);
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ use umide_agent::AgentEvent;
 
 use super::claude::ClaudeParser;
 use super::codex::CodexParser;
+use super::device_server::DeviceServer;
 use super::framer::CliFramer;
 use super::gemini::GeminiParser;
 use super::permission_server::PermissionServer;
@@ -83,6 +84,14 @@ const WRITE_NOTE: &str = "You can read the project, edit files, and run commands
 — but every edit and command is shown to the developer for approval before it \
 takes effect, so act normally and they will confirm. Reads are automatic.";
 
+/// Appended when the emulator device-MCP tools are wired, so the agent knows it
+/// can actually drive the running device (not just talk about it).
+const DEVICE_NOTE: &str = " You can also drive the running Android emulator: use \
+the umide-device tools — `device_screenshot` and `describe_ui` to SEE the \
+screen, `device_tap`/`device_swipe`/`device_type`/`device_key` to interact, and \
+`device_logs` to read logcat — to test your changes on the device and verify the \
+result yourself.";
+
 /// Gemini read-only tool whitelist: these run without confirmation; mutating
 /// tools (write_file/replace/run_shell_command) then need a confirmation that
 /// headless can't give, so they're effectively blocked.
@@ -120,6 +129,9 @@ pub struct CliRunner {
     approvals: ApprovalQueue,
     /// Wakes the UI when an approval card is pushed.
     trigger: ExtSendTrigger,
+    /// adb serial of the device the user is viewing (`None` ⇒ first running).
+    /// Pins the device-MCP tools (Claude Code only) to that emulator.
+    serial: Option<String>,
     idle_timeout: Duration,
 }
 
@@ -130,6 +142,7 @@ impl CliRunner {
         session: Arc<Mutex<Option<String>>>,
         approvals: ApprovalQueue,
         trigger: ExtSendTrigger,
+        serial: Option<String>,
     ) -> Self {
         Self {
             kind,
@@ -137,6 +150,7 @@ impl CliRunner {
             session,
             approvals,
             trigger,
+            serial,
             idle_timeout: DEFAULT_IDLE,
         }
     }
@@ -158,6 +172,7 @@ impl CliRunner {
         &self,
         resume: Option<&str>,
         perm: Option<&PermissionServer>,
+        dev: Option<&DeviceServer>,
     ) -> Vec<String> {
         match self.kind {
             CliKind::ClaudeCode => {
@@ -176,12 +191,25 @@ impl CliRunner {
                         a.push("--permission-mode".into());
                         a.push("default".into());
                         a.push("--mcp-config".into());
-                        a.push(p.mcp_config_json());
+                        // ONE --mcp-config object (--strict-mcp-config loads only
+                        // what's here): the permission bridge, plus the device
+                        // tools when an emulator server is running.
+                        a.push(match dev {
+                            Some(d) => format!(
+                                "{{\"mcpServers\":{{{},{}}}}}",
+                                p.mcp_config_entry(),
+                                d.mcp_config_entry()
+                            ),
+                            None => p.mcp_config_json(),
+                        });
                         a.push("--strict-mcp-config".into());
                         a.push("--permission-prompt-tool".into());
                         a.push(p.tool_ref());
                         a.push("--append-system-prompt".into());
-                        a.push(format!("{UMIDE_CONTEXT}{WRITE_NOTE}"));
+                        a.push(format!(
+                            "{UMIDE_CONTEXT}{WRITE_NOTE}{}",
+                            if dev.is_some() { DEVICE_NOTE } else { "" }
+                        ));
                     }
                     None => {
                         // Read-only fallback (bridge couldn't bind). Deny the
@@ -270,7 +298,22 @@ impl AgentRunner for CliRunner {
         } else {
             None
         };
-        let args = self.build_args(resume.as_deref(), perm.as_ref());
+
+        // Device-MCP tools (Claude only): let the agent drive the viewed emulator
+        // (screenshot/tap/logs). Held for the whole turn, dropped at the end.
+        // Best-effort — if it can't bind, the agent just runs without them.
+        let dev = if matches!(self.kind, CliKind::ClaudeCode) {
+            match DeviceServer::start(self.serial.clone()) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    tracing::warn!("device MCP unavailable ({e}); no device tools");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let args = self.build_args(resume.as_deref(), perm.as_ref(), dev.as_ref());
 
         // Resolve the absolute path when possible (a GUI app's PATH may be
         // minimal); fall back to the bare name.

@@ -1076,6 +1076,8 @@ fn send_handler(
                 queue.clone(),
                 approvals.clone(),
                 trigger,
+                // Drive the device the user is viewing (mirrors the LLM arm).
+                active_device.get_untracked(),
                 cancel.clone(),
             ),
         }

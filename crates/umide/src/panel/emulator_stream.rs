@@ -300,38 +300,93 @@ pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
             }
         };
         rt.block_on(async move {
-            let mut client = match EmulatorGrpcClient::connect_with_retry(
+            // Connect eagerly so the command channel is warm before the first
+            // tap; a failure here is non-fatal — the loop reconnects on demand.
+            let mut client = EmulatorGrpcClient::connect_with_retry(
                 &endpoint,
                 Duration::from_secs(30),
             )
             .await
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!("emulator input gRPC connect failed: {e}");
-                    return;
-                }
-            };
+            .map_err(|e| tracing::error!("emulator input gRPC connect failed: {e}"))
+            .ok();
+
             while let Some(ev) = rx.recv().await {
-                let r = match ev {
-                    InputEvent::TouchDown(x, y) => {
-                        client.send_touch_down(x, y).await
+                // (Re)connect if we have no live client — either the initial
+                // connect failed or a prior send dropped it. This mirrors the
+                // frame stream, which reconnects on a stalled/ended stream
+                // rather than giving up: without it, a single dropped input
+                // connection silently kills taps/keys forever while frames
+                // keep painting (looks like "input stopped working").
+                if client.is_none() {
+                    match EmulatorGrpcClient::connect_with_retry(
+                        &endpoint,
+                        Duration::from_secs(30),
+                    )
+                    .await
+                    {
+                        Ok(c) => client = Some(c),
+                        Err(e) => {
+                            tracing::warn!(
+                                "emulator input: reconnect failed, dropping event: {e}"
+                            );
+                            continue;
+                        }
                     }
-                    InputEvent::TouchMove(x, y) => {
-                        client.send_touch_move(x, y).await
+                }
+
+                if let Err(e) =
+                    send_input_event(client.as_mut().unwrap(), &ev).await
+                {
+                    // The connection likely dropped mid-gesture. Reconnect once
+                    // and retry this same event so a lone transient blip doesn't
+                    // break the gesture; if the retry also fails, clear the
+                    // client so the next event forces a fresh connect.
+                    tracing::warn!("emulator input send failed, reconnecting: {e}");
+                    match EmulatorGrpcClient::connect_with_retry(
+                        &endpoint,
+                        Duration::from_secs(30),
+                    )
+                    .await
+                    {
+                        Ok(mut c2) => {
+                            if let Err(e2) =
+                                send_input_event(&mut c2, &ev).await
+                            {
+                                tracing::warn!(
+                                    "emulator input retry after reconnect failed: {e2}"
+                                );
+                            }
+                            client = Some(c2);
+                        }
+                        Err(e2) => {
+                            tracing::warn!(
+                                "emulator input reconnect failed: {e2}"
+                            );
+                            client = None;
+                        }
                     }
-                    InputEvent::TouchUp(x, y) => client.send_touch_up(x, y).await,
-                    InputEvent::Key(k) => client.send_key(&k).await,
-                    InputEvent::KeyCode(c) => client.send_key_code(c).await,
-                };
-                if let Err(e) = r {
-                    tracing::warn!("emulator input send failed: {e}");
                 }
             }
         });
     });
 
     EmulatorInput { tx }
+}
+
+/// Dispatch one input event on an open command client. Errors are stringified
+/// so callers can log/retry without naming the client's error type.
+async fn send_input_event(
+    client: &mut EmulatorGrpcClient,
+    ev: &InputEvent,
+) -> Result<(), String> {
+    let r = match ev {
+        InputEvent::TouchDown(x, y) => client.send_touch_down(*x, *y).await,
+        InputEvent::TouchMove(x, y) => client.send_touch_move(*x, *y).await,
+        InputEvent::TouchUp(x, y) => client.send_touch_up(*x, *y).await,
+        InputEvent::Key(k) => client.send_key(k).await,
+        InputEvent::KeyCode(c) => client.send_key_code(*c).await,
+    };
+    r.map_err(|e| e.to_string())
 }
 
 /// Map a pointer position in the view's local coordinates to a device pixel

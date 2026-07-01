@@ -41,13 +41,16 @@ _Short, dated messages. Delete when resolved._
 
 ## Working agreement
 
-- **Push branches early and often.** Don't sit on a big local branch — the other
-  machine can only see what's pushed.
+- **Push as you go — don't wait for the feature to be done.** The other machine
+  builds on your **latest pushed commit**, not your finished feature. So push
+  each commit right after you make it; never sit on a big local branch. Sharing
+  needs a `git push`, not a merge.
 - **Atomic commits.** Each commit is *one* self-contained change that **compiles
-  and is logically complete**, with a clear message — not a giant end-of-branch
-  dump. That way the other side gets incremental, cherry-pickable updates and can
-  build any commit, instead of waiting for the whole feature. Prefer several
-  small PRs over one big one.
+  and is logically complete on its own** (the other side can build *any* commit),
+  with a clear message — not a giant end-of-branch dump. Combined with the point
+  above, this means the other machine gets your work in small, cherry-pickable
+  increments **while the feature is still in progress**, not all at once at the
+  end. Prefer several small PRs over one big one.
 - **Fetch first, integrate early.** `git fetch origin --prune` at session start;
   rebase your branch onto the other's latest WIP so you converge continuously
   (e.g. the Windows panel rebased onto the Mac's stream-hardening before it

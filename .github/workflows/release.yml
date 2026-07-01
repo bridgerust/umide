@@ -6,7 +6,7 @@ on:
       - "v[0-9]*" # real release: always builds + publishes
     branches:
       - main # post-merge: builds to validate packaging (gated in `meta`)
-  workflow_dispatch:
+  workflow_dispatch: # ⚠ PUBLISHES — signs + creates a GitHub Release for `tag_name`.
     inputs:
       tag_name:
         description: "Release tag (for example: v0.1.0)"
@@ -16,8 +16,11 @@ on:
   # real release from building. Instead the (slow) build jobs are gated in the
   # `meta` job: tags + manual dispatch always build; a push to main builds only
   # when a packaging input (umide.spec, extra/**, release.yml, …) changed.
-  # PR-time code/dependency correctness is covered by ci.yml on all three OSes;
-  # for an on-demand packaging dry-run use the workflow_dispatch button.
+  # PR-time code/dependency correctness is covered by ci.yml on all three OSes.
+  # To DRY-RUN packaging WITHOUT publishing, push a packaging-input change to
+  # `main` (is_release=false → build only). `workflow_dispatch` is NOT a dry-run:
+  # it sets is_release=true and the `publish` job runs on it, so it signs and
+  # publishes a real Release (a `-`-suffixed tag_name becomes a prerelease).
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}

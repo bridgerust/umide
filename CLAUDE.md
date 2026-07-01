@@ -57,9 +57,13 @@ Before finishing any change, check whether these need updating and keep them in 
   packaging input changed* (`release.yml`/`extra/**`/`umide.spec`/`docker-bake.hcl`/
   `Makefile`) — that main-push case builds to validate packaging but never signs or
   publishes (gated via `meta.outputs.should_build`/`is_release`). Ordinary code/dependency
-  PRs run only the CI workflow. Use the release workflow's `workflow_dispatch` button to
-  dry-run packaging on demand. NB: pushing changes under `.github/workflows/` needs the
-  `gh` token's `workflow` scope (`gh auth refresh -h github.com -s workflow`).
+  PRs run only the CI workflow. **To dry-run packaging without publishing, push a
+  packaging-input change to `main`** (that build-only path). NB: `workflow_dispatch` is
+  **NOT** a safe dry-run — it sets `is_release=true` and the `publish` job runs on it, so it
+  **signs and publishes a GitHub Release** to the required `tag_name` input (a `-`-suffixed
+  tag becomes a prerelease). Treat any tag/dispatch as an outward-facing publish. NB: pushing
+  changes under `.github/workflows/` needs the `gh` token's `workflow` scope
+  (`gh auth refresh -h github.com -s workflow`).
 
 ## Current status (keep this fresh — it is the cross-machine handoff)
 - **v0.2.0 shipped**: notarized macOS DMG, Windows MSI, Linux `.deb` on GitHub Releases.
@@ -171,10 +175,12 @@ Before finishing any change, check whether these need updating and keep them in 
     stream and the panel froze (looked like "taps stopped working"). Now `emulator_stream.rs`
     reconnects (a fresh stream repaints immediately); verified live.
 - **Next milestones / before tagging v0.3.0**:
-  1. **Dry-run the release workflow** (`workflow_dispatch`) before the real `v0.3.0` tag —
-     the MSI/`release-lto` path isn't exercised by ordinary CI. Then flip the `docs/index.html`
-     badge to `0.3.0`.
-  2. Windows Authenticode signing (needs a cert); live-verify the OpenAI/DeepSeek/Gemini
+  1. **Dry-run packaging without publishing** by pushing a packaging-input change to `main`
+     (the build-only path) — the MSI/`release-lto` path isn't exercised by ordinary CI. NOT
+     `workflow_dispatch` (that publishes). The `docs/index.html` badge is flipped to `0.3.0` in
+     the v0.3.0 release-prep.
+  2. Windows Authenticode signing (needs a cert — v0.3.0 ships the MSI **unsigned**, noted on
+     the download page; add signing in a 0.3.x follow-up); live-verify the OpenAI/DeepSeek/Gemini
      AI providers (note: `ai.rs` tool PATH on Windows is now fixed, but the providers
      themselves haven't been exercised on Windows). NB: the Mac is working on AI agent
      integration — coordinate before touching AI code.

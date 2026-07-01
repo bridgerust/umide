@@ -42,9 +42,11 @@ What you can do:
 (build, test, lint, etc.). Both require the user to approve a diff or command \
 before they take effect.
 - Drive the running emulator/simulator to test your changes: `screenshot_device` \
-to SEE the screen, `tap`, `swipe`, `type_text`, `press_key` to interact, and \
-`read_logs` to read the device log. These work on both Android (adb) and iOS \
-(simctl + idb); they auto-detect the running device, or pass `platform` \
+to SEE the screen, `tap`, `swipe`, `type_text`, `press_key` to interact, \
+`read_logs` to read the device log, and `describe_ui` to list on-screen \
+elements as text with tap coordinates (an accessibility fallback when a \
+screenshot is ambiguous; Android-only). These work on both Android (adb) and \
+iOS (simctl + idb); they auto-detect the running device, or pass `platform` \
 (\"android\"/\"ios\") to choose.
 
 Your superpower is the closed loop: after changing code and reloading the app, \
@@ -932,6 +934,17 @@ impl EditorTools {
             Err(e) => ToolOutput::error(e),
         }
     }
+
+    fn describe_ui(&self, input: &serde_json::Value) -> ToolOutput {
+        match resolve_target(input) {
+            Ok(Target::Android(serial)) => android_describe_ui(&serial),
+            Ok(Target::Ios(_)) => ToolOutput::error(
+                "describe_ui is Android-only for now — use screenshot_device on \
+                 iOS.",
+            ),
+            Err(e) => ToolOutput::error(e),
+        }
+    }
 }
 
 #[async_trait]
@@ -996,6 +1009,7 @@ impl ToolExecutor for EditorTools {
                 }
             }
             "read_logs" => self.read_logs(&call.input),
+            "describe_ui" => self.describe_ui(&call.input),
             other => ToolOutput::error(format!("unknown tool: {other}")),
         }
     }
@@ -1101,6 +1115,19 @@ fn device_specs() -> Vec<ToolDef> {
                     "filter": { "type": "string", "description": "Only lines containing this text." },
                     "platform": platform()
                 }
+            }),
+            cache_control: None,
+        },
+        ToolDef {
+            name: "describe_ui".into(),
+            description: "List the on-screen UI elements as text — each labelled \
+                or tappable element with its center coordinate, label, class and \
+                id. An accessibility fallback for when a screenshot is ambiguous \
+                (custom-rendered React Native / Flutter UIs). Android-only."
+                .into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": { "platform": platform() }
             }),
             cache_control: None,
         },
@@ -1369,6 +1396,120 @@ fn android_logs(serial: &str, lines: i64, filter: &str) -> ToolOutput {
     }
 }
 
+/// Dump the current Android view hierarchy (`uiautomator dump`) and render it
+/// as a compact, tappable element listing. `uiautomator` writes the XML to a
+/// file on the device; we dump then `cat` it in one shell round-trip.
+fn android_describe_ui(serial: &str) -> ToolOutput {
+    let cmd = format!(
+        "adb -s {serial} exec-out 'uiautomator dump /sdcard/umide_ui.xml \
+         >/dev/null 2>&1 && cat /sdcard/umide_ui.xml'"
+    );
+    match adb_sh(&cmd) {
+        Ok(out) if out.status.success() => {
+            let xml = String::from_utf8_lossy(&out.stdout);
+            if !xml.contains("<node") {
+                return ToolOutput::error(format!(
+                    "uiautomator produced no hierarchy: {}",
+                    clip(xml.trim(), 200)
+                ));
+            }
+            let listing = parse_ui_dump(&xml);
+            ToolOutput::ok(format!("UI elements (x,y = tap center):\n{listing}"))
+        }
+        Ok(out) => ToolOutput::error(format!(
+            "uiautomator dump failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        )),
+        Err(e) => ToolOutput::error(format!("uiautomator: {e}")),
+    }
+}
+
+/// Parse a uiautomator XML dump into one line per labelled or interactive node:
+/// `(cx,cy) [tap] "label" <Class> #id`. Nodes with no label and no interaction
+/// are dropped so the output stays a useful, skimmable map rather than the raw
+/// tree. Output is capped so a deep hierarchy can't flood the context.
+fn parse_ui_dump(xml: &str) -> String {
+    // Each `<node ...>` (container or leaf) carries its own attributes, so a
+    // flat scan over opening tags captures every element regardless of nesting.
+    // Attribute values are XML-escaped, so `>` never appears inside one.
+    let node_re = regex::Regex::new(r"<node\s+([^>]*?)/?>")
+        .expect("static node regex is valid");
+    let attr_re = regex::Regex::new(r#"([\w:-]+)="([^"]*)""#)
+        .expect("static attr regex is valid");
+
+    let mut lines = Vec::new();
+    for node in node_re.captures_iter(xml) {
+        let mut attrs = std::collections::HashMap::new();
+        for a in attr_re.captures_iter(&node[1]) {
+            attrs.insert(a[1].to_string(), xml_unescape(&a[2]));
+        }
+        let get = |k: &str| attrs.get(k).map(String::as_str).unwrap_or("");
+        let text = get("text").trim();
+        let desc = get("content-desc").trim();
+        let clickable = get("clickable") == "true";
+        let label = if !text.is_empty() { text } else { desc };
+        // Keep only what a user could read or act on.
+        if label.is_empty() && !clickable {
+            continue;
+        }
+        let Some((cx, cy)) = bounds_center(get("bounds")) else {
+            continue;
+        };
+        let mut line = format!("({cx},{cy})");
+        if clickable {
+            line.push_str(" [tap]");
+        }
+        if !label.is_empty() {
+            line.push_str(&format!(" \"{}\"", clip(label, 80)));
+        }
+        let class = get("class").rsplit('.').next().unwrap_or("");
+        if !class.is_empty() {
+            line.push_str(&format!(" <{class}>"));
+        }
+        let rid = get("resource-id");
+        if !rid.is_empty() {
+            line.push_str(&format!(" #{}", rid.rsplit('/').next().unwrap_or(rid)));
+        }
+        lines.push(line);
+    }
+    if lines.is_empty() {
+        return "No labelled or interactive elements found (the screen may be \
+                fully custom-rendered — use screenshot_device)."
+            .to_string();
+    }
+    const MAX: usize = 200;
+    let total = lines.len();
+    if total > MAX {
+        lines.truncate(MAX);
+        lines.push(format!("… ({} more elements omitted)", total - MAX));
+    }
+    lines.join("\n")
+}
+
+/// Center `(x,y)` of a uiautomator `bounds` value `"[x1,y1][x2,y2]"`.
+fn bounds_center(bounds: &str) -> Option<(i64, i64)> {
+    let nums: Vec<i64> = bounds
+        .split(|c: char| c != '-' && !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    match nums.as_slice() {
+        [x1, y1, x2, y2] => Some(((x1 + x2) / 2, (y1 + y2) / 2)),
+        _ => None,
+    }
+}
+
+/// Unescape the five XML entities that appear in uiautomator attribute values.
+/// `&amp;` is replaced last so an escaped entity isn't double-decoded.
+fn xml_unescape(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
 fn ios_logs(udid: &str, lines: i64, filter: &str) -> ToolOutput {
     let mut cmd = format!(
         "xcrun simctl spawn {udid} log show --last 1m --style compact 2>/dev/null"
@@ -1486,6 +1627,47 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    #[test]
+    fn bounds_center_computes_midpoint() {
+        assert_eq!(bounds_center("[0,0][100,200]"), Some((50, 100)));
+        assert_eq!(bounds_center("[10,20][30,60]"), Some((20, 40)));
+        assert_eq!(bounds_center("garbage"), None);
+        assert_eq!(bounds_center("[1,2][3]"), None); // only 3 numbers
+    }
+
+    #[test]
+    fn parse_ui_dump_lists_labelled_and_tappable_nodes() {
+        let xml = r#"<?xml version='1.0'?>
+<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][1080,2400]">
+    <node text="Settings" resource-id="com.app:id/title"
+          class="android.widget.TextView" clickable="false"
+          bounds="[40,100][300,180]" />
+    <node content-desc="Search &amp; more" class="android.widget.Button"
+          clickable="true" bounds="[900,100][1000,200]" />
+    <node text="" content-desc="" class="android.view.View"
+          clickable="false" bounds="[0,300][1080,400]" />
+  </node>
+</hierarchy>"#;
+        let out = parse_ui_dump(xml);
+        // Labelled TextView is listed with its center + short class + short id.
+        assert!(out.contains("(170,140)"));
+        assert!(out.contains("\"Settings\""));
+        assert!(out.contains("<TextView>"));
+        assert!(out.contains("#title"));
+        // Clickable button: [tap] marker + unescaped content-desc.
+        assert!(out.contains("[tap]"));
+        assert!(out.contains("\"Search & more\""));
+        // The empty, non-clickable spacer node is dropped.
+        assert!(!out.contains("(540,350)"));
+    }
+
+    #[test]
+    fn parse_ui_dump_reports_empty_hierarchy() {
+        let out = parse_ui_dump("<hierarchy></hierarchy>");
+        assert!(out.contains("custom-rendered"));
     }
 
     #[test]

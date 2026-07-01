@@ -140,7 +140,7 @@ impl Agent {
             // Execute each tool, then feed all results back in ONE user message
             // (the API requires every tool_use to have a matching tool_result).
             let mut results = Vec::with_capacity(calls.len());
-            for call in calls {
+            for call in &calls {
                 let _ = events.send(AgentEvent::ToolCallInput {
                     id: call.id.clone(),
                     name: call.name.clone(),
@@ -154,14 +154,123 @@ impl Agent {
                     summary: out.summary,
                 });
                 results.push(ContentBlock::ToolResult {
-                    tool_use_id: call.id,
+                    tool_use_id: call.id.clone(),
                     content: out.content,
                     is_error: out.is_error.then_some(true),
                 });
             }
+            // A2 — close the observe→act→observe loop: after the tools run, let
+            // the executor append an automatic observation (a fresh device
+            // screenshot after a tap/swipe/type/key), so the model always sees
+            // the post-action state next turn instead of acting blind.
+            results.extend(self.tools.auto_observe(&calls).await);
             self.history.push(Message::user(results));
         }
 
         Err(AgentError::MaxIterations(MAX_ITERATIONS))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::TurnResult;
+    use crate::provider::ProviderKind;
+    use crate::tools::ToolOutput;
+    use crate::types::{ToolDef, Usage};
+    use async_trait::async_trait;
+    use std::sync::atomic::AtomicUsize;
+
+    /// Turn 1 asks for a `tap`; turn 2 ends. Exercises the observe→act→observe
+    /// path without a network.
+    struct MockBackend {
+        calls: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl LlmBackend for MockBackend {
+        async fn stream(
+            &self,
+            _system: &str,
+            _history: &[Message],
+            _tools: &[ToolDef],
+            _cfg: &ProviderConfig,
+            _events: &UnboundedSender<AgentEvent>,
+            _cancel: &AtomicBool,
+        ) -> Result<TurnResult, AgentError> {
+            let usage = Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            };
+            if self.calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                Ok(TurnResult {
+                    blocks: vec![ContentBlock::ToolUse {
+                        id: "t1".into(),
+                        name: "tap".into(),
+                        input: serde_json::json!({ "x": 1, "y": 2 }),
+                    }],
+                    stop_reason: Some("tool_use".into()),
+                    usage,
+                })
+            } else {
+                Ok(TurnResult {
+                    blocks: vec![ContentBlock::text("done")],
+                    stop_reason: Some("end_turn".into()),
+                    usage,
+                })
+            }
+        }
+    }
+
+    struct MockExec;
+
+    #[async_trait]
+    impl ToolExecutor for MockExec {
+        fn specs(&self) -> Vec<ToolDef> {
+            vec![]
+        }
+        async fn execute(&self, _call: ToolInvocation) -> ToolOutput {
+            ToolOutput::ok("tapped")
+        }
+        async fn auto_observe(
+            &self,
+            executed: &[ToolInvocation],
+        ) -> Vec<ContentBlock> {
+            if executed.iter().any(|c| c.name == "tap") {
+                vec![ContentBlock::text("AUTO_OBSERVED")]
+            } else {
+                vec![]
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn loop_auto_observes_after_a_device_action() {
+        let mut agent = Agent {
+            backend: Box::new(MockBackend {
+                calls: AtomicUsize::new(0),
+            }),
+            provider: ProviderConfig::new(ProviderKind::Anthropic, "test-key"),
+            system_prompt: "sys".into(),
+            tools: Arc::new(MockExec),
+            history: Vec::new(),
+        };
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let cancel = AtomicBool::new(false);
+        agent
+            .send(vec![ContentBlock::text("go")], tx, &cancel)
+            .await
+            .unwrap();
+
+        // The tool-results message must also carry the auto-observation, i.e. the
+        // loop re-observed after the tap without the model asking.
+        let observed = agent.history().iter().any(|m| {
+            m.content.iter().any(
+                |b| matches!(b, ContentBlock::Text { text } if text == "AUTO_OBSERVED"),
+            )
+        });
+        assert!(observed, "auto_observe result was not appended to history");
     }
 }

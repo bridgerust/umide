@@ -8,7 +8,7 @@
 
 use async_trait::async_trait;
 
-use crate::types::{ToolDef, ToolResultContent};
+use crate::types::{ContentBlock, ToolDef, ToolResultContent};
 
 /// A single tool call requested by the model.
 #[derive(Debug, Clone)]
@@ -80,4 +80,14 @@ pub trait ToolExecutor: Send + Sync {
     /// commands) should be gated behind user approval *inside* this method, so
     /// the human stays in control of the IDE.
     async fn execute(&self, call: ToolInvocation) -> ToolOutput;
+
+    /// After a batch of tool calls runs, optionally return extra observation
+    /// content to append to the tool-results message — e.g. a fresh device
+    /// screenshot after a `tap`/`swipe`, so the agent always *sees* the result
+    /// of its action without having to remember to ask. This is what closes the
+    /// observe→act→observe loop. Default: nothing. Executors that add images
+    /// here should keep them small (downscaled) to protect the token budget.
+    async fn auto_observe(&self, _executed: &[ToolInvocation]) -> Vec<ContentBlock> {
+        Vec::new()
+    }
 }

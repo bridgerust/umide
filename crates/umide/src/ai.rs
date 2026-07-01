@@ -24,6 +24,7 @@ use tokio::sync::oneshot;
 use umide_agent::tools::{ToolExecutor, ToolInvocation, ToolOutput};
 use umide_agent::{
     Agent, AgentEvent, ContentBlock, Message, ProviderConfig, ProviderKind, ToolDef,
+    ToolResultContent,
 };
 
 pub mod cli;
@@ -946,6 +947,40 @@ impl ToolExecutor for EditorTools {
             other => ToolOutput::error(format!("unknown tool: {other}")),
         }
     }
+
+    /// A2 — after the agent drives the device (tap/swipe/type/key), capture a
+    /// fresh screenshot and hand it back automatically, so the model always sees
+    /// the result of its action. Skipped if the model already screenshotted this
+    /// turn (no double image) or if no device action ran.
+    async fn auto_observe(&self, executed: &[ToolInvocation]) -> Vec<ContentBlock> {
+        if !should_auto_observe(executed) {
+            return Vec::new();
+        }
+        const MUTATING: &[&str] = &["tap", "swipe", "type_text", "press_key"];
+        // Screenshot the same platform the device actions targeted.
+        let platform = executed
+            .iter()
+            .rev()
+            .find(|c| MUTATING.contains(&c.name.as_str()))
+            .and_then(|c| c.input.get("platform").cloned());
+        let input = match platform {
+            Some(p) => serde_json::json!({ "platform": p }),
+            None => serde_json::json!({}),
+        };
+        let out = self.screenshot_device(&input);
+        if out.is_error {
+            return Vec::new();
+        }
+        let mut blocks = vec![ContentBlock::text(
+            "Screenshot of the device after the action(s) above:",
+        )];
+        for c in out.content {
+            if let ToolResultContent::Image { source } = c {
+                blocks.push(ContentBlock::Image { source });
+            }
+        }
+        blocks
+    }
 }
 
 /// Tool schemas for the emulator/simulator driving tools (Android + iOS).
@@ -1210,10 +1245,49 @@ fn idb_run(udid: &str, args: &[&str], summary: String) -> ToolOutput {
     }
 }
 
+/// Whether to auto-capture a screenshot after a tool batch: only when the agent
+/// drove the device (tap/swipe/type/key) AND didn't already screenshot this turn
+/// (so we never send a redundant second image). Pure, so it's unit-tested.
+fn should_auto_observe(executed: &[ToolInvocation]) -> bool {
+    const MUTATING: &[&str] = &["tap", "swipe", "type_text", "press_key"];
+    let mutated = executed.iter().any(|c| MUTATING.contains(&c.name.as_str()));
+    let already = executed.iter().any(|c| c.name == "screenshot_device");
+    mutated && !already
+}
+
+/// Long-edge cap for screenshots handed to the model. Native phone frames are
+/// ~1080×2400; downscaling to this keeps each screenshot affordable so the
+/// agent can auto-observe every step without exhausting the vision token budget.
+const SHOT_MAX_EDGE: u32 = 1280;
+
+/// Downscale a PNG so its long edge is ≤ `max_edge`, re-encoding as PNG. Returns
+/// the bytes unchanged if it's already small enough or can't be decoded — taps
+/// still map 1:1 because the model is told to reason over device coordinates.
+fn downscale_png(bytes: &[u8], max_edge: u32) -> Vec<u8> {
+    let img = match image::load_from_memory(bytes) {
+        Ok(i) => i,
+        Err(_) => return bytes.to_vec(),
+    };
+    let (w, h) = (img.width(), img.height());
+    if w.max(h) <= max_edge {
+        return bytes.to_vec();
+    }
+    let scale = max_edge as f32 / w.max(h) as f32;
+    let nw = ((w as f32 * scale).round() as u32).max(1);
+    let nh = ((h as f32 * scale).round() as u32).max(1);
+    let resized = img.resize(nw, nh, image::imageops::FilterType::Triangle);
+    let mut out = std::io::Cursor::new(Vec::new());
+    match resized.write_to(&mut out, image::ImageFormat::Png) {
+        Ok(()) => out.into_inner(),
+        Err(_) => bytes.to_vec(),
+    }
+}
+
 fn android_screenshot(serial: &str) -> ToolOutput {
     match adb_sh(&format!("adb -s {serial} exec-out screencap -p")) {
         Ok(out) if out.status.success() && !out.stdout.is_empty() => {
-            ToolOutput::with_image(format!("screenshot of {serial}"), &out.stdout)
+            let png = downscale_png(&out.stdout, SHOT_MAX_EDGE);
+            ToolOutput::with_image(format!("screenshot of {serial}"), &png)
         }
         Ok(out) => ToolOutput::error(format!(
             "screencap failed: {}",
@@ -1234,7 +1308,8 @@ fn ios_screenshot(udid: &str) -> ToolOutput {
         Ok(out) if out.status.success() => match std::fs::read(&tmp) {
             Ok(bytes) if !bytes.is_empty() => {
                 let _ = std::fs::remove_file(&tmp);
-                ToolOutput::with_image(format!("screenshot of {udid}"), &bytes)
+                let png = downscale_png(&bytes, SHOT_MAX_EDGE);
+                ToolOutput::with_image(format!("screenshot of {udid}"), &png)
             }
             _ => ToolOutput::error("simctl screenshot produced no image"),
         },
@@ -1396,6 +1471,53 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    fn call(name: &str) -> ToolInvocation {
+        ToolInvocation {
+            id: name.into(),
+            name: name.into(),
+            input: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn auto_observe_fires_only_after_a_device_mutation() {
+        // A device action → observe.
+        assert!(should_auto_observe(&[call("tap")]));
+        assert!(should_auto_observe(&[call("read_file"), call("swipe")]));
+        // Model already screenshotted → don't double up.
+        assert!(!should_auto_observe(&[
+            call("tap"),
+            call("screenshot_device")
+        ]));
+        // No device action → nothing to re-observe.
+        assert!(!should_auto_observe(&[
+            call("read_file"),
+            call("edit_file")
+        ]));
+        assert!(!should_auto_observe(&[]));
+    }
+
+    #[test]
+    fn downscale_png_caps_the_long_edge() {
+        // A 2000x1000 PNG downscales to a 1280 long edge; aspect preserved.
+        let big = image::DynamicImage::new_rgb8(2000, 1000);
+        let mut buf = std::io::Cursor::new(Vec::new());
+        big.write_to(&mut buf, image::ImageFormat::Png).unwrap();
+        let small = downscale_png(&buf.into_inner(), 1280);
+        let out = image::load_from_memory(&small).unwrap();
+        assert_eq!(out.width(), 1280);
+        assert_eq!(out.height(), 640);
+    }
+
+    #[test]
+    fn downscale_png_leaves_small_images_untouched() {
+        let small = image::DynamicImage::new_rgb8(800, 600);
+        let mut buf = std::io::Cursor::new(Vec::new());
+        small.write_to(&mut buf, image::ImageFormat::Png).unwrap();
+        let bytes = buf.into_inner();
+        assert_eq!(downscale_png(&bytes, 1280), bytes);
     }
 
     #[test]

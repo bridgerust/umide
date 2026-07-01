@@ -17,14 +17,20 @@ pub fn list_all_devices() -> Vec<DeviceInfo> {
     let mut devices = Vec::new();
 
     if let Ok(mut android_devices) = AndroidEmulator::list_devices() {
-        // Update states based on actual running status
+        // Update states based on actual running status, and attach the adb
+        // serial of the running instance so the AI agent can target the exact
+        // device the user is viewing (multi-Android).
         let running_serials = AndroidEmulator::get_running_serials();
         for device in &mut android_devices {
-            if AndroidEmulator::is_running(&device.id)
-                || running_serials
-                    .iter()
-                    .any(|s| s.contains(&device.id) || device.id.contains(s))
+            if let Some(serial) = AndroidEmulator::running_serial(&device.id) {
+                device.state = DeviceState::Running;
+                device.serial = Some(serial);
+            } else if running_serials
+                .iter()
+                .any(|s| s.contains(&device.id) || device.id.contains(s))
             {
+                // Fallback heuristic: running, but the exact serial couldn't be
+                // resolved (e.g. `emu avd name` failed).
                 device.state = DeviceState::Running;
             }
         }

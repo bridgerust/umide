@@ -118,29 +118,30 @@ impl AndroidEmulator {
             .collect()
     }
 
-    /// Check if an AVD is currently running
+    /// Check if an AVD is currently running.
     pub fn is_running(avd_name: &str) -> bool {
-        let running = Self::get_running_serials();
-        if running.is_empty() {
-            return false;
-        }
+        Self::running_serial(avd_name).is_some()
+    }
 
-        // Check if any running emulator corresponds to this AVD
-        // We need to query each emulator for its AVD name
-        for serial in &running {
+    /// The adb serial (`emulator-<consolePort>`) of the running emulator for
+    /// `avd_name`, or `None` if that AVD isn't currently running. Each running
+    /// emulator is queried for its AVD name (`adb -s <serial> emu avd name`) so
+    /// the right serial is returned even when several emulators run at once.
+    pub fn running_serial(avd_name: &str) -> Option<String> {
+        for serial in Self::get_running_serials() {
             if let Ok(output) = quiet_command("adb")
-                .args(["-s", serial, "emu", "avd", "name"])
+                .args(["-s", &serial, "emu", "avd", "name"])
                 .output()
             {
                 let name = String::from_utf8_lossy(&output.stdout);
                 if name.trim() == avd_name
                     || name.lines().next().map(|l| l.trim()) == Some(avd_name)
                 {
-                    return true;
+                    return Some(serial);
                 }
             }
         }
-        false
+        None
     }
 
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
@@ -159,6 +160,7 @@ impl AndroidEmulator {
                 name: line.trim().to_string(),
                 platform: DevicePlatform::Android,
                 state: DeviceState::Disconnected, // Initial state
+                serial: None, // Resolved once running (see running_serial)
             })
             .collect();
 

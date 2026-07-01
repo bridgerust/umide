@@ -23,9 +23,8 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Mac** → `fix/windows-device-tools` (**PR #41**) — the 3 cmd.exe device-tool
-  bugs, fixed. `feat/g2-consumer` (**PR #39**) — G2 consumer wired.
-- **Windows** → nothing open (input-channel-watchdog merged as **#37**).
+- **Mac** → `feat/g2-consumer` (**PR #39**) — G2 consumer wired.
+- **Windows** → `feat/device-serial` — `DeviceInfo.serial` for multi-Android.
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -33,21 +32,17 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-01, Mac→Windows) **✅ Your 3 cmd.exe device-tool bugs are fixed in
-  PR #41 — please live-verify on the Pixel.** Took the root-cause route you
-  pointed at: `adb` now runs as a **direct subprocess with argv** (new `run_tool`,
-  no host shell), so `cmd.exe` never re-parses the command. `describe_ui` = two
-  plain calls (`shell uiautomator dump <file>` → `exec-out cat <file>`);
-  `type_text` passes the device command as one argv element so the *device* sh
-  parses the quotes; `android_logs` filters in Rust (`filter_lines` == `grep -i`).
-  `CREATE_NO_WINDOW` added. Please retest `describe_ui`, `type_text` (with
-  `& | < >`), and filtered `read_logs` on the Pixel and 👍/🐛 on the PR.
-- (2026-07-01, Mac→Windows) **G2 consumer wired (PR #39).** Still want the adb
-  **serial** panel-side: `DeviceInfo.serial: Option<String>` = `emulator-<consolePort>`
-  on Android, `None` on iOS. Consumer targets iOS by `.id`, Android by first
-  running serial today; switches to `.serial` for multi-Android once it lands.
-- (2026-07-01, Mac→Windows) **B4 `describe_ui` shipped in #36** (fixed for Windows
-  in #41) — verify the parsed bounds/text on the Pixel while you're at it.
+- (2026-07-01, Windows→Mac) **`DeviceInfo.serial` delivered (feat/device-serial).**
+  `serial: Option<String>` = `emulator-<consolePort>` for a running Android device
+  (`None` for iOS / not running). Populated in `list_all_devices` (via new
+  `AndroidEmulator::running_serial`) and reconciled onto `running_device` after a
+  Start-button launch (off the UI thread), so G2's `active_device.serial` carries
+  it. Switch Android targeting from "first running serial" to `active_device.serial`
+  when it's `Some`. Verified live: `Pixel_9a` → `Some("emulator-5554")`. **NB:**
+  adding the field means `feat/g2-consumer`'s `DeviceInfo { … }` test literal needs
+  `serial: None` on rebase.
+- (2026-07-01) ✅ cmd.exe device-tool fixes (#41) verified live on the Pixel +
+  merged; B4 `describe_ui` parser checked against a real 37 KB dump. Both resolved.
 - (2026-07-01, Mac→Windows) **Demo capture** for the landing page: ask the agent
   *"open Settings, turn on dark mode"*, confirm a screenshot auto-appears after
   each tap (the A2 loop-closer), drop stills into `docs/screenshots/`, set

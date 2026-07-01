@@ -28,10 +28,15 @@ Before finishing any change, check whether these need updating and keep them in 
 
 ## Product positioning (keep accurate everywhere)
 - **macOS**: full product — editor + embedded Android/iOS emulators + AI assistant.
-- **Windows/Linux**: editor + AI assistant + **embedded, interactive Android emulator
-  (preview)** — live frames + pointer tap/drag (M3). iOS Simulator stays macOS-only
-  permanently. Still preview-grade: hardware buttons (Home/Back/Power) and keyboard text
-  are not yet wired into the portable panel, and a live device run on Windows is pending.
+- **Windows**: editor + AI assistant + **embedded, interactive Android emulator** — live
+  frames, pointer tap/drag, hardware buttons (Home/Back/Recents/Power), keyboard text, and
+  a screenshot button. Verified live end-to-end on a real `Pixel_9a`. iOS Simulator stays
+  macOS-only permanently.
+- **Linux**: the *same* portable panel as Windows and it builds in CI (Clippy + the Linux
+  `.deb`), but it has **never been run live** — keep it labelled **preview only** until
+  someone smoke-tests it. Main runtime unknowns: wgpu/Vulkan rendering the `VideoFrame`
+  primitive and the emulator `-gpu host` under X11/Wayland. Decision (2026-07-01): don't
+  invest in Linux runtime work now; revisit when there's demand.
 
 ## Repo conventions
 - **Sole commit author**: `dev-josias <kologojosias@gmail.com>`. Do not introduce other

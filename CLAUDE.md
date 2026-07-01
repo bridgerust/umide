@@ -107,6 +107,29 @@ Before finishing any change, check whether these need updating and keep them in 
     Pixel + capture the demo video/hero screenshots** (Windows — blocked on a provider key).
   - **Coordination**: Mac owns `umide_agent/*` + `crates/umide/src/ai.rs` +
     `ai_assistant_view.rs`; Windows owns the emulator panel files.
+- **Landed since #41 (toward v0.3.0):**
+  - **Input-channel reconnect (#37)**: the emulator input (touch/key) channel now
+    reconnects on a dropped gRPC connection — the input-side twin of the frame-stream
+    stall fix. Verified live on the Pixel.
+  - **Windows cmd.exe device-tool audit + fixes (#40 → #41)**: `describe_ui`,
+    `type_text` (metachars), and filtered `read_logs` were all mis-parsed by `cmd /C`;
+    fixed via argv-direct `run_tool`. Found + proven live on the Pixel.
+  - **`DeviceInfo.serial` (#44)**: Windows added the field + `running_serial` +
+    panel resolution; Mac wired the `resolve_target` consumer + the macOS G2 producer.
+    Multi-Android disambiguation groundwork; full loop live-verified on macOS.
+  - **Device-tools MCP for Claude Code (#46, core only)**: `ai/cli/device_server.rs`
+    exposes the emulator device tools to the Claude Code backend so it drives the
+    device **with no API key** — proven live (the real `claude` CLI called
+    `device_screenshot`→`device_tap` on the Pixel). **App wiring is a handed-off
+    follow-up** (5 seams incl. `WRITE_NOTE` mobile-first context — see HANDOFF; Mac's
+    `feat/cli-umide-context` #53 does the WRITE_NOTE half).
+  - **AI panel redesign + sessions (Mac #48, #52)**: key-free CLI backends surfaced
+    ("No API key needed — pick Claude Code/Codex"), real chat sessions (New Chat,
+    switcher, per-workspace persistence).
+  - **Panel polish**: Volume/Rotate hardware buttons (#49); the panel now connects to
+    the device's **discovered gRPC port** (`AndroidEmulator::grpc_port`, reads the
+    emulator discovery ini) instead of a hardcoded 8554 (#51). README + `docs/index.html`
+    feature lists refreshed.
 - **floem** is pinned at `bridgerust/floem@e07fcd5ff148…` (branch `feat/external-texture`
   = upstream-latest + the wgpu external-texture / `VideoFrame` primitive + aspect letterbox).
   It is fetched from git automatically — you only need a local floem clone to iterate on

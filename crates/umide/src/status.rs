@@ -166,7 +166,10 @@ pub fn status(
                 },
             ),
             // Mobile project badge: shows the detected React Native / Flutter
-            // kind of the workspace; hidden for non-mobile workspaces.
+            // kind of the workspace; hidden for non-mobile workspaces. Clicking
+            // it RUNS the app on the embedded emulator/simulator (the mobile
+            // loop's run step — no Android Studio/Xcode needed), hence the play
+            // glyph beside the stack name.
             Stack::new((
                 svg(move || config.get().ui_svg(UmideIcons::EMULATOR)).style(
                     move |s| {
@@ -187,7 +190,19 @@ pub fn status(
                         .color(config.get().color(UmideColor::STATUS_FOREGROUND))
                         .selectable(false)
                 }),
+                svg(move || config.get().ui_svg(UmideIcons::DEBUG_CONTINUE)).style(
+                    move |s| {
+                        let config = config.get();
+                        let icon_size = config.ui.icon_size() as f32;
+                        s.margin_left(6.0)
+                            .size(icon_size, icon_size)
+                            .color(config.color(UmideColor::LAPCE_ICON_ACTIVE))
+                    },
+                ),
             ))
+            .on_click_stop(move |_| {
+                workbench_command.send(UmideWorkbenchCommand::RunOnDevice);
+            })
             .style(move |s| {
                 s.display(if project_kind.get().is_none() {
                     Display::None
@@ -197,6 +212,12 @@ pub fn status(
                 .height_pct(100.0)
                 .padding_horiz(10.0)
                 .align_items(Some(AlignItems::Center))
+                .cursor(CursorStyle::Pointer)
+                .hover(|s| {
+                    s.background(
+                        config.get().color(UmideColor::PANEL_HOVERED_BACKGROUND),
+                    )
+                })
             }),
             {
                 let panel = panel.clone();

@@ -23,8 +23,15 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Windows** → `feat/device-mcp` (**PR #46**) — device-tools MCP server for the
-  Claude Code CLI backend (core; proven live). (DeviceInfo.serial #44 merged.)
+- **Mac** → `feat/right-dock-layout` (**PR #59**, incl. Windows's dock fix +
+  wrap polish) and `fix/macos-panel-native-icons` (**PR #62**) — both merging;
+  Device Logs panel registration unblocks on #59's landing.
+- **Windows** → mobile-first tooling: **detection (#60) + logcat backend (#61)
+  both MERGED**. `CommonData.project_kind: RwSignal<Option<ProjectKind>>` is
+  live (status-bar badge verified on an RN workspace) — ready for your AI
+  context injection. `start_logcat_stream(serial, signal) -> LogcatHandle` in
+  `panel/device_logs_stream.rs` is live-verified on the Pixel — the panel UI on
+  top of it waits for your dock push; the iOS `simctl log stream` half is yours.
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -33,62 +40,25 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 _Short, dated messages. Delete when resolved._
 
 - (2026-07-02, Windows→Mac) **#59 dock: fixed the Windows right-dock collapse —
-  pushed to `feat/right-dock-layout` @ `6ef2cbee`.** After #59 moved the AI
-  assistant out of the right dock into the bottom dock, the right column held
-  only the portable emulator panel (min-content width ~0 — it's `min_width(0)`
-  throughout), so the *wide* AI panel overflowed the centre column and shoved
-  the fixed-width right dock **off the right window edge** — the emulator was
-  invisible on Windows even though its state was correct (verified live:
-  `is_container_shown=true`, `rt_shown=true`, `size_right=250`, no visible
-  column). macOS was unaffected because the native emulator panel reports a real
-  intrinsic width. Fix (placement-independent): `view.rs` Left/Right dock
-  containers get `min_width(size)`+`flex_shrink(0.0)`; `app.rs` centre column
-  gets `min_width(0.0)` so it shrinks instead of overflowing. Verified live on a
-  `Pixel_9a`: emulator + AI + terminal + file explorer all render at once — the
-  intended mobile-first layout. **FYI I also took the AI content-fit polish in
-  your file `ai_assistant_view.rs`** (@ `f12613f0`, at the user's request):
-  assistant transcript replies now wrap to the panel width (the message
-  `rich_text` had no width constraint, so markdown laid out at its natural width
-  and overflowed the narrow bottom dock — fixed with width_full + min_width(0)
-  down the message chain, mirroring how the editor hover wraps markdown).
-  Layout-only, no behaviour change — flag if you'd have done it differently. Two
-  small things I left for you: (1) the provider button rows fit at normal widths
-  but don't wrap if dragged very narrow — floem has no `flex_wrap`, so it'd need
-  a taffy-level tweak; (2) emulator placement (right column) is confirmed good
-  for the closed-loop story — no need to move it.
-- (2026-07-01, Windows→Mac) **Device-tools MCP for Claude Code — core proven,
-  wiring is yours (fits your agent-UI refinement).** New `ai/cli/device_server.rs`
-  (**PR #46**) exposes the emulator device tools to the Claude Code backend so the
-  in-panel session drives the device **with no API key** — verified LIVE on the
-  Pixel: the real `claude` CLI called `device_screenshot` → reasoned → `device_tap`
-  (`claude exit=0`). Reuses your `ai.rs` device fns via `super::super::` (no `ai.rs`
-  change). **4 seams to expose it from the panel (all your area — I stayed out):**
-  1. `runner.rs` — in `CliRunner::run` (~:249) start `DeviceServer::start(serial)`
-     next to `PermissionServer`; in `build_args` Claude branch (~:166) merge its
-     `mcp_config_entry()` into the ONE `--mcp-config` JSON's `mcpServers` map
-     (`--strict-mcp-config` means it must be in that JSON); add a serial field to
-     `CliRunner`.
-  2. `ai.rs` — add `selected_device: Option<DeviceInfo>` to `spawn_cli_turn`
-     (~:385), forward to `CliRunner::new` (~:419). Resolve the Android serial from
-     it (reuse `resolve_target`/`.serial`).
-  3. `ai_assistant_view.rs:824` — pass `active_device.get_untracked()` into the
-     `Launch::Cli` arm (mirror the LLM arm at `:821`).
-  4. `permission_server.rs` `is_read_only` (~:245) — add `mcp__umide-device__
-     device_screenshot`/`…describe_ui`/`…device_logs` (auto-allow reads); writes
-     (`tap`/`swipe`/`type`/`key`) keep prompting. Nicer card titles in `describe`
-     optional.
-  5. **`runner.rs` `WRITE_NOTE`/`READ_ONLY_NOTE` (~:62,69) — give the CLI backend
-     the mobile-first context it's missing.** Today they say only "inside the
-     UMIDE editor" + approval model; the built-in `SYSTEM_PROMPT` (ai.rs:35) knows
-     UMIDE is a React-Native/Flutter mobile IDE with an embedded emulator and a
-     see→act "closed loop." Once the device tools are wired, Claude Code will
-     *have* them but no framing to use them — add ~1–2 sentences mirroring
-     `SYSTEM_PROMPT`: mobile-first (RN/Flutter), an embedded Android emulator, use
-     the umide-device tools to screenshot/tap/read-logs and test changes on the
-     running device (the closed loop). Otherwise it acts like a generic code agent
-     with mystery tools.
-  `DeviceServer::start(serial)` takes the pinned serial (`None` = first running).
-  Ping me and I'll live-verify the wired in-panel flow on the Pixel.
+  on `feat/right-dock-layout` @ `6ef2cbee`.** The wide AI panel overflowed the
+  centre column and shoved the fixed-width right dock off the window edge (state
+  said shown, paint was off-screen). Fix: side docks pin their width
+  (`min_width(size)` + `flex_shrink(0)`), the centre column gets `min_width(0)`
+  so it shrinks instead of overflowing. Verified live on the Pixel; Mac
+  re-verified the whole layout after pulling. **Also took the transcript-wrap
+  polish in `ai_assistant_view.rs`** (@ `f12613f0`) — Mac reviewed: exactly
+  right, keep. Left for Mac: provider-row wrap at very narrow widths (needs a
+  taffy-level tweak; floem has no `flex_wrap`).
+- (2026-07-02, Windows→Mac) **Mobile-first split (user direction):** Windows —
+  detection (#60) + logcat backend (#61), both MERGED; Device Logs panel UI next
+  (on the #59 layout once merged). Mac — the iOS half of Device Logs
+  (`xcrun simctl spawn <udid> log stream` into the same panel) and **AI
+  project-context injection** (`CommonData.project_kind` is live — feed it into
+  SYSTEM_PROMPT/WRITE_NOTE so the agent stops re-discovering the stack).
+- (2026-07-01) ✅ Device-MCP wiring + mobile context shipped in Mac's #53; core
+  #46. Claude Code drives the device key-free. Demo assets captured on Windows
+  (v0.3.0 hero screenshots + emulator GIF) — publishing PR pending; demo video
+  re-take parked.
 - (2026-07-01, Mac→Windows) **Multi-Android live check** (from #44): two emulators
   up, confirm the agent drives the one you're viewing. Blocked here on a provider
   key (agent path) — will do it once a key's available or via Claude Code once the

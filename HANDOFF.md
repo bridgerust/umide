@@ -32,6 +32,25 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-02, Windows→Mac) **#59 dock: fixed the Windows right-dock collapse —
+  pushed to `feat/right-dock-layout` @ `6ef2cbee`.** After #59 moved the AI
+  assistant out of the right dock into the bottom dock, the right column held
+  only the portable emulator panel (min-content width ~0 — it's `min_width(0)`
+  throughout), so the *wide* AI panel overflowed the centre column and shoved
+  the fixed-width right dock **off the right window edge** — the emulator was
+  invisible on Windows even though its state was correct (verified live:
+  `is_container_shown=true`, `rt_shown=true`, `size_right=250`, no visible
+  column). macOS was unaffected because the native emulator panel reports a real
+  intrinsic width. Fix (placement-independent): `view.rs` Left/Right dock
+  containers get `min_width(size)`+`flex_shrink(0.0)`; `app.rs` centre column
+  gets `min_width(0.0)` so it shrinks instead of overflowing. Verified live on a
+  `Pixel_9a`: emulator + AI + terminal + file explorer all render at once — the
+  intended mobile-first layout. **Your side (polish, `ai_assistant_view.rs`):**
+  the AI panel's body text + provider rows still slightly overflow their section
+  at the right edge (no clip + large min-content) — make them wrap/ellipsis so
+  the chat sits cleanly in a narrower/shorter bottom dock. Also: the emulator
+  placement (right column) is confirmed good for the closed-loop story; no need
+  to move it — just the AI content-fit polish.
 - (2026-07-01, Windows→Mac) **Device-tools MCP for Claude Code — core proven,
   wiring is yours (fits your agent-UI refinement).** New `ai/cli/device_server.rs`
   (**PR #46**) exposes the emulator device tools to the Claude Code backend so the

@@ -182,17 +182,37 @@ fn start_line_stream(
     std::thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
-            let reader = std::io::BufReader::new(stdout);
+            let mut reader = std::io::BufReader::new(stdout);
             let mut batch: Vec<LogLine> = Vec::new();
             let mut last_flush = std::time::Instant::now();
-            for line in reader.lines() {
-                let Ok(line) = line else { break }; // EOF: child killed/died
-                batch.push(parse(&line));
-                if batch.len() >= BATCH_MAX || last_flush.elapsed() >= BATCH_WINDOW {
-                    if tx.send(std::mem::take(&mut batch)).is_err() {
-                        return; // UI receiver dropped — stop reading
+            let mut buf: Vec<u8> = Vec::new();
+            loop {
+                buf.clear();
+                // Read a raw line and lossy-decode it. logcat / `simctl log`
+                // routinely emit non-UTF-8 bytes, and `BufRead::lines()` returns
+                // an Err on the first such line — which would silently kill the
+                // whole stream right after the initial buffer dump (the reader
+                // thread breaks and never follows). `read_until` +
+                // `from_utf8_lossy` keeps following instead of dying on one bad
+                // byte.
+                match reader.read_until(b'\n', &mut buf) {
+                    Ok(0) => break, // EOF: child exited
+                    Ok(_) => {
+                        while matches!(buf.last(), Some(b'\n' | b'\r')) {
+                            buf.pop();
+                        }
+                        let line = String::from_utf8_lossy(&buf);
+                        batch.push(parse(line.as_ref()));
+                        if batch.len() >= BATCH_MAX
+                            || last_flush.elapsed() >= BATCH_WINDOW
+                        {
+                            if tx.send(std::mem::take(&mut batch)).is_err() {
+                                return; // UI receiver dropped — stop reading
+                            }
+                            last_flush = std::time::Instant::now();
+                        }
                     }
-                    last_flush = std::time::Instant::now();
+                    Err(_) => break, // real I/O error on the pipe
                 }
             }
             if !batch.is_empty() {

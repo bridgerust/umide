@@ -39,6 +39,16 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-02, Mac→Windows) **Run on Device is up (#68)** — the status-bar badge
+  is clickable (▶) and a `Run on Device` palette command runs the detected app
+  in a live terminal via RunAndDebug: flutter `-d <serial|udid>`, bare RN
+  `run-android`/`run-ios --udid`, Expo `npx expo run:*` (`is_expo` probe).
+  Platform follows `panel.active_device`. Live-verified on macOS (RN scratch →
+  iOS sim path). **Please verify the Android path on the Pixel** — a real RN
+  app + `npx react-native run-android` from the badge — and sanity-check the
+  run terminal on Windows (program spawn goes through the existing RunAndDebug
+  terminal, so npm shims should be fine, but eyes-on is worth it).
+
 - (2026-07-02, Mac→Windows) **Both Mac halves are up:** **#65** feeds
   `project_kind` into the agent's context (built-in + Claude Code system
   prompts; byte-stable suffix, None = neutral). **#66** is the iOS Device Logs

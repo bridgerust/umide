@@ -216,6 +216,10 @@ pub enum UmideWorkbenchCommand {
     #[strum(message = "Run in Terminal")]
     RunInTerminal,
 
+    #[strum(serialize = "run_on_device")]
+    #[strum(message = "Run on Device (Emulator/Simulator)")]
+    RunOnDevice,
+
     #[strum(serialize = "reveal_active_file_in_file_explorer")]
     #[strum(message = "Reveal Active File in File Explorer")]
     RevealActiveFileInFileExplorer,

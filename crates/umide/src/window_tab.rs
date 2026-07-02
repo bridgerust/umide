@@ -30,8 +30,8 @@ use im::HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lsp_types::{
-    CodeActionOrCommand, CodeLens, Diagnostic, ProgressParams, ProgressToken,
-    ShowMessageParams,
+    CodeActionOrCommand, CodeLens, Diagnostic, MessageType, ProgressParams,
+    ProgressToken, ShowMessageParams,
 };
 use serde_json::Value;
 use tracing::{Level, debug, error, event};
@@ -1647,6 +1647,55 @@ impl WindowTabData {
                 {
                     editor_data.go_to_implementation(self.clone());
                 }
+            }
+            RunOnDevice => {
+                // The mobile core loop's RUN step: build + launch the detected
+                // RN/Flutter app on the embedded emulator/simulator, in a live
+                // terminal (interactive — flutter's hot-reload keys work). The
+                // target platform follows the device the user is viewing.
+                let Some(kind) = self.common.project_kind.get_untracked() else {
+                    self.show_message(
+                        "Run on Device",
+                        &ShowMessageParams {
+                            typ: MessageType::INFO,
+                            message: "No React Native / Flutter project \
+                                      detected in this workspace."
+                                .to_string(),
+                        },
+                    );
+                    return;
+                };
+                let workspace = self.common.workspace.path.clone();
+                let expo = workspace
+                    .as_deref()
+                    .is_some_and(crate::project::is_expo);
+                let device = self.panel.active_device.get_untracked();
+                let run = crate::project::run_on_device_command(
+                    kind,
+                    expo,
+                    device.as_ref(),
+                );
+                let config = RunDebugConfig {
+                    ty: None,
+                    name: run.name,
+                    program: run.program,
+                    args: (!run.args.is_empty()).then_some(run.args),
+                    cwd: workspace
+                        .as_deref()
+                        .map(|p| p.to_string_lossy().into_owned()),
+                    env: None,
+                    prelaunch: None,
+                    debug_command: None,
+                    dap_id: Default::default(),
+                    tracing_output: false,
+                    config_source: ConfigSource::RunInTerminal,
+                };
+                self.common.internal_command.send(
+                    InternalCommand::RunAndDebug {
+                        mode: RunDebugMode::Run,
+                        config,
+                    },
+                );
             }
             RunInTerminal => {
                 if let Some(editor_data) =

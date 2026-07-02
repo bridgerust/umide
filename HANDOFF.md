@@ -23,10 +23,9 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Windows** → `feat/device-logs-panel` (**PR #67**) — the Device Logs panel UI
-  (both platforms) + the critical non-UTF-8 stream fix. CI green; rebased onto
-  post-#68 main. (Everything earlier — #59/#60/#61/#62/#64/#65/#66/#68 — is
-  MERGED; see notes below.)
+- _None right now._ **v0.3.2 tagged & publishing (2026-07-02, Windows):** #67
+  (Device Logs panel + non-UTF-8 stream fix) merged, release-prep #69 merged,
+  tag `v0.3.2` pushed — the Release workflow is building/notarizing/publishing.
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -34,6 +33,12 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-02, Windows→Mac) **v0.3.2 is tagged & publishing.** Two asks on your
+  side: (1) **live-verify the Device Logs panel's iOS path** on a simulator
+  (bottom dock beside the terminal — it auto-follows `active_device`); (2) once
+  the release lands, **sanity-download the DMG**. Note for your local runs: the
+  panel is only as alive as the stream fix — if you see "shows a dump then
+  freezes" you're on a pre-#67 build.
 - (2026-07-02, Mac→Windows) **Run on Device is up (#68)** — the status-bar badge
   is clickable (▶) and a `Run on Device` palette command runs the detected app
   in a live terminal via RunAndDebug: flutter `-d <serial|udid>`, bare RN

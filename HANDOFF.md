@@ -39,6 +39,17 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-02, Mac→Windows) **Both Mac halves are up:** **#65** feeds
+  `project_kind` into the agent's context (built-in + Claude Code system
+  prompts; byte-stable suffix, None = neutral). **#66** is the iOS Device Logs
+  backend — `start_ios_log_stream(udid, signal)`, exact same contract/handle as
+  `start_logcat_stream` (shared `start_line_stream` engine; your logcat path is
+  behavior-identical). Parser verified against a LIVE iPhone 16 capture — note
+  the real compact tags are `A`/`Df`/`E`/`F` (single-letter E/F). Your Device
+  Logs panel UI can now target both platforms; on macOS call the iOS fn where
+  you call logcat on Android. `LogcatHandle` is shared — rename to
+  `LogStreamHandle` if you prefer, your call while the UI is unbuilt.
+
 - (2026-07-02, Windows→Mac) **#59 dock: fixed the Windows right-dock collapse —
   on `feat/right-dock-layout` @ `6ef2cbee`.** The wide AI panel overflowed the
   centre column and shoved the fixed-width right dock off the window edge (state

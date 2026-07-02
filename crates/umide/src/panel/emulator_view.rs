@@ -2,7 +2,7 @@ use floem::{
     View,
     prelude::{SignalGet, SignalUpdate},
     reactive::{Effect, RwSignal},
-    views::{Container, Decorators, Label, Scroll, Stack, dyn_stack},
+    views::{Container, Decorators, Label, Scroll, Stack, dyn_stack, svg},
 };
 #[cfg(target_os = "macos")]
 use floem::{ViewId, context::ComputeLayoutCx, peniko::kurbo::Rect};
@@ -473,47 +473,51 @@ fn platform_panel(
 /// panel currently exposes a smaller set of controls (no shell shellouts).
 #[cfg(target_os = "macos")]
 fn action_button(
-    label: &'static str,
+    icon: &'static str,
     _tooltip: &'static str,
     device_id: RwSignal<String>,
     cmd_builder: impl Fn(String) -> String + 'static + Send + Sync,
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
-    let label_text = label.to_string();
-    Stack::new((Label::new(label_text).style(|s| s.font_size(14.0)),))
-        .on_click_stop(move |_| {
-            let id = device_id.get_untracked();
-            if id.is_empty() {
-                return;
-            }
+    // Themed SVG icon (same set as the portable panel's hardware buttons), not
+    // an emoji glyph — emoji render as color bitmaps and clash with the IDE.
+    Stack::new((svg(move || config.get().ui_svg(icon)).style(move |s| {
+        s.size(16.0, 16.0)
+            .color(config.get().color(UmideColor::LAPCE_ICON_ACTIVE))
+    }),))
+    .on_click_stop(move |_| {
+        let id = device_id.get_untracked();
+        if id.is_empty() {
+            return;
+        }
 
-            let cmd = cmd_builder(id);
-            std::thread::spawn(move || {
-                let env_path = std::env::var("PATH").unwrap_or_default();
-                let _ = std::process::Command::new("sh")
-                    .env(
-                        "PATH",
-                        format!("/opt/homebrew/bin:/usr/local/bin:{}", env_path),
-                    )
-                    .arg("-c")
-                    .arg(&cmd)
-                    .output();
-            });
-        })
-        .style(move |s| {
-            let config_val = config.get();
-            s.width(28.0)
-                .height(28.0)
-                .items_center()
-                .justify_center()
-                .border_radius(4.0)
-                .cursor(floem::style::CursorStyle::Pointer)
-                .border(1.0)
-                .border_color(config_val.color(UmideColor::LAPCE_BORDER))
-                .hover(|s| {
-                    s.background(floem::peniko::Color::from_rgba8(255, 255, 255, 20))
-                })
-        })
+        let cmd = cmd_builder(id);
+        std::thread::spawn(move || {
+            let env_path = std::env::var("PATH").unwrap_or_default();
+            let _ = std::process::Command::new("sh")
+                .env(
+                    "PATH",
+                    format!("/opt/homebrew/bin:/usr/local/bin:{}", env_path),
+                )
+                .arg("-c")
+                .arg(&cmd)
+                .output();
+        });
+    })
+    .style(move |s| {
+        let config_val = config.get();
+        s.width(28.0)
+            .height(28.0)
+            .items_center()
+            .justify_center()
+            .border_radius(4.0)
+            .cursor(floem::style::CursorStyle::Pointer)
+            .border(1.0)
+            .border_color(config_val.color(UmideColor::LAPCE_BORDER))
+            .hover(|s| {
+                s.background(floem::peniko::Color::from_rgba8(255, 255, 255, 20))
+            })
+    })
 }
 
 /// Emulator sidebar with control buttons (Stop/Hide for all, hardware buttons
@@ -575,16 +579,16 @@ fn emulator_sidebar(
 
         // Android hardware controls
         Stack::new((
-            action_button("🏠", "Home", current_device_id, |_id| "adb shell input keyevent 3".to_string(), config),
-            action_button("◀", "Back", current_device_id, |_id| "adb shell input keyevent 4".to_string(), config),
-            action_button("▦", "Overview", current_device_id, |_id| "adb shell input keyevent 187".to_string(), config),
+            action_button(UmideIcons::DEVICE_HOME, "Home", current_device_id, |_id| "adb shell input keyevent 3".to_string(), config),
+            action_button(UmideIcons::DEVICE_BACK, "Back", current_device_id, |_id| "adb shell input keyevent 4".to_string(), config),
+            action_button(UmideIcons::DEVICE_RECENTS, "Overview", current_device_id, |_id| "adb shell input keyevent 187".to_string(), config),
             Label::new("").style(|s| s.height(8.0)),
-            action_button("🔊", "Vol+", current_device_id, |_id| "adb shell input keyevent 24".to_string(), config),
-            action_button("🔉", "Vol-", current_device_id, |_id| "adb shell input keyevent 25".to_string(), config),
+            action_button(UmideIcons::DEVICE_VOLUME_UP, "Vol+", current_device_id, |_id| "adb shell input keyevent 24".to_string(), config),
+            action_button(UmideIcons::DEVICE_VOLUME_DOWN, "Vol-", current_device_id, |_id| "adb shell input keyevent 25".to_string(), config),
             Label::new("").style(|s| s.height(8.0)),
-            action_button("⏻", "Power", current_device_id, |_id| "adb shell input keyevent 26".to_string(), config),
+            action_button(UmideIcons::DEVICE_POWER, "Power", current_device_id, |_id| "adb shell input keyevent 26".to_string(), config),
             Label::new("").style(|s| s.height(8.0)),
-            action_button("📷", "Screenshot", current_device_id, |_id| "adb exec-out screencap -p > ~/Desktop/umide_screenshot_$(date +%s).png".to_string(), config),
+            action_button(UmideIcons::DEVICE_SCREENSHOT, "Screenshot", current_device_id, |_id| "adb exec-out screencap -p > ~/Desktop/umide_screenshot_$(date +%s).png".to_string(), config),
         ))
         .style(move |s| {
             s.flex_col()
@@ -595,9 +599,9 @@ fn emulator_sidebar(
 
         // iOS hardware controls
         Stack::new((
-            action_button("🏠", "Home", current_device_id, |id| format!("idb ui button --udid {} HOME", id), config),
+            action_button(UmideIcons::DEVICE_HOME, "Home", current_device_id, |id| format!("idb ui button --udid {} HOME", id), config),
             Label::new("").style(|s| s.height(8.0)),
-            action_button("📷", "Screenshot", current_device_id, |id| format!("idb screenshot --udid {} ~/Desktop/umide_screenshot_$(date +%s).png", id), config),
+            action_button(UmideIcons::DEVICE_SCREENSHOT, "Screenshot", current_device_id, |id| format!("idb screenshot --udid {} ~/Desktop/umide_screenshot_$(date +%s).png", id), config),
         ))
         .style(move |s| {
             s.flex_col()

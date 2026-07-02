@@ -2824,7 +2824,8 @@ impl WindowTabData {
             | PanelKind::Implementation
             | PanelKind::Emulator
             | PanelKind::Video
-            | PanelKind::AiAssistant => {
+            | PanelKind::AiAssistant
+            | PanelKind::DeviceLogs => {
                 // Some panels don't accept focus (yet). Fall back to visibility check
                 // in those cases.
                 self.panel.is_panel_visible(&kind)

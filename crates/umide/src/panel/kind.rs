@@ -22,6 +22,7 @@ pub enum PanelKind {
     Emulator,
     Video,
     AiAssistant,
+    DeviceLogs,
 }
 
 impl PanelKind {
@@ -41,6 +42,7 @@ impl PanelKind {
             PanelKind::Emulator => UmideIcons::EMULATOR,
             PanelKind::Video => UmideIcons::DEBUG_CONSOLE,
             PanelKind::AiAssistant => UmideIcons::AI_ASSISTANT,
+            PanelKind::DeviceLogs => UmideIcons::DEBUG_CONSOLE,
         }
     }
 
@@ -73,6 +75,9 @@ impl PanelKind {
             // and the emulator keeps the right column's FULL height (a phone
             // screen is tall — splitting the right dock starved both panels).
             PanelKind::AiAssistant => PanelPosition::BottomRight,
+            // Bottom dock beside the terminal — native device logs live where
+            // build/run output already does.
+            PanelKind::DeviceLogs => PanelPosition::BottomLeft,
         }
     }
 }

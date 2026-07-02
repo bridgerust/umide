@@ -51,6 +51,21 @@ impl LogSeverity {
             LogSeverity::Fatal => "F",
         }
     }
+
+    /// Severity from a `log stream --style compact` type token (iOS unified
+    /// log). Verified against a live simulator capture (7k+ lines): well-formed
+    /// lines carry `A` (Activity), `Df` (Default), `E` (Error) or `F` (Fault);
+    /// `Db`/`I` appear at other stream levels. Default/Activity map to Info —
+    /// that's where ordinary app logging lands.
+    fn from_ios_tag(tag: &str) -> Option<Self> {
+        Some(match tag {
+            "Db" => LogSeverity::Debug,
+            "I" | "In" | "Df" | "A" => LogSeverity::Info,
+            "E" | "Er" => LogSeverity::Error,
+            "F" | "Ft" | "Fa" => LogSeverity::Fatal,
+            _ => return None,
+        })
+    }
 }
 
 /// One parsed logcat line. The full text is kept verbatim for display and
@@ -118,37 +133,61 @@ const BATCH_MAX: usize = 256;
 /// How long the reader waits to accumulate a batch before flushing.
 const BATCH_WINDOW: Duration = Duration::from_millis(50);
 
-/// Start following `adb -s <serial> logcat` and deliver parsed lines to
-/// `batch_signal` in arrival order (each signal update is one batch). Returns
-/// `None` if adb couldn't be spawned (no SDK); the panel shows its empty state.
-pub fn start_logcat_stream(
-    serial: &str,
+/// Parse an iOS `log stream --style compact` line, e.g.
+/// `2026-07-02 14:09:05.699 E  nsurlsessiond[12394:fda9c] message`
+/// (format verified live). The type token is the third whitespace field, but
+/// only on lines that actually start with a `YYYY-MM-DD HH:MM:SS…` timestamp —
+/// anchoring on that keeps single-letter tags (`E`, `F`, `A`) from
+/// false-matching words in continuation/banner lines, which default to `Info`
+/// so nothing is dropped — same policy as logcat.
+pub fn parse_ios_log_line(line: &str) -> LogLine {
+    let mut tokens = line.split_whitespace();
+    let severity = match (tokens.next(), tokens.next(), tokens.next()) {
+        (Some(date), Some(time), Some(ty))
+            if date.matches('-').count() == 2 && time.contains(':') =>
+        {
+            LogSeverity::from_ios_tag(ty)
+        }
+        _ => None,
+    };
+    LogLine {
+        severity: severity.unwrap_or(LogSeverity::Info),
+        text: line.to_string(),
+    }
+}
+
+/// Shared engine for both platforms: spawn `cmd`, follow its stdout line by
+/// line through `parse`, and deliver batches to `batch_signal` (floem owns a
+/// reader thread on `rx` and applies each batch on the UI thread — same bridge
+/// as the emulator frame stream). Returns `None` if the tool couldn't be
+/// spawned; the panel shows its empty state.
+fn start_line_stream(
+    mut cmd: std::process::Command,
+    parse: fn(&str) -> LogLine,
     batch_signal: RwSignal<Option<Vec<LogLine>>>,
+    thread_name: &str,
 ) -> Option<LogcatHandle> {
-    let mut cmd = umide_emulator::AndroidEmulator::logcat_command(serial);
     let mut child = cmd
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|e| tracing::error!("logcat spawn failed: {e}"))
+        .map_err(|e| tracing::error!("device log spawn failed: {e}"))
         .ok()?;
     let stdout = child.stdout.take()?;
 
-    // floem owns a reader thread on `rx` and applies each batch to the signal
-    // on the UI thread (same bridge as the emulator frame stream).
     let (tx, rx) = mpsc::channel::<Vec<LogLine>>();
     update_signal_from_channel(batch_signal.write_only(), rx);
 
     std::thread::Builder::new()
-        .name("umide-logcat-reader".into())
+        .name(thread_name.into())
         .spawn(move || {
             let reader = std::io::BufReader::new(stdout);
             let mut batch: Vec<LogLine> = Vec::new();
             let mut last_flush = std::time::Instant::now();
             for line in reader.lines() {
                 let Ok(line) = line else { break }; // EOF: child killed/died
-                batch.push(parse_log_line(&line));
+                batch.push(parse(&line));
                 if batch.len() >= BATCH_MAX || last_flush.elapsed() >= BATCH_WINDOW {
                     if tx.send(std::mem::take(&mut batch)).is_err() {
                         return; // UI receiver dropped — stop reading
@@ -165,6 +204,37 @@ pub fn start_logcat_stream(
     Some(LogcatHandle {
         child: Arc::new(Mutex::new(Some(child))),
     })
+}
+
+/// Start following `adb -s <serial> logcat` and deliver parsed lines to
+/// `batch_signal` in arrival order (each signal update is one batch). Returns
+/// `None` if adb couldn't be spawned (no SDK); the panel shows its empty state.
+pub fn start_logcat_stream(
+    serial: &str,
+    batch_signal: RwSignal<Option<Vec<LogLine>>>,
+) -> Option<LogcatHandle> {
+    start_line_stream(
+        umide_emulator::AndroidEmulator::logcat_command(serial),
+        parse_log_line,
+        batch_signal,
+        "umide-logcat-reader",
+    )
+}
+
+/// The iOS half: follow the booted simulator's unified log
+/// (`xcrun simctl spawn <udid> log stream --style compact`) into the same
+/// panel contract as [`start_logcat_stream`] — identical batching, handle and
+/// shutdown semantics, so the Device Logs panel treats both platforms alike.
+pub fn start_ios_log_stream(
+    udid: &str,
+    batch_signal: RwSignal<Option<Vec<LogLine>>>,
+) -> Option<LogcatHandle> {
+    start_line_stream(
+        umide_emulator::IosSimulator::log_stream_command(udid),
+        parse_ios_log_line,
+        batch_signal,
+        "umide-ioslog-reader",
+    )
 }
 
 #[cfg(test)]
@@ -191,6 +261,49 @@ mod tests {
         // A path with slashes must not be misread as a severity tag.
         assert_eq!(
             parse_log_line("some random x/y text").severity,
+            LogSeverity::Info
+        );
+    }
+
+    #[test]
+    fn parses_ios_compact_severities() {
+        // Lines verbatim from a live `log stream --style compact` capture.
+        let e = parse_ios_log_line(
+            "2026-07-02 14:09:05.699 E  nsurlsessiond[12394:fda9c] copy failed",
+        );
+        assert_eq!(e.severity, LogSeverity::Error);
+        assert!(e.text.contains("nsurlsessiond"));
+        // Default and Activity both map to Info (ordinary app logging).
+        assert_eq!(
+            parse_ios_log_line(
+                "2026-07-02 14:09:05.561 Df axassetsd[12360:fe848] activating",
+            )
+            .severity,
+            LogSeverity::Info
+        );
+        assert_eq!(
+            parse_ios_log_line(
+                "2026-07-02 14:09:05.542 A  assistantd[12353:fe63c] prefs",
+            )
+            .severity,
+            LogSeverity::Info
+        );
+        assert_eq!(
+            parse_ios_log_line(
+                "2026-07-02 14:09:05.700 F  SpringBoard[123:0x1a] fault",
+            )
+            .severity,
+            LogSeverity::Fatal
+        );
+        // Header/banner/continuation lines default to Info — and a bare `E`
+        // in prose must NOT be read as Error (timestamp anchor).
+        assert_eq!(
+            parse_ios_log_line("Timestamp               Ty Process[PID:TID]")
+                .severity,
+            LogSeverity::Info
+        );
+        assert_eq!(
+            parse_ios_log_line("got an E grade on F stuff").severity,
             LogSeverity::Info
         );
     }

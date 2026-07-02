@@ -1,5 +1,5 @@
 use crate::common::{DeviceInfo, DevicePlatform, DeviceState, MobileDevice};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::process::Command;
@@ -11,6 +11,18 @@ pub struct IosSimulator {
 impl IosSimulator {
     pub fn new(udid: String) -> Self {
         Self { udid }
+    }
+
+    /// Device Logs panel: follow the booted simulator's unified log. Mirrors
+    /// `AndroidEmulator::logcat_command` — the caller pipes stdout and owns the
+    /// child's lifetime (kill on panel close). `--style compact` gives one
+    /// line per event with a stable `<Ty>` severity token (Db/In/Df/Er/Ft).
+    pub fn log_stream_command(udid: &str) -> Command {
+        let mut cmd = Command::new("xcrun");
+        cmd.args([
+            "simctl", "spawn", udid, "log", "stream", "--style", "compact",
+        ]);
+        cmd
     }
 
     /// Get list of currently booted simulator UDIDs

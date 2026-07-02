@@ -4,6 +4,7 @@ pub mod call_hierarchy_view;
 pub mod data;
 pub mod debug_view;
 pub mod device_logs_stream;
+pub mod device_logs_view;
 pub mod document_symbol;
 pub mod emulator_native_view;
 pub mod emulator_stream;

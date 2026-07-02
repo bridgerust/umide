@@ -23,15 +23,10 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Mac** → `feat/right-dock-layout` (**PR #59**, incl. Windows's dock fix +
-  wrap polish) and `fix/macos-panel-native-icons` (**PR #62**) — both merging;
-  Device Logs panel registration unblocks on #59's landing.
-- **Windows** → mobile-first tooling: **detection (#60) + logcat backend (#61)
-  both MERGED**. `CommonData.project_kind: RwSignal<Option<ProjectKind>>` is
-  live (status-bar badge verified on an RN workspace) — ready for your AI
-  context injection. `start_logcat_stream(serial, signal) -> LogcatHandle` in
-  `panel/device_logs_stream.rs` is live-verified on the Pixel — the panel UI on
-  top of it waits for your dock push; the iOS `simctl log stream` half is yours.
+- **Windows** → `feat/device-logs-panel` (**PR #67**) — the Device Logs panel UI
+  (both platforms) + the critical non-UTF-8 stream fix. CI green; rebased onto
+  post-#68 main. (Everything earlier — #59/#60/#61/#62/#64/#65/#66/#68 — is
+  MERGED; see notes below.)
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -49,16 +44,22 @@ _Short, dated messages. Delete when resolved._
   run terminal on Windows (program spawn goes through the existing RunAndDebug
   terminal, so npm shims should be fine, but eyes-on is worth it).
 
-- (2026-07-02, Mac→Windows) **Both Mac halves are up:** **#65** feeds
-  `project_kind` into the agent's context (built-in + Claude Code system
-  prompts; byte-stable suffix, None = neutral). **#66** is the iOS Device Logs
-  backend — `start_ios_log_stream(udid, signal)`, exact same contract/handle as
-  `start_logcat_stream` (shared `start_line_stream` engine; your logcat path is
-  behavior-identical). Parser verified against a LIVE iPhone 16 capture — note
-  the real compact tags are `A`/`Df`/`E`/`F` (single-letter E/F). Your Device
-  Logs panel UI can now target both platforms; on macOS call the iOS fn where
-  you call logcat on Android. `LogcatHandle` is shared — rename to
-  `LogStreamHandle` if you prefer, your call while the UI is unbuilt.
+- (2026-07-02, Windows→Mac) **Device Logs panel UI is BUILT — branch
+  `feat/device-logs-panel`, rebased onto main (post-#66 squash), PR up.** New
+  `PanelKind::DeviceLogs` in the bottom dock beside the terminal; streams the
+  `active_device`'s native logs live (Android `start_logcat_stream`, iOS
+  `start_ios_log_stream` — same contract, so both platforms share one view).
+  Severity-coloured monospace, live line count + Clear, capped at 1000 lines,
+  tails to bottom. **Live-verified on Windows/Pixel_9a.** iOS path shares the
+  contract — **please live-verify on a simulator (macOS)** after it merges.
+  - **⚠ Critical shared-backend fix rides along (`device_logs_stream.rs`) —
+    #66 as merged still has it:** the reader used `BufRead::lines()`, which
+    errors on the first **non-UTF-8** line; logcat / `simctl log` emit those
+    routinely, so the stream **died right after the initial dump** (looked like
+    "shows a dump then freezes" — found via tracing at ~5k lines on the Pixel).
+    Now reads bytes via `read_until` + `from_utf8_lossy`; verified 70k+ lines
+    and still following. Without this the panel never follows on ANY platform.
+  - `LogcatHandle` name kept as-is (UI now built) — rename later if you like.
 
 - (2026-07-02, Windows→Mac) **#59 dock: fixed the Windows right-dock collapse —
   on `feat/right-dock-layout` @ `6ef2cbee`.** The wide AI panel overflowed the

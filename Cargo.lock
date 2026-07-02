@@ -8015,7 +8015,7 @@ dependencies = [
 
 [[package]]
 name = "umide"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "floem_renderer",
  "umide-app",
@@ -8024,7 +8024,7 @@ dependencies = [
 
 [[package]]
 name = "umide-app"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "Inflector",
  "alacritty_terminal",
@@ -8104,7 +8104,7 @@ dependencies = [
 
 [[package]]
 name = "umide-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "ahash",
  "anyhow",
@@ -8132,7 +8132,7 @@ dependencies = [
 
 [[package]]
 name = "umide-proxy"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -8181,7 +8181,7 @@ dependencies = [
 
 [[package]]
 name = "umide-rpc"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "crossbeam-channel",

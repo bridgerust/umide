@@ -27,6 +27,9 @@ Get the latest build from the [Releases page](https://github.com/bridgerust/umid
 ## Features
 
 - **Unified Mobile Environment**: Android Emulator and iOS Simulator embedded directly in the IDE.
+- **Device Logs in the IDE**: the running device's native logs — Android logcat and the iOS simulator's unified log — streamed live in a bottom panel with severity colouring, follow/tail, and Clear. No Android Studio or Xcode needed to read logs.
+- **Run on Device**: one click (the status-bar ▶ badge or a palette command) builds & runs your React Native / Flutter / Expo app on the device you're viewing, in a live terminal.
+- **RN/Flutter auto-detection**: UMIDE detects React Native and Flutter workspaces (status-bar badge) and feeds that context to the AI assistant, so the agent knows your stack without being told.
 - **AI Coding Assistant**: A built-in, approval-gated agent (Claude, OpenAI, DeepSeek, Gemini) that reads your code, proposes edits, runs commands, and can see and drive the embedded device.
 - **External agent CLIs — no API key needed**: Point the assistant at your own **Claude Code**, **Codex**, or **Gemini** CLI and drive the real agent in your project on your existing login — no key to paste. Claude Code edits and runs commands with **per-action approval** surfaced right in the panel; Codex runs sandboxed (workspace-confined) behind a session-consent gate; Gemini is read-only. Opt-in — the built-in BYO-key providers stay the default.
 - **Chat sessions**: New Chat, a session switcher, and per-workspace history so conversations persist across restarts.

@@ -5,6 +5,20 @@ UMIDE's releases; the inherited upstream Lapce changelog is preserved below unde
 **Upstream (Lapce)**. Full per-release notes are on the
 [Releases page](https://github.com/bridgerust/umide/releases).
 
+## v0.3.1
+
+**Mobile-first layout & polish** (from the first day of dogfooding):
+
+- **New default layout**: the emulator owns the full right column (tall, like a
+  phone) and shows on startup; the AI assistant moved to the bottom dock beside
+  the terminal — code, terminal, agent, and device all visible at once.
+- **React Native / Flutter workspaces are auto-detected** (status-bar badge) —
+  groundwork for the A-to-Z mobile loop, including the upcoming Device Logs
+  panel (adb logcat backend already landed).
+- Fixed a Windows dock-overflow bug that could push the emulator panel
+  off-screen; assistant replies now wrap to the panel width; macOS emulator
+  hardware buttons use themed icons (no more emoji); DocumentSymbol undocked.
+
 ## v0.3.0
 
 **A mobile IDE that codes with you.**

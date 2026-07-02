@@ -69,7 +69,10 @@ impl PanelKind {
             PanelKind::Implementation => PanelPosition::BottomLeft,
             PanelKind::Emulator => PanelPosition::RightTop,
             PanelKind::Video => PanelPosition::RightBottom,
-            PanelKind::AiAssistant => PanelPosition::RightTop,
+            // Bottom dock, beside the terminal: the chat gets real width there,
+            // and the emulator keeps the right column's FULL height (a phone
+            // screen is tall — splitting the right dock starved both panels).
+            PanelKind::AiAssistant => PanelPosition::BottomRight,
         }
     }
 }

@@ -442,12 +442,22 @@ pub fn panel_container_view(
             .apply_if(position == PanelContainerPosition::Left, |s| {
                 s.border_right(1.0)
                     .width(size as f32)
+                    // Pin the dock's width: never let it flex-shrink below the
+                    // configured size. A side dock whose only panel has ~zero
+                    // min-content width (e.g. the portable emulator panel, which
+                    // is `min_width(0)` throughout) would otherwise collapse to
+                    // nothing when a wide sibling (the editor / bottom dock)
+                    // claims the row — the panel is "shown" but invisible.
+                    .min_width(size as f32)
+                    .flex_shrink(0.0)
                     .height_pct(100.0)
                     .background(config.color(UmideColor::PANEL_BACKGROUND))
             })
             .apply_if(position == PanelContainerPosition::Right, |s| {
                 s.border_left(1.0)
                     .width(size as f32)
+                    .min_width(size as f32)
+                    .flex_shrink(0.0)
                     .height_pct(100.0)
                     .background(config.color(UmideColor::PANEL_BACKGROUND))
             })
@@ -470,6 +480,10 @@ fn panel_view(
     };
     let active_fn =
         move || panel.styles.with(|s| s.get(&position).map(|s| s.active));
+    // NB: do NOT wrap this in `clip()` — several panels (terminal, search,
+    // problems, …) style themselves `absolute()`, and a Clip ancestor makes
+    // them vanish. Panels that can overflow their section (e.g. the emulator's
+    // device lists) must clip/scroll their own content instead.
     tab(
         active_fn,
         panels,
@@ -527,11 +541,18 @@ fn panel_view(
         },
     )
     .style(move |s| {
-        s.size_pct(100.0, 100.0).apply_if(
-            !panel.is_position_shown(&position, true)
-                || panel.is_position_empty(&position, true),
-            |s| s.hide(),
-        )
+        // min size 0: flex children only share the container when they may
+        // shrink below their content's min size — without this, a section with
+        // tall content (e.g. the emulator's device list) hogs the whole dock
+        // and its top/bottom peer collapses to zero height.
+        s.size_pct(100.0, 100.0)
+            .min_height(0.0)
+            .min_width(0.0)
+            .apply_if(
+                !panel.is_position_shown(&position, true)
+                    || panel.is_position_empty(&position, true),
+                |s| s.hide(),
+            )
     })
 }
 

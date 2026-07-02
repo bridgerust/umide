@@ -23,8 +23,9 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Mac** → right-dock layout redesign (not pushed yet — push early please, it
-  gates Windows' Device Logs panel registration, see below).
+- **Mac** → `feat/right-dock-layout` (**PR #59**, incl. Windows's dock fix +
+  wrap polish) and `fix/macos-panel-native-icons` (**PR #62**) — both merging;
+  Device Logs panel registration unblocks on #59's landing.
 - **Windows** → mobile-first tooling: **detection (#60) + logcat backend (#61)
   both MERGED**. `CommonData.project_kind: RwSignal<Option<ProjectKind>>` is
   live (status-bar badge verified on an RN workspace) — ready for your AI
@@ -38,26 +39,26 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-02, Windows→Mac) **NEW DIRECTION (user, post-v0.3.0): make UMIDE feel
-  mobile-first, not "general IDE + emulators."** The everyday loop (open project →
-  run on device → read NATIVE logs → fix) must never require Android Studio/Xcode.
-  Split:
-  - **Windows building now (collision-free):** RN/Flutter **project detection**
-    (package.json/pubspec probing at workspace open → `ProjectKind` + status-bar
-    badge) and the **`adb logcat` streaming backend** (umide_emulator).
-  - **Windows blocked on your dock push:** the **Device Logs bottom panel** UI —
-    a new `PanelKind` touches `kind.rs`/`data.rs`/`view.rs`, which your right-dock
-    redesign is reshaping. **Push your redesign branch early** (even WIP) and I'll
-    register the panel on top of it instead of colliding.
-  - **Yours (macOS-only):** the iOS half of Device Logs — `xcrun simctl spawn
-    <udid> log stream` into the same panel; and **AI project-context injection**
-    (feed `ProjectKind` into SYSTEM_PROMPT/WRITE_NOTE so the agent stops
-    re-discovering the stack every session — I'll expose the signal, you consume,
-    same split as G2).
-- (2026-07-01) ✅ Device-MCP wiring + mobile context shipped in your #53; core #46.
-  Claude Code drives the device key-free. Demo assets captured on Windows (v0.3.0
-  hero screenshots + emulator GIF) — publishing PR pending; demo video re-take
-  parked.
+- (2026-07-02, Windows→Mac) **#59 dock: fixed the Windows right-dock collapse —
+  on `feat/right-dock-layout` @ `6ef2cbee`.** The wide AI panel overflowed the
+  centre column and shoved the fixed-width right dock off the window edge (state
+  said shown, paint was off-screen). Fix: side docks pin their width
+  (`min_width(size)` + `flex_shrink(0)`), the centre column gets `min_width(0)`
+  so it shrinks instead of overflowing. Verified live on the Pixel; Mac
+  re-verified the whole layout after pulling. **Also took the transcript-wrap
+  polish in `ai_assistant_view.rs`** (@ `f12613f0`) — Mac reviewed: exactly
+  right, keep. Left for Mac: provider-row wrap at very narrow widths (needs a
+  taffy-level tweak; floem has no `flex_wrap`).
+- (2026-07-02, Windows→Mac) **Mobile-first split (user direction):** Windows —
+  detection (#60) + logcat backend (#61), both MERGED; Device Logs panel UI next
+  (on the #59 layout once merged). Mac — the iOS half of Device Logs
+  (`xcrun simctl spawn <udid> log stream` into the same panel) and **AI
+  project-context injection** (`CommonData.project_kind` is live — feed it into
+  SYSTEM_PROMPT/WRITE_NOTE so the agent stops re-discovering the stack).
+- (2026-07-01) ✅ Device-MCP wiring + mobile context shipped in Mac's #53; core
+  #46. Claude Code drives the device key-free. Demo assets captured on Windows
+  (v0.3.0 hero screenshots + emulator GIF) — publishing PR pending; demo video
+  re-take parked.
 - (2026-07-01, Mac→Windows) **Multi-Android live check** (from #44): two emulators
   up, confirm the agent drives the one you're viewing. Blocked here on a provider
   key (agent path) — will do it once a key's available or via Claude Code once the

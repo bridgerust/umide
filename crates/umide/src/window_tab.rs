@@ -466,25 +466,29 @@ impl WindowTabData {
                     panels.push_back(PanelKind::Emulator);
                 }
                 let mut styles = i.panel.styles.clone();
-                // Old layouts get the new right dock once: emulator on top
-                // (visible), assistant below (visible). Fires when the saved
-                // order still IS the old default (`migrate_right_dock`) or when
-                // the saved styles predate the layout version (styles saved
-                // before the assistant moved to RightBottom would keep that
-                // section hidden). After this one-time rewrite the info is
-                // re-saved at the current version, so user choices stick.
+                // Old layouts get the new dock shape once: emulator owning the
+                // right column (visible), assistant in the bottom dock beside
+                // the terminal (visible). Fires when the saved order still IS
+                // an old default (`migrate_dock_layout`) or when the saved
+                // styles predate the layout version. After this one-time
+                // rewrite the info re-saves at the current version, so user
+                // choices stick.
                 let migrated =
-                    super::panel::data::migrate_right_dock(&mut panel_order);
+                    super::panel::data::migrate_dock_layout(&mut panel_order);
                 if migrated
                     || i.panel.version < super::panel::data::PANEL_LAYOUT_VERSION
                 {
-                    for pos in [PanelPosition::RightTop, PanelPosition::RightBottom]
-                    {
+                    for (pos, shown) in [
+                        (PanelPosition::RightTop, true),
+                        (PanelPosition::BottomRight, true),
+                        // Video-only after the assistant moved out — hide it.
+                        (PanelPosition::RightBottom, false),
+                    ] {
                         styles.insert(
                             pos,
                             super::panel::style::PanelStyle {
                                 active: 0,
-                                shown: true,
+                                shown,
                                 maximized: false,
                             },
                         );
@@ -521,7 +525,7 @@ impl WindowTabData {
                         panel_order.entry(PanelPosition::RightTop).or_default();
                     panels.push_back(PanelKind::Emulator);
                 }
-                super::panel::data::migrate_right_dock(&mut panel_order);
+                super::panel::data::migrate_dock_layout(&mut panel_order);
 
                 let mut styles = im::HashMap::new();
                 styles.insert(
@@ -552,7 +556,10 @@ impl WindowTabData {
                     PanelPosition::BottomRight,
                     super::panel::style::PanelStyle {
                         active: 0,
-                        shown: false,
+                        // Visible on startup: the AI assistant lives here,
+                        // beside the terminal, while the emulator owns the
+                        // right column — all visible at once.
+                        shown: true,
                         maximized: false,
                     },
                 );
@@ -568,9 +575,7 @@ impl WindowTabData {
                     PanelPosition::RightBottom,
                     super::panel::style::PanelStyle {
                         active: 0,
-                        // Visible on startup: the AI assistant lives here, below
-                        // the emulator, so both show at once.
-                        shown: true,
+                        shown: false,
                         maximized: false,
                     },
                 );

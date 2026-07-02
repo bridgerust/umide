@@ -69,9 +69,10 @@ impl PanelKind {
             PanelKind::Implementation => PanelPosition::BottomLeft,
             PanelKind::Emulator => PanelPosition::RightTop,
             PanelKind::Video => PanelPosition::RightBottom,
-            // Its own section of the right dock, so the emulator (RightTop)
-            // stays visible while the agent works — both render at once.
-            PanelKind::AiAssistant => PanelPosition::RightBottom,
+            // Bottom dock, beside the terminal: the chat gets real width there,
+            // and the emulator keeps the right column's FULL height (a phone
+            // screen is tall — splitting the right dock starved both panels).
+            PanelKind::AiAssistant => PanelPosition::BottomRight,
         }
     }
 }

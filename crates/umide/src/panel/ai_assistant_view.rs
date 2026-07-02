@@ -388,11 +388,11 @@ pub fn ai_assistant_panel(
                 |m| m.id,
                 move |m| message_view(m, config),
             )
-            .style(|s| s.flex_col().width_full()),
+            .style(|s| s.flex_col().width_full().min_width(0.0)),
         ))
-        .style(|s| s.flex_col().width_full().padding(8.0)),
+        .style(|s| s.flex_col().width_full().min_width(0.0).padding(8.0)),
     )
-    .style(|s| s.flex_grow(1.0).width_full())
+    .style(|s| s.flex_grow(1.0).width_full().min_width(0.0))
     // Auto-scroll to the bottom as messages arrive / tokens stream in.
     .scroll_to_percent(move || {
         let _ = messages.get();
@@ -776,7 +776,7 @@ pub fn ai_assistant_panel(
         key_row,
         input_row,
     ))
-    .style(|s| s.flex_col().size_pct(100.0, 100.0))
+    .style(|s| s.flex_col().size_pct(100.0, 100.0).min_width(0.0))
     // If the panel/window is torn down mid-turn, cancel so an agent CLI isn't
     // left editing the workspace unobserved.
     .on_cleanup(move || cancel.store(true, Ordering::Relaxed))
@@ -1067,8 +1067,15 @@ fn message_view(m: ChatMsg, config: ReadSignal<Arc<UmideConfig>>) -> impl View {
         |(i, _)| *i,
         move |(_, content)| match content {
             MarkdownContent::Text(layout) => {
-                Container::new(rich_text(move || layout.clone()))
-                    .style(|s| s.width_full())
+                // `rich_text` wraps its layout to the width it's given; without a
+                // width constraint it lays out at the text's natural (unwrapped)
+                // width and overflows a narrow panel. width_full + min_width(0)
+                // down the chain lets it take the section width and reflow.
+                Container::new(
+                    rich_text(move || layout.clone())
+                        .style(|s| s.width_full().min_width(0.0)),
+                )
+                .style(|s| s.width_full().min_width(0.0))
             }
             MarkdownContent::Separator => {
                 Container::new(Empty::new().style(move |s| {
@@ -1081,7 +1088,7 @@ fn message_view(m: ChatMsg, config: ReadSignal<Arc<UmideConfig>>) -> impl View {
             MarkdownContent::Image { .. } => Container::new(Empty::new()),
         },
     )
-    .style(|s| s.flex_col().width_full());
+    .style(|s| s.flex_col().width_full().min_width(0.0));
 
     // Compact "⚙ tool …" trail under a reply, dimmed so it doesn't compete.
     let tools_view =
@@ -1110,6 +1117,7 @@ fn message_view(m: ChatMsg, config: ReadSignal<Arc<UmideConfig>>) -> impl View {
         let s = s
             .flex_col()
             .width_full()
+            .min_width(0.0)
             .padding(10.0)
             .margin_vert(4.0)
             .border_radius(10.0);

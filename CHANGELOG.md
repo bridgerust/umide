@@ -5,6 +5,24 @@ UMIDE's releases; the inherited upstream Lapce changelog is preserved below unde
 **Upstream (Lapce)**. Full per-release notes are on the
 [Releases page](https://github.com/bridgerust/umide/releases).
 
+## v0.3.2
+
+**The mobile A-to-Z loop closes** — run, watch, and debug your app without
+leaving the IDE:
+
+- **Device Logs panel** (bottom dock, beside the terminal): the running
+  device's native logs streamed live in the IDE — Android logcat and the iOS
+  simulator's unified log — with severity colouring, follow/tail, a live line
+  count, and Clear. No more opening Android Studio or Xcode just to read logs.
+- **Run on Device**: the status-bar badge is clickable (▶) and a `Run on
+  Device` palette command builds & runs the detected React Native / Flutter /
+  Expo app on the device you're viewing, in a live terminal.
+- **The AI assistant knows your stack**: the detected project kind (React
+  Native / Flutter) is injected into the agent's context — both the built-in
+  agent and Claude Code — so it stops re-discovering your setup every chat.
+- Fixed the device-log stream dying on the first non-UTF-8 log line (logcat and
+  `simctl log` emit those routinely) — it now follows indefinitely.
+
 ## v0.3.1
 
 **Mobile-first layout & polish** (from the first day of dogfooding):

@@ -66,6 +66,19 @@ Before finishing any change, check whether these need updating and keep them in 
   (`gh auth refresh -h github.com -s workflow`).
 
 ## Current status (keep this fresh — it is the cross-machine handoff)
+- **v0.3.2 SHIPPED (2026-07-02)** — *the mobile A-to-Z loop closed*: **Device Logs
+  panel** (#66/#67 — native logcat + iOS unified log streamed live in the bottom
+  dock, severity colours, tail, Clear; includes the critical non-UTF-8 stream fix —
+  `BufRead::lines()` died on the first bad byte), **Run on Device** (#68 — status-bar
+  ▶ badge / palette command runs the detected RN/Flutter/Expo app on the viewed
+  device), **AI project-context** (#65 — `project_kind` injected into the agent's
+  context). Android half live-verified on the Pixel (Windows); iOS halves
+  live-verified on macOS except the Device Logs panel UI (smoke-test pending).
+  Follow-ups: verify Run-on-Device's Android path on the Pixel (needs a real
+  buildable RN app); Windows Authenticode still pending.
+- **v0.3.1 SHIPPED (2026-07-02)** — mobile-first layout patch: emulator owns the
+  right column, AI beside the terminal (#59 + Windows dock-collapse fix), RN/Flutter
+  detection badge (#60), logcat backend (#61), macOS themed panel icons (#62).
 - **v0.2.0 shipped**: notarized macOS DMG, Windows MSI, Linux `.deb` on GitHub Releases.
 - **v0.3.0 SHIPPED (2026-07-01)**: tagged `v0.3.0`, published to GitHub Releases —
   notarized macOS DMG, **unsigned** Windows MSI (Authenticode cert is a 0.3.x follow-up;

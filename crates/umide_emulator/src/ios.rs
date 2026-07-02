@@ -13,6 +13,19 @@ impl IosSimulator {
         Self { udid }
     }
 
+    /// Device Logs panel: follow the booted simulator's unified log. Mirrors
+    /// `AndroidEmulator::logcat_command` — the caller pipes stdout and owns the
+    /// child's lifetime (kill on panel close). `--style compact` gives one
+    /// line per event with a `Ty` severity token as the third field (observed
+    /// live: `A`/`Df`/`E`/`F`; parsed in `device_logs_stream.rs`).
+    pub fn log_stream_command(udid: &str) -> Command {
+        let mut cmd = Command::new("xcrun");
+        cmd.args([
+            "simctl", "spawn", udid, "log", "stream", "--style", "compact",
+        ]);
+        cmd
+    }
+
     /// Get list of currently booted simulator UDIDs
     pub fn get_booted_udids() -> Vec<String> {
         let output = match Command::new("xcrun")

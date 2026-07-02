@@ -25,9 +25,12 @@ and add a note under *Open asks* before touching the other's area.
 
 - **Mac** → right-dock layout redesign (not pushed yet — push early please, it
   gates Windows' Device Logs panel registration, see below).
-- **Windows** → mobile-first tooling: RN/Flutter project detection + `adb logcat`
-  streaming backend (collision-free parts first; panel UI waits for your dock
-  push).
+- **Windows** → mobile-first tooling: **detection (#60) + logcat backend (#61)
+  both MERGED**. `CommonData.project_kind: RwSignal<Option<ProjectKind>>` is
+  live (status-bar badge verified on an RN workspace) — ready for your AI
+  context injection. `start_logcat_stream(serial, signal) -> LogcatHandle` in
+  `panel/device_logs_stream.rs` is live-verified on the Pixel — the panel UI on
+  top of it waits for your dock push; the iOS `simctl log stream` half is yours.
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 

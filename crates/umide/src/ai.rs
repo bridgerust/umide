@@ -68,6 +68,28 @@ project's reload command.
 reading and looking over guessing. The user can watch and take over the \
 emulator at any time — keep your interactions purposeful.";
 
+/// The detected project kind as a system-prompt suffix, so the agent KNOWS the
+/// stack instead of re-discovering it every session (detection: `project.rs`,
+/// surfaced via `CommonData.project_kind`). Byte-stable per kind, so the
+/// provider prompt cache stays valid across turns in the same workspace;
+/// empty when nothing was detected (plain folders keep the neutral prompt).
+pub fn project_context(kind: Option<crate::project::ProjectKind>) -> &'static str {
+    match kind {
+        Some(crate::project::ProjectKind::ReactNative) => {
+            "\n\nThe open workspace is a React Native app (detected from its \
+             package.json). Assume React Native idioms and tooling — \
+             components/screens/navigation, Metro, `npx react-native` or Expo \
+             equivalents — unless the code says otherwise."
+        }
+        Some(crate::project::ProjectKind::Flutter) => {
+            "\n\nThe open workspace is a Flutter app (detected from its \
+             pubspec.yaml). Assume Flutter idioms and tooling — widgets, \
+             `flutter run`/`flutter test`, pub — unless the code says otherwise."
+        }
+        None => "",
+    }
+}
+
 // ---------------------------------------------------------------------------
 // API key storage (OS keychain)
 // ---------------------------------------------------------------------------
@@ -240,6 +262,7 @@ pub struct LlmRunner {
     pub trigger: ExtSendTrigger,
     pub device_consent: Arc<Mutex<Option<bool>>>,
     pub selected_device: Option<umide_emulator::DeviceInfo>,
+    pub project_kind: Option<crate::project::ProjectKind>,
 }
 
 #[async_trait(?Send)]
@@ -253,8 +276,10 @@ impl AgentRunner for LlmRunner {
             self.selected_device.clone(),
         ));
         let seed = self.history.lock().unwrap().clone();
+        let system_prompt =
+            format!("{SYSTEM_PROMPT}{}", project_context(self.project_kind));
         let mut agent =
-            match Agent::resume(self.provider.clone(), tools, SYSTEM_PROMPT, seed) {
+            match Agent::resume(self.provider.clone(), tools, system_prompt, seed) {
                 Ok(a) => a,
                 Err(e) => {
                     push.emit(AgentEvent::Error(e.to_string()));
@@ -332,6 +357,7 @@ pub fn spawn_turn(
     trigger: ExtSendTrigger,
     device_consent: Arc<Mutex<Option<bool>>>,
     selected_device: Option<umide_emulator::DeviceInfo>,
+    project_kind: Option<crate::project::ProjectKind>,
     cancel: Arc<AtomicBool>,
 ) {
     let err_queue = queue.clone();
@@ -367,6 +393,7 @@ pub fn spawn_turn(
                     trigger,
                     device_consent,
                     selected_device,
+                    project_kind,
                 };
                 runner.run(user_text, push, cancel).await;
             });
@@ -382,7 +409,6 @@ pub fn spawn_turn(
 /// `trigger`/`cancel` behave exactly as for the LLM path. `session` carries the
 /// CLI's conversation id across turns so the agent keeps multi-turn context.
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 pub fn spawn_cli_turn(
     kind: cli::CliKind,
     workspace: PathBuf,
@@ -392,6 +418,7 @@ pub fn spawn_cli_turn(
     approvals: ApprovalQueue,
     trigger: ExtSendTrigger,
     selected_device: Option<umide_emulator::DeviceInfo>,
+    project_kind: Option<crate::project::ProjectKind>,
     cancel: Arc<AtomicBool>,
 ) {
     // The device-MCP tools drive Android over adb, so pin the panel-selected
@@ -426,7 +453,13 @@ pub fn spawn_cli_turn(
             let cancel = CancelHandle::new(cancel);
             rt.block_on(async move {
                 let mut runner = cli::runner::CliRunner::new(
-                    kind, workspace, session, approvals, trigger, serial,
+                    kind,
+                    workspace,
+                    session,
+                    approvals,
+                    trigger,
+                    serial,
+                    project_kind,
                 );
                 runner.run(user_text, push, cancel).await;
             });
@@ -2043,6 +2076,18 @@ mod tests {
             "Exception occurred while executing 'input'"
         ));
         assert!(!adb_stderr_is_transient(""));
+    }
+
+    #[test]
+    fn project_context_names_the_detected_stack() {
+        use crate::project::ProjectKind;
+        // Detected stacks are named so the agent doesn't re-discover them…
+        assert!(
+            project_context(Some(ProjectKind::ReactNative)).contains("React Native")
+        );
+        assert!(project_context(Some(ProjectKind::Flutter)).contains("Flutter"));
+        // …and a plain folder keeps the neutral prompt (byte-stable: empty).
+        assert_eq!(project_context(None), "");
     }
 
     #[test]

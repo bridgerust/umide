@@ -132,6 +132,9 @@ pub struct CliRunner {
     /// adb serial of the device the user is viewing (`None` ⇒ first running).
     /// Pins the device-MCP tools (Claude Code only) to that emulator.
     serial: Option<String>,
+    /// Detected workspace project kind (RN/Flutter), injected into the system
+    /// prompt so the agent knows the stack without re-discovering it.
+    project_kind: Option<crate::project::ProjectKind>,
     idle_timeout: Duration,
 }
 
@@ -143,6 +146,7 @@ impl CliRunner {
         approvals: ApprovalQueue,
         trigger: ExtSendTrigger,
         serial: Option<String>,
+        project_kind: Option<crate::project::ProjectKind>,
     ) -> Self {
         Self {
             kind,
@@ -151,6 +155,7 @@ impl CliRunner {
             approvals,
             trigger,
             serial,
+            project_kind,
             idle_timeout: DEFAULT_IDLE,
         }
     }
@@ -207,8 +212,9 @@ impl CliRunner {
                         a.push(p.tool_ref());
                         a.push("--append-system-prompt".into());
                         a.push(format!(
-                            "{UMIDE_CONTEXT}{WRITE_NOTE}{}",
-                            if dev.is_some() { DEVICE_NOTE } else { "" }
+                            "{UMIDE_CONTEXT}{WRITE_NOTE}{}{}",
+                            if dev.is_some() { DEVICE_NOTE } else { "" },
+                            crate::ai::project_context(self.project_kind)
                         ));
                     }
                     None => {
@@ -223,7 +229,10 @@ impl CliRunner {
                         a.push("--disallowedTools".into());
                         a.push(READ_ONLY_DENY.into());
                         a.push("--append-system-prompt".into());
-                        a.push(format!("{UMIDE_CONTEXT}{READ_ONLY_NOTE}"));
+                        a.push(format!(
+                            "{UMIDE_CONTEXT}{READ_ONLY_NOTE}{}",
+                            crate::ai::project_context(self.project_kind)
+                        ));
                     }
                 }
                 if let Some(id) = resume {

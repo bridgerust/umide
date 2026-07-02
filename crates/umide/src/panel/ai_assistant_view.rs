@@ -430,6 +430,7 @@ pub fn ai_assistant_panel(
         cli_session.clone(),
         device_consent.clone(),
         window_tab_data.panel.active_device,
+        window_tab_data.common.project_kind,
         input,
         messages,
         active,
@@ -1249,6 +1250,7 @@ fn send_handler(
     cli_session: Arc<Mutex<Option<String>>>,
     device_consent: Arc<Mutex<Option<bool>>>,
     active_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
+    project_kind: RwSignal<Option<crate::project::ProjectKind>>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
     active: RwSignal<Option<ChatMsg>>,
@@ -1345,6 +1347,7 @@ fn send_handler(
                 // Snapshot the device the user is viewing right now, so the
                 // agent's emulator tools drive that device for this turn.
                 active_device.get_untracked(),
+                project_kind.get_untracked(),
                 cancel.clone(),
             ),
             Launch::Cli(cli_kind, ws) => ai::spawn_cli_turn(
@@ -1357,6 +1360,7 @@ fn send_handler(
                 trigger,
                 // Drive the device the user is viewing (mirrors the LLM arm).
                 active_device.get_untracked(),
+                project_kind.get_untracked(),
                 cancel.clone(),
             ),
         }

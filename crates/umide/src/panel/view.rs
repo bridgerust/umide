@@ -442,12 +442,22 @@ pub fn panel_container_view(
             .apply_if(position == PanelContainerPosition::Left, |s| {
                 s.border_right(1.0)
                     .width(size as f32)
+                    // Pin the dock's width: never let it flex-shrink below the
+                    // configured size. A side dock whose only panel has ~zero
+                    // min-content width (e.g. the portable emulator panel, which
+                    // is `min_width(0)` throughout) would otherwise collapse to
+                    // nothing when a wide sibling (the editor / bottom dock)
+                    // claims the row — the panel is "shown" but invisible.
+                    .min_width(size as f32)
+                    .flex_shrink(0.0)
                     .height_pct(100.0)
                     .background(config.color(UmideColor::PANEL_BACKGROUND))
             })
             .apply_if(position == PanelContainerPosition::Right, |s| {
                 s.border_left(1.0)
                     .width(size as f32)
+                    .min_width(size as f32)
+                    .flex_shrink(0.0)
                     .height_pct(100.0)
                     .background(config.color(UmideColor::PANEL_BACKGROUND))
             })

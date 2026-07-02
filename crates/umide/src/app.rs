@@ -2270,7 +2270,13 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
                     main_split_width.set(width);
                 }
             })
-            .style(|s| s.flex_col().flex_grow(1.0))
+            // min_width(0): the editor/bottom column must be allowed to shrink
+            // below its content's min size. Otherwise a wide bottom-dock panel
+            // (e.g. the AI assistant's provider rows) makes this column overflow
+            // and shoves the fixed-width right dock (the emulator) off-screen —
+            // the panel is "shown" at its full width but painted past the window
+            // edge. Paired with `flex_shrink(0)` on the side docks in view.rs.
+            .style(|s| s.flex_col().flex_grow(1.0).min_width(0.0))
         },
         panel_container_view(window_tab_data.clone(), PanelContainerPosition::Right),
         window_message_view(window_tab_data.messages, window_tab_data.common.config),

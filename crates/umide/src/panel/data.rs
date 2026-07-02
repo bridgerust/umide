@@ -135,7 +135,9 @@ pub struct PanelSize {
 /// Saved data predating the field deserializes as 0.
 /// v1: assistant moved to RightBottom. v2: DocumentSymbol undocked.
 /// v3: assistant moved to the bottom dock; emulator owns the right column.
-pub const PANEL_LAYOUT_VERSION: u32 = 3;
+/// v4: v3's style rewrite also normalizes BottomLeft (terminal active+shown) —
+///     v3 never shipped beyond a dev box.
+pub const PANEL_LAYOUT_VERSION: u32 = 4;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PanelInfo {

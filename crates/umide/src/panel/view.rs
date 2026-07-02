@@ -34,7 +34,7 @@ use floem::{
     taffy::AlignItems,
     ui_events::pointer::PointerUpdate,
     unit::PxPctAuto,
-    views::{Container, Decorators, Empty, Label, Stack, clip, dyn_stack, tab},
+    views::{Container, Decorators, Empty, Label, Stack, dyn_stack, tab},
 };
 
 pub fn foldable_panel_section(
@@ -470,10 +470,11 @@ fn panel_view(
     };
     let active_fn =
         move || panel.styles.with(|s| s.get(&position).map(|s| s.active));
-    // clip: a panel's content must not paint outside its section — with two
-    // sections stacked in one dock, un-clipped overflow (e.g. a long device
-    // list) bleeds through the other section's view.
-    clip(tab(
+    // NB: do NOT wrap this in `clip()` — several panels (terminal, search,
+    // problems, …) style themselves `absolute()`, and a Clip ancestor makes
+    // them vanish. Panels that can overflow their section (e.g. the emulator's
+    // device lists) must clip/scroll their own content instead.
+    tab(
         active_fn,
         panels,
         |p| *p,
@@ -528,7 +529,7 @@ fn panel_view(
             };
             view.style(|s| s.size_pct(100.0, 100.0))
         },
-    ))
+    )
     .style(move |s| {
         // min size 0: flex children only share the container when they may
         // shrink below their content's min size — without this, a section with

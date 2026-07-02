@@ -481,6 +481,10 @@ impl WindowTabData {
                     for (pos, shown) in [
                         (PanelPosition::RightTop, true),
                         (PanelPosition::BottomRight, true),
+                        // Terminal front-and-center beside the assistant (a
+                        // stale saved `active` here can point at an empty
+                        // References/Implementation tab, which looks blank).
+                        (PanelPosition::BottomLeft, true),
                         // Video-only after the assistant moved out — hide it.
                         (PanelPosition::RightBottom, false),
                     ] {

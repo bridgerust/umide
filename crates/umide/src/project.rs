@@ -246,7 +246,11 @@ mod tests {
         assert_cmd(&rn, "npx", &["react-native", "run-android"]);
         let rni =
             run_on_device_command(ProjectKind::ReactNative, false, Some(&ios_dev()));
-        assert_cmd(&rni, "npx", &["react-native", "run-ios", "--udid", "UDID-42"]);
+        assert_cmd(
+            &rni,
+            "npx",
+            &["react-native", "run-ios", "--udid", "UDID-42"],
+        );
 
         // Expo apps go through `npx expo run:*`.
         let ex = run_on_device_command(

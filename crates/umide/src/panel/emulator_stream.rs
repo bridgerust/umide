@@ -78,6 +78,14 @@ pub fn start_emulator_stream(
             // once and reused across reconnects.
             let mut stream_size: Option<(u32, u32)> = None;
 
+            // Backoff between reconnect attempts after a *failing* session. An
+            // emulator launched outside UMIDE (Android Studio, or `emulator`
+            // with no `-grpc`) uses token gRPC auth, so its stream returns
+            // Unauthenticated instantly — without backoff the connect→fail→
+            // reconnect loop hot-spins and starves the UI thread (the panel
+            // appears frozen). A healthy or merely-idle session resets it.
+            let mut backoff = Duration::ZERO;
+
             // Reconnect loop. The emulator emits a frame only when the screen
             // *changes*, so an idle screen legitimately produces none — which is
             // indistinguishable from a dead socket. Rather than treat a stall as
@@ -85,6 +93,9 @@ pub fn start_emulator_stream(
             // stalled stream and reconnect; a fresh stream delivers the current
             // frame immediately, so the panel recovers on its own.
             loop {
+                if !backoff.is_zero() {
+                    tokio::time::sleep(backoff).await;
+                }
                 let mut client = match EmulatorGrpcClient::connect_with_retry(
                     &endpoint,
                     Duration::from_secs(60),
@@ -127,11 +138,14 @@ pub fn start_emulator_stream(
                 });
 
                 let mut ui_gone = false;
+                let mut got_frame = false;
+                let session_start = std::time::Instant::now();
                 loop {
                     match tokio::time::timeout(Duration::from_secs(20), grx.recv())
                         .await
                     {
                         Ok(Some(frame)) => {
+                            got_frame = true;
                             if tx.send(Arc::new(frame)).is_err() {
                                 ui_gone = true; // panel dropped
                                 break;
@@ -149,6 +163,25 @@ pub fn start_emulator_stream(
                 stream_task.abort();
                 if ui_gone {
                     return; // UI side gone — stop for good
+                }
+                // A session that delivered frames — or merely lasted a while (an
+                // idle screen produces none for the 20s stall window) — is
+                // healthy: reset. One that died almost immediately with no
+                // frames is failing (auth rejected / refused): back off,
+                // doubling to a 15s cap, so retries stay cheap.
+                if got_frame || session_start.elapsed() >= Duration::from_secs(5) {
+                    backoff = Duration::ZERO;
+                } else {
+                    backoff = if backoff.is_zero() {
+                        Duration::from_millis(500)
+                    } else {
+                        (backoff * 2).min(Duration::from_secs(15))
+                    };
+                    tracing::warn!(
+                        "emulator stream failed immediately with no frames; \
+                         backing off {backoff:?} before reconnecting (is the \
+                         emulator's gRPC token-authenticated?)"
+                    );
                 }
             }
         });

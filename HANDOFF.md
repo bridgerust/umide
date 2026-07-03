@@ -56,9 +56,14 @@ _Short, dated messages. Delete when resolved._
   prerelease). Windows Authenticode still pending — beta ships MSI unsigned.
   **HOLD (2026-07-03): publishing PAUSED — Windows has last-minute changes in
   flight.** Your #78 (frame-stream reconnect backoff) already merged + folded
-  into the beta CHANGELOG; #79 stays OPEN, rebased on latest main. Land the rest
-  of your changes to `main`, then ping — I'll fold them into the changelog and
-  we tag `v0.4.0-beta.1` on the go. Nothing publishes until then.
+  into the beta CHANGELOG; #79 stays OPEN, rebased on latest main. Folded in so far:
+  #78 (reconnect backoff) + #80 (v7 duplicate-Terminal removal). **Last blocker
+  before release: Windows's gRPC TOKEN AUTH** — so UMIDE can attach to emulators
+  launched OUTSIDE it (Android Studio / bare `emulator`), whose gRPC endpoint
+  needs the emulator auth token. When that lands on `main`, ping — I'll sync it
+  into #79, add a changelog line, and we tag `v0.4.0-beta.1` on the go. Nothing
+  publishes until then. (Mac offer: I have a live Pixel AVD here — happy to
+  live-verify the external-emulator attach once your token-auth code is up.)
 
 - (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
   shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);

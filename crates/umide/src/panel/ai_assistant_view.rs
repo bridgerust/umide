@@ -11,6 +11,7 @@ use floem::{
     peniko::Color,
     prelude::{Key, NamedKey, SignalGet, SignalUpdate},
     reactive::{Effect, ReadSignal, RwSignal},
+    style::FlexWrap,
     views::{
         Container, Decorators, Empty, Label, Scroll, Stack, dyn_stack, rich_text,
         text_input,
@@ -628,7 +629,14 @@ pub fn ai_assistant_panel(
             config,
         ),
     ))
-    .style(|s| s.width_full().items_center());
+    // Wrap so the backend chips stay visible in the narrow left sidebar instead
+    // of clipping off the right edge.
+    .style(|s| {
+        s.width_full()
+            .items_center()
+            .flex_wrap(FlexWrap::Wrap)
+            .gap(2.0)
+    });
     let apikey_row = Stack::new((
         group_label("API key"),
         provider_button(
@@ -664,7 +672,13 @@ pub fn ai_assistant_panel(
             config,
         ),
     ))
-    .style(|s| s.width_full().items_center().margin_top(4.0));
+    .style(|s| {
+        s.width_full()
+            .items_center()
+            .margin_top(4.0)
+            .flex_wrap(FlexWrap::Wrap)
+            .gap(2.0)
+    });
     let provider_row = Stack::new((keyfree_row, apikey_row)).style(move |s| {
         s.flex_col()
             .width_full()

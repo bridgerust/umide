@@ -496,13 +496,17 @@ impl WindowTabData {
                     || i.panel.version < super::panel::data::PANEL_LAYOUT_VERSION
                 {
                     for (pos, shown) in [
+                        // File Explorer is the default-active left tab, not the
+                        // AI assistant that moved into this group (active: 0).
+                        (PanelPosition::LeftTop, true),
                         (PanelPosition::RightTop, true),
-                        (PanelPosition::BottomRight, true),
-                        // Terminal front-and-center beside the assistant (a
-                        // stale saved `active` here can point at an empty
-                        // References/Implementation tab, which looks blank).
+                        // Terminal front-and-center (a stale saved `active` here
+                        // can point at an empty References/Implementation tab,
+                        // which looks blank).
                         (PanelPosition::BottomLeft, true),
-                        // Video-only after the assistant moved out — hide it.
+                        // Empty after the assistant moved to the left sidebar.
+                        (PanelPosition::BottomRight, false),
+                        // Video-only — hide it.
                         (PanelPosition::RightBottom, false),
                     ] {
                         styles.insert(

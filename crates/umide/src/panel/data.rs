@@ -29,6 +29,10 @@ pub fn default_panel_order() -> PanelOrder {
             PanelKind::Plugin,
             PanelKind::SourceControl,
             PanelKind::Debug,
+            // The AI assistant lives in the left sidebar tab group so the chat
+            // gets the full editor height (see `kind.rs`); File Explorer stays
+            // the default-active tab.
+            PanelKind::AiAssistant,
         ],
     );
     order.insert(
@@ -45,20 +49,17 @@ pub fn default_panel_order() -> PanelOrder {
     );
     // Mobile-first layout: the emulator owns the WHOLE right column (a phone
     // screen is tall — a fresh workspace opens SHOWING the device at full
-    // height), and the AI assistant sits in the bottom dock beside the
-    // terminal, where a chat gets real width. Everything is visible at once —
-    // watch the agent drive the emulator — and each panel closes
-    // independently. DocumentSymbol is deliberately not docked by default
+    // height); the AI assistant is a LEFT-sidebar tab (full editor height for
+    // the chat); and the bottom dock is left to the terminal + device logs so
+    // nothing is squeezed. DocumentSymbol is deliberately not docked by default
     // (open it on demand); it isn't part of the mobile core loop.
     order.insert(PanelPosition::RightTop, im::vector![PanelKind::Emulator]);
     // RightBottom stays empty: the Video demo panel is undocked (its console
     // icon duplicated Device Logs' in the picker); open it on demand.
     order.insert(PanelPosition::RightBottom, im::vector![]);
     order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
-    order.insert(
-        PanelPosition::BottomRight,
-        im::vector![PanelKind::AiAssistant],
-    );
+    // BottomRight stays empty: the AI assistant moved to the left sidebar.
+    order.insert(PanelPosition::BottomRight, im::vector![]);
 
     order
 }
@@ -73,8 +74,8 @@ pub fn default_panel_order() -> PanelOrder {
 ///     which split the right column and starved both (the device view lost the
 ///     height a phone screen needs, the chat lost width).
 /// Rewrites to the current default: emulator alone owning the right column,
-/// assistant in the bottom dock beside the terminal. A customized order matches
-/// none of the old defaults, so user-arranged layouts are left untouched.
+/// assistant a tab in the left sidebar (v6). A customized order matches none of
+/// the old defaults, so user-arranged layouts are left untouched.
 /// Returns whether it migrated, so the caller can also fix section visibility
 /// once (see the `PANEL_LAYOUT_VERSION` check at load).
 pub fn migrate_dock_layout(order: &mut PanelOrder) -> bool {
@@ -125,6 +126,20 @@ pub fn migrate_dock_layout(order: &mut PanelOrder) -> bool {
         bottom_left.insert(at, PanelKind::DeviceLogs);
         migrated = true;
     }
+    // v6: the AI assistant moves out of the bottom dock (BottomRight) into the
+    // LEFT sidebar tab group, so the chat gets full editor height and the
+    // bottom dock is the terminal's. Only moves it from the previous default
+    // spot — a user who docked it elsewhere is untouched.
+    if let Some(br) = order.get_mut(&PanelPosition::BottomRight) {
+        if br.contains(&PanelKind::AiAssistant) {
+            br.retain(|k| k != &PanelKind::AiAssistant);
+            let left_top = order.entry(PanelPosition::LeftTop).or_default();
+            if !left_top.contains(&PanelKind::AiAssistant) {
+                left_top.push_back(PanelKind::AiAssistant);
+            }
+            migrated = true;
+        }
+    }
     migrated
 }
 
@@ -162,7 +177,9 @@ pub struct PanelSize {
 ///     v3 never shipped beyond a dev box.
 /// v5: Video undocked from the right dock; Device Logs docked beside the
 ///     terminal on orders saved before the panel existed.
-pub const PANEL_LAYOUT_VERSION: u32 = 5;
+/// v6: AI assistant moved from the bottom dock (BottomRight) into the left
+///     sidebar tab group; bottom dock left to the terminal + device logs.
+pub const PANEL_LAYOUT_VERSION: u32 = 6;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PanelInfo {
@@ -526,17 +543,23 @@ mod tests {
     /// The v5 target: emulator alone owns the right column, assistant heads
     /// the bottom dock's right section, RightBottom is empty (Video undocked),
     /// and Device Logs sits in the bottom-left dock.
-    fn assert_v5_shape(order: &PanelOrder) {
+    fn assert_v6_shape(order: &PanelOrder) {
         assert_eq!(
             order.get(&PanelPosition::RightTop),
             Some(&im::vector![PanelKind::Emulator])
         );
         assert_eq!(order.get(&PanelPosition::RightBottom), Some(&im::vector![]));
-        assert_eq!(
+        // v6: the AI assistant lives in the left sidebar; the bottom dock's
+        // right section is empty.
+        assert!(
+            order
+                .get(&PanelPosition::LeftTop)
+                .is_some_and(|v| v.contains(&PanelKind::AiAssistant))
+        );
+        assert!(
             order
                 .get(&PanelPosition::BottomRight)
-                .and_then(|v| v.front()),
-            Some(&PanelKind::AiAssistant)
+                .is_none_or(|v| !v.contains(&PanelKind::AiAssistant))
         );
         assert!(
             order
@@ -560,7 +583,7 @@ mod tests {
         order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
         order.insert(PanelPosition::BottomLeft, im::vector![PanelKind::Terminal]);
         assert!(migrate_dock_layout(&mut order));
-        assert_v5_shape(&order);
+        assert_v6_shape(&order);
         // Device Logs lands right after the terminal.
         assert_eq!(
             order.get(&PanelPosition::BottomLeft),
@@ -577,7 +600,7 @@ mod tests {
         );
         v1.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
         assert!(migrate_dock_layout(&mut v1));
-        assert_v5_shape(&v1);
+        assert_v6_shape(&v1);
 
         // v2: emulator alone up top, assistant docked below it.
         let mut v2 = PanelOrder::new();
@@ -587,7 +610,7 @@ mod tests {
             im::vector![PanelKind::AiAssistant, PanelKind::Video],
         );
         assert!(migrate_dock_layout(&mut v2));
-        assert_v5_shape(&v2);
+        assert_v6_shape(&v2);
 
         // v4 (both dev boxes): current dock shape but Video still docked and
         // no Device Logs yet — exactly what the v5 pass fixes.
@@ -597,7 +620,7 @@ mod tests {
             bl.retain(|k| k != &PanelKind::DeviceLogs);
         }
         assert!(migrate_dock_layout(&mut v4));
-        assert_v5_shape(&v4);
+        assert_v6_shape(&v4);
     }
 
     #[test]
@@ -617,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_default_is_the_v5_shape() {
-        assert_v5_shape(&default_panel_order());
+    fn fresh_default_is_the_v6_shape() {
+        assert_v6_shape(&default_panel_order());
     }
 }

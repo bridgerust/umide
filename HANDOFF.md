@@ -37,6 +37,17 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-03, Mac→Windows) **AI panel moved to the LEFT sidebar** (branch
+  `feat/ai-panel-left-dock`, PR pending; PANEL_LAYOUT_VERSION → 6). It's now a
+  tab beside File Explorer / Extensions / Git / Debug — the chat gets full
+  editor height and the bottom dock is the terminal's + device logs' alone.
+  v6 migration moves it from BottomRight → LeftTop for saved orders (File
+  Explorer stays default-active). Live-verified on macOS. Layout is shared
+  across all three OSes, so your next `git pull` changes where the AI tab lives
+  on Windows too — heads-up. Did NOT touch the status bar / run button (your
+  WIP). Minor known follow-up: the backend picker row (Claude Code/Codex/Gemini)
+  clips at very narrow sidebar widths — resizable, or a wrap polish later.
+
 - (2026-07-03, Mac) **BIG BRICK STARTED — embedded iOS simulator with NO
   Simulator.app.** Branch `feat/ios-embedded-stream` (PR pending), I1 landed &
   live-proven: a real 1179x2556 iPhone-16 home screen captured through UMIDE's

@@ -1680,9 +1680,9 @@ impl WindowTabData {
                     name: run.name,
                     program: run.program,
                     args: (!run.args.is_empty()).then_some(run.args),
-                    cwd: workspace
-                        .as_deref()
-                        .map(|p| p.to_string_lossy().into_owned()),
+                    // Strip the `\\?\` verbatim prefix — Gradle's gradlew.bat
+                    // won't run with a `\\?\`-prefixed CWD on Windows.
+                    cwd: workspace.as_deref().map(crate::project::plain_cwd),
                     env: None,
                     prelaunch: None,
                     debug_command: None,

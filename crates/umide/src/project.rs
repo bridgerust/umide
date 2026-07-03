@@ -65,6 +65,22 @@ pub fn is_expo(workspace: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// A workspace path as a plain string for a child process's working directory.
+/// Strips the Windows extended-length ("verbatim", `\\?\`) prefix that
+/// `canonicalize()` produces: `cmd.exe` and Gradle's `gradlew.bat` refuse to
+/// run with a `\\?\`-prefixed CWD (`'gradlew.bat' is not recognized …`), which
+/// silently breaks Run on Device. `\\?\UNC\server\share` → `\\server\share`.
+pub fn plain_cwd(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s.into_owned()
+    }
+}
+
 /// The command "▶ Run on device" executes in UMIDE's terminal: build, install
 /// and launch the app on the embedded emulator/simulator — the step that
 /// otherwise sends people to Android Studio / Xcode.
@@ -258,6 +274,20 @@ mod tests {
         );
         assert_eq!(rn.program, "cmd");
         assert_eq!(rn.args[..2], ["/C".to_string(), "npx".to_string()]);
+    }
+
+    #[test]
+    fn plain_cwd_strips_verbatim_prefix() {
+        use std::path::Path;
+        assert_eq!(
+            plain_cwd(Path::new(r"\\?\C:\Users\me\app")),
+            r"C:\Users\me\app"
+        );
+        assert_eq!(plain_cwd(Path::new(r"C:\Users\me\app")), r"C:\Users\me\app");
+        assert_eq!(
+            plain_cwd(Path::new(r"\\?\UNC\srv\share\app")),
+            r"\\srv\share\app"
+        );
     }
 
     #[test]

@@ -33,6 +33,20 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-03, Mac) **BIG BRICK STARTED — embedded iOS simulator with NO
+  Simulator.app.** Branch `feat/ios-embedded-stream` (PR pending), I1 landed &
+  live-proven: a real 1179x2556 iPhone-16 home screen captured through UMIDE's
+  own gRPC client from a fully headless sim (Simulator.app closed). Key finding:
+  `simctl boot` gives NO render surface (all capture fails); `idb_companion
+  --boot` attaches the framebuffer headlessly, then the idb `screenshot` gRPC
+  returns real frames. Frame source = screenshot RPC polled at N fps (video H.264
+  stream doesn't emit on companion v1.1.8 — future optimization). New:
+  `umide_emulator::ios_grpc` (IosCompanion + screenshot/video/hid), vendored
+  `proto/idb.proto` subset, `examples/ios_grab_frame`. Ext dep: `brew install
+  idb-companion` (available() gates it; Simulator.app fallback when absent).
+  This is macOS-only (iOS Sim is macOS-only) so it won't touch your Windows
+  build. Next on Mac: I2 panel embedded-iOS view + boot_headless; I3 hid input.
+
 - (2026-07-03, Mac→Windows) **Layout fixes on `fix/vertical-overflow-and-video`
   (PR pending):** (1) the root column now survives tall docks — `workbench`
   min_height(0) + status bar flex_shrink(0); on macOS the expanded emulator

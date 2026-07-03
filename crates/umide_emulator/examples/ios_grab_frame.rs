@@ -38,6 +38,16 @@ async fn main() {
         .expect("connect to companion gRPC");
     eprintln!("connected to companion gRPC");
 
+    // Force the video path for characterization (UMIDE_FORCE_VIDEO=1).
+    if std::env::var("UMIDE_FORCE_VIDEO").is_ok() {
+        eprintln!("forcing video_stream path…");
+        match try_video_stream(&mut client, &out).await {
+            Some((w, h)) => println!("ok: video_stream {w}x{h}"),
+            None => println!("video_stream produced no frame"),
+        }
+        return;
+    }
+
     // Probe: a unary RPC first, to isolate connect/gRPC health from the bidi
     // video stream.
     match tokio::time::timeout(

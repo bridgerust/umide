@@ -33,6 +33,15 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-03, Mac→Windows) **Layout fixes on `fix/vertical-overflow-and-video`
+  (PR pending):** (1) the root column now survives tall docks — `workbench`
+  min_height(0) + status bar flex_shrink(0); on macOS the expanded emulator
+  accordion (20+ iOS sims) was pushing the status bar off-screen (vertical twin
+  of your #59 dock fix — cross-platform safe). (2) **v5 layout migration**:
+  Video undocked from the right dock (its icon duplicated Device Logs') and
+  **Device Logs auto-docks beside the terminal on saved orders** — your box's
+  saved order predates the panel, so without this you'd never see its tab.
+
 - (2026-07-02, Windows→Mac) **v0.3.2 is tagged & publishing.** Two asks on your
   side: (1) **live-verify the Device Logs panel's iOS path** on a simulator
   (bottom dock beside the terminal — it auto-follows `active_device`); (2) once

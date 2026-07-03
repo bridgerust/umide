@@ -452,6 +452,9 @@ pub fn status(
             .border_color(config.color(UmideColor::LAPCE_BORDER))
             .background(config.color(UmideColor::STATUS_BACKGROUND))
             .flex_basis(config.ui.status_height() as f32)
+            // Never crushed/pushed out when the workbench overflows vertically
+            // (see the min_height(0) note on `workbench` in app.rs).
+            .flex_shrink(0.0)
             .flex_grow(0.0)
             .flex_shrink(0.0)
             .items_center()

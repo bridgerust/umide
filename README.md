@@ -2,7 +2,7 @@
   UMIDE
 </h1>
 
-<h4 align="center">The Unified IDE for Cross-Platform Mobile Development</h4>
+<h4 align="center">The cross-platform mobile AI IDE — with the emulators built in</h4>
 
 <p align="center">
   <b>🧪 v0.4.0-beta.1 is open for beta testing.</b><br>
@@ -11,7 +11,7 @@
   · <a href="https://github.com/bridgerust/umide/discussions">discuss</a>.
 </p>
 
-UMIDE is a unified IDE for cross-platform mobile development (React Native + Flutter), built in Rust. It embeds the Android emulator and iOS Simulator directly as panels — on macOS the iOS Simulator now runs **headless inside the IDE, with no Simulator.app window** — eliminating context-switching for mobile developers, and ships a built-in AI coding assistant that can see and drive those devices.
+UMIDE is a **cross-platform mobile AI IDE** for React Native & Flutter, built in Rust. It embeds the **Android emulator and iOS Simulator right in the editor** — on macOS the iOS Simulator runs **headless, with no Simulator.app window** — and ships a built-in **AI assistant that can see and drive those devices**. One window: code, run, and debug on real devices without switching to Xcode or Android Studio.
 
 ## Download (beta)
 

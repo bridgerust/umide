@@ -1,4 +1,4 @@
-[package]
+﻿[package]
 name         = "umide"
 version      = { workspace = true }
 authors      = { workspace = true }
@@ -24,7 +24,7 @@ path = "umide-proxy/src/bin/umide-proxy.rs"
 members = ["crates/umide", "umide-proxy", "umide-rpc", "umide-core", "crates/umide_emulator", "crates/umide_native", "crates/umide_agent"]
 
 [workspace.package]
-version      = "0.3.2"
+version      = "0.3.3"
 edition      = "2024"
 rust-version = "1.87.0"
 license      = "Apache-2.0"
@@ -80,9 +80,9 @@ umide_emulator = { path = "./crates/umide_emulator" }
 umide_native = { path = "./crates/umide_native" }
 umide_agent = { path = "./crates/umide_agent" }
 
-floem = { git = "https://github.com/bridgerust/floem", rev = "e07fcd5ff148d437b22082cd861d266bbae3bb1e", features = ["editor", "serde", "default-image-formats"] }
-floem_renderer = { git = "https://github.com/bridgerust/floem", rev = "e07fcd5ff148d437b22082cd861d266bbae3bb1e", package = "floem_renderer" }
-floem-editor-core = { git = "https://github.com/bridgerust/floem", rev = "e07fcd5ff148d437b22082cd861d266bbae3bb1e", package = "floem-editor-core", features = ["serde"] }
+floem = { git = "https://github.com/bridgerust/floem", rev = "ee8cd8a79cb58b8bfb94335fb55dad7a02282dd3", features = ["editor", "serde", "default-image-formats"] }
+floem_renderer = { git = "https://github.com/bridgerust/floem", rev = "ee8cd8a79cb58b8bfb94335fb55dad7a02282dd3", package = "floem_renderer" }
+floem-editor-core = { git = "https://github.com/bridgerust/floem", rev = "ee8cd8a79cb58b8bfb94335fb55dad7a02282dd3", package = "floem-editor-core", features = ["serde"] }
 [patch.crates-io]
 # Temporarily patch lsp-types with a version that adds message-type debug
 lsp-types = { path = "vendor/lsp-types" }
@@ -155,3 +155,4 @@ assets = [
     ["extra/images/logo.png", "usr/share/pixmaps/dev.umide.umide.png", "644"],
     ["README.md", "usr/share/doc/umide/README.md", "644"],
 ]
+

@@ -66,6 +66,23 @@ Before finishing any change, check whether these need updating and keep them in 
   (`gh auth refresh -h github.com -s workflow`).
 
 ## Current status (keep this fresh — it is the cross-machine handoff)
+- **v0.3.3 HOTFIX (2026-07-03)** — fixes the **UI freeze under streaming device
+  logs** that shipped in v0.3.2. Root cause was in the floem fork: messages
+  addressed to removed views were retained + re-scanned forever (their own code
+  comment predicted the pile-up); a live log stream churning Device-Logs rows
+  grew the pile unbounded and pegged the main thread (measured 84M
+  `is_known_root` calls/40s). Fix in `bridgerust/floem@ee8cd8a`
+  (`feat/external-texture`): drop messages whose ViewId left VIEW_STORAGE +
+  a 64-pass retention budget; umide re-pinned to that rev. Verified live:
+  ~7% of one core during active streaming (was a pegged, growing 100%), UI
+  responsive, Device Logs tails. Diagnosed via cdb stack sampling + floem
+  `[patch]` instrumentation + an 18-agent verified trace.
+  - Known follow-ups (user-reported, next branches): move the AI assistant to
+    the LEFT icon rail for full-height chat; fix duplicate Terminal in
+    `default_panel_order` (BottomLeft AND LeftBottom) making the terminal icon
+    open under File Explorer instead of switching the bottom tab; frame-stream
+    reconnect needs backoff + gRPC token support for externally-launched
+    emulators (no `-grpc 8554` flag → token auth → hot reconnect loop).
 - **v0.3.2 SHIPPED (2026-07-02)** — *the mobile A-to-Z loop closed*: **Device Logs
   panel** (#66/#67 — native logcat + iOS unified log streamed live in the bottom
   dock, severity colours, tail, Clear; includes the critical non-UTF-8 stream fix —

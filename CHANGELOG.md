@@ -5,6 +5,19 @@ UMIDE's releases; the inherited upstream Lapce changelog is preserved below unde
 **Upstream (Lapce)**. Full per-release notes are on the
 [Releases page](https://github.com/bridgerust/umide/releases).
 
+## v0.3.3
+
+**Hotfix: the freeze under streaming device logs.**
+
+- Fixed the UI freezing (one CPU core pegged, clicks starved) while a device
+  streamed logs. Root cause was in our floem fork: UI messages addressed to
+  views that no longer exist were retained and re-scanned forever, so a live
+  log stream churning list rows grew an unbounded pile that starved the main
+  thread. The fork now garbage-collects unroutable messages (drop-on-removal +
+  a retention budget), measured live: a pegged, growing core became ~7% during
+  active streaming, and the UI stays responsive.
+- Device Logs now reliably tails to the newest line.
+
 ## v0.3.2
 
 **The mobile A-to-Z loop closes** — run, watch, and debug your app without

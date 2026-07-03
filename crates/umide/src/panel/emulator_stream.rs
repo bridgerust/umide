@@ -53,6 +53,7 @@ fn downscaled(w: u32, h: u32, max_dim: u32) -> (u32, u32) {
 /// UI side (the channel receiver) is dropped.
 pub fn start_emulator_stream(
     endpoint: String,
+    token: Option<String>,
     frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
     native_size: RwSignal<Option<(u32, u32)>>,
 ) {
@@ -99,6 +100,7 @@ pub fn start_emulator_stream(
                 let mut client = match EmulatorGrpcClient::connect_with_retry(
                     &endpoint,
                     Duration::from_secs(60),
+                    token.as_deref(),
                 )
                 .await
                 {
@@ -212,7 +214,11 @@ pub fn default_screenshot_path() -> std::path::PathBuf {
 /// save it as a PNG to `out`, and reveal it in the file manager. Runs on a
 /// background thread and returns immediately (a fresh short-lived gRPC
 /// connection, so it's independent of the live stream).
-pub fn capture_screenshot(endpoint: String, out: std::path::PathBuf) {
+pub fn capture_screenshot(
+    endpoint: String,
+    token: Option<String>,
+    out: std::path::PathBuf,
+) {
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
@@ -225,6 +231,7 @@ pub fn capture_screenshot(endpoint: String, out: std::path::PathBuf) {
             let mut client = match EmulatorGrpcClient::connect_with_retry(
                 &endpoint,
                 Duration::from_secs(10),
+                token.as_deref(),
             )
             .await
             {
@@ -319,7 +326,10 @@ impl EmulatorInput {
 /// Open a gRPC command connection to the emulator at `endpoint` for sending
 /// input. Returns immediately; events sent via the returned handle are
 /// forwarded on a background thread.
-pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
+pub fn start_emulator_input(
+    endpoint: String,
+    token: Option<String>,
+) -> EmulatorInput {
     // Bounded: drop input on full/disconnected (latest-wins) rather than
     // queueing unboundedly during the connect window.
     let (tx, mut rx) = tokio::sync::mpsc::channel::<InputEvent>(256);
@@ -338,6 +348,7 @@ pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
             let mut client = EmulatorGrpcClient::connect_with_retry(
                 &endpoint,
                 Duration::from_secs(30),
+                token.as_deref(),
             )
             .await
             .map_err(|e| tracing::error!("emulator input gRPC connect failed: {e}"))
@@ -354,6 +365,7 @@ pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
                     match EmulatorGrpcClient::connect_with_retry(
                         &endpoint,
                         Duration::from_secs(30),
+                        token.as_deref(),
                     )
                     .await
                     {
@@ -378,6 +390,7 @@ pub fn start_emulator_input(endpoint: String) -> EmulatorInput {
                     match EmulatorGrpcClient::connect_with_retry(
                         &endpoint,
                         Duration::from_secs(30),
+                        token.as_deref(),
                     )
                     .await
                     {

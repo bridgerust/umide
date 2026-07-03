@@ -100,6 +100,25 @@ pub struct GrpcDiscovery {
 /// its `port.serial` matches `console` (so we bind to the right instance among
 /// several running emulators). Returns `None` when the file is for a different
 /// device or carries no `grpc.port`.
+/// Directories to search for the emulator's `avd/running/pid_*.ini` discovery
+/// files, most-likely first. The location is OS-specific: on macOS the emulator
+/// writes to `~/Library/Caches/TemporaryItems` (NOT `$TMPDIR`, which
+/// `std::env::temp_dir()` returns) — found live: an Android-Studio-launched
+/// Pixel wrote its `grpc.port`/`grpc.token` there while `$TMPDIR/avd/running`
+/// was empty. `$TMPDIR` is kept as a fallback for both platforms.
+fn discovery_dirs() -> Vec<std::path::PathBuf> {
+    let mut dirs = Vec::new();
+    #[cfg(target_os = "macos")]
+    if let Some(home) = std::env::var_os("HOME") {
+        dirs.push(
+            std::path::PathBuf::from(home)
+                .join("Library/Caches/TemporaryItems/avd/running"),
+        );
+    }
+    dirs.push(std::env::temp_dir().join("avd").join("running"));
+    dirs
+}
+
 fn parse_discovery_ini(text: &str, console: u32) -> Option<GrpcDiscovery> {
     let mut this_serial: Option<u32> = None;
     let mut this_grpc: Option<u16> = None;
@@ -235,17 +254,21 @@ impl AndroidEmulator {
     /// the emulator predates discovery files.
     pub fn grpc_discovery(serial: &str) -> Option<GrpcDiscovery> {
         let console: u32 = serial.strip_prefix("emulator-")?.parse().ok()?;
-        let dir = std::env::temp_dir().join("avd").join("running");
-        for entry in std::fs::read_dir(dir).ok()?.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("ini") {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(&path) else {
+        for dir in discovery_dirs() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
                 continue;
             };
-            if let Some(disc) = parse_discovery_ini(&text, console) {
-                return Some(disc);
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("ini") {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                if let Some(disc) = parse_discovery_ini(&text, console) {
+                    return Some(disc);
+                }
             }
         }
         None

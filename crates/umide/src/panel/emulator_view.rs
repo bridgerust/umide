@@ -215,12 +215,29 @@ impl View for NativeEmulatorWidget {
                                         view.attach_device(&device.id);
                                     }
 
-                                    // Android: start gRPC frame streaming (headless, no window)
-                                    // iOS: uses ScreenCaptureKit via attach_device (no gRPC needed)
+                                    // Android: start gRPC frame streaming (headless, no window).
+                                    // iOS: uses ScreenCaptureKit via attach_device (no gRPC needed).
+                                    // Resolve the device's discovered gRPC port + auth token from
+                                    // its serial so the native view streams externally-launched
+                                    // emulators (Android Studio) too — mirrors the portable path.
+                                    // Falls back to 8554 + no token (what UMIDE launches with).
                                     if view.is_android() {
-                                        view.start_grpc_stream(
-                                            "http://localhost:8554",
-                                        );
+                                        let (endpoint, token) = device
+                                            .serial
+                                            .as_deref()
+                                            .and_then(
+                                                umide_emulator::AndroidEmulator::grpc_discovery,
+                                            )
+                                            .map(|d| {
+                                                (
+                                                    format!("http://localhost:{}", d.port),
+                                                    d.token,
+                                                )
+                                            })
+                                            .unwrap_or_else(|| {
+                                                ("http://localhost:8554".to_string(), None)
+                                            });
+                                        view.start_grpc_stream(&endpoint, token);
                                     }
 
                                     *self.native_view.borrow_mut() = Some(view);

@@ -45,7 +45,15 @@ _Short, dated messages. Delete when resolved._
   `proto/idb.proto` subset, `examples/ios_grab_frame`. Ext dep: `brew install
   idb-companion` (available() gates it; Simulator.app fallback when absent).
   This is macOS-only (iOS Sim is macOS-only) so it won't touch your Windows
-  build. Next on Mac: I2 panel embedded-iOS view + boot_headless; I3 hid input.
+  build. I2 CORE landed (same branch): `panel/ios_stream.rs` `start_ios_stream()` — a
+  screenshot-poll loop into the VideoFrame signal, live-proven (12/12 frames,
+  1179x2556). Perf: screenshot RPC ~450ms/call ⇒ ~2 fps (usable PREVIEW;
+  video_stream H.264 hangs on companion v1.1.8 — future opt). NEXT (I2b): the
+  macOS emulator panel renders iOS via a native ScreenCaptureKit overlay of the
+  Simulator.app WINDOW (`emulator_view.rs` NativeEmulatorView, iOS branch ~L196)
+  — to drop the Simulator.app dependency, add an `ios_panel_portable` mirroring
+  `android_panel_portable` (L632) that feeds a `video_frame` from
+  `start_ios_stream` instead of the native overlay. Then I3 hid input.
 
 - (2026-07-03, Mac→Windows) **Layout fixes on `fix/vertical-overflow-and-video`
   (PR pending):** (1) the root column now survives tall docks — `workbench`

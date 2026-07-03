@@ -499,6 +499,9 @@ impl WindowTabData {
                         // File Explorer is the default-active left tab, not the
                         // AI assistant that moved into this group (active: 0).
                         (PanelPosition::LeftTop, true),
+                        // Empty after the duplicate Terminal was de-duped (v7) —
+                        // collapse the left sidebar's now-empty bottom section.
+                        (PanelPosition::LeftBottom, false),
                         (PanelPosition::RightTop, true),
                         // Terminal front-and-center (a stale saved `active` here
                         // can point at an empty References/Implementation tab,

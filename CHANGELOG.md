@@ -30,6 +30,8 @@ public beta. Please try it and tell us what breaks:
   the `\\?\` verbatim CWD that broke `gradlew.bat` is stripped).
 - Status bar no longer disappears behind tall device lists; the Video demo
   panel is undocked; Device Logs docks beside the terminal on upgrade.
+- Emulator frame-stream reconnects now back off, so a failing gRPC auth can't
+  peg the UI in a tight reconnect loop.
 
 **Known beta limitations:** embedded iOS needs `idb_companion` and refreshes at
 ~2 fps; the Windows installer isn't Authenticode-signed yet (SmartScreen may

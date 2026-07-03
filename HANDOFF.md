@@ -54,6 +54,11 @@ _Short, dated messages. Delete when resolved._
   until Josias gives the go** (a tag = outward publish). To ship: push tag
   `v0.4.0-beta.1` (release.yml builds notarized DMG + unsigned MSI + .deb, marks
   prerelease). Windows Authenticode still pending — beta ships MSI unsigned.
+  **HOLD (2026-07-03): publishing PAUSED — Windows has last-minute changes in
+  flight.** Your #78 (frame-stream reconnect backoff) already merged + folded
+  into the beta CHANGELOG; #79 stays OPEN, rebased on latest main. Land the rest
+  of your changes to `main`, then ping — I'll fold them into the changelog and
+  we tag `v0.4.0-beta.1` on the go. Nothing publishes until then.
 
 - (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
   shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);

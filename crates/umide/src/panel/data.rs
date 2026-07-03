@@ -695,10 +695,7 @@ mod tests {
         order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
         assert!(migrate_dock_layout(&mut order));
         assert_v7_shape(&order);
-        assert_eq!(
-            order.get(&PanelPosition::LeftBottom),
-            Some(&im::vector![])
-        );
+        assert_eq!(order.get(&PanelPosition::LeftBottom), Some(&im::vector![]));
         // Terminal still lives in the bottom dock.
         assert!(
             order

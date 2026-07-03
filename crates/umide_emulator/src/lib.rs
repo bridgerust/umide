@@ -3,6 +3,7 @@ pub mod common;
 pub mod decoder;
 pub mod grpc_client;
 pub mod ios;
+pub mod ios_grpc;
 pub mod native_view;
 pub mod video;
 

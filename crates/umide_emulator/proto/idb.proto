@@ -1,0 +1,161 @@
+// SUBSET of facebook/idb's proto (github.com/facebook/idb, tag v1.1.8 — the
+// Homebrew idb-companion version UMIDE is tested against), trimmed to the
+// three RPCs UMIDE uses to embed a HEADLESS iOS simulator: video_stream
+// (H.264 frames), hid (touch/key input) and screenshot.
+//
+// Wire compatibility: gRPC matches on package/service/method names and field
+// numbers/types — all preserved verbatim below — so this subset talks to the
+// full companion unchanged. The full file also trips a prost codegen name
+// collision (DapResponse has both a nested `message Event` and a
+// `oneof event`), which trimming sidesteps entirely.
+//
+// idb is MIT-licensed: Copyright (c) Meta Platforms, Inc. and affiliates.
+
+syntax = "proto3";
+
+package idb;
+
+service CompanionService {
+  rpc describe(TargetDescriptionRequest) returns (TargetDescriptionResponse) {}
+  rpc hid(stream HIDEvent) returns (HIDResponse) {}
+  rpc screenshot(ScreenshotRequest) returns (ScreenshotResponse) {}
+  rpc video_stream(stream VideoStreamRequest)
+      returns (stream VideoStreamResponse) {}
+}
+
+message Payload {
+  oneof source {
+    string file_path = 1;
+    bytes data = 2;
+    string url = 3;
+    Compression compression = 4;
+  }
+  enum Compression {
+    GZIP = 0;
+    ZSTD = 1;
+  }
+}
+
+// describe: only the fields UMIDE reads are declared — proto3 skips unknown
+// fields, so the companion's fuller TargetDescription decodes fine against
+// this subset (field numbers match the full v1.1.8 file).
+message TargetDescriptionRequest {
+  bool fetch_diagnostics = 1;
+}
+
+message TargetDescriptionResponse {
+  TargetDescription target_description = 1;
+}
+
+message TargetDescription {
+  ScreenDimensions screen_dimensions = 3;
+}
+
+message ScreenDimensions {
+  uint64 width = 1;
+  uint64 height = 2;
+  double density = 3;
+  uint64 width_points = 4;
+  uint64 height_points = 5;
+}
+
+message ScreenshotRequest {}
+
+message ScreenshotResponse {
+  bytes image_data = 1;
+  string image_format = 2;
+}
+
+message Point {
+  double x = 1;
+  double y = 2;
+}
+
+message HIDEvent {
+  enum HIDDirection {
+    DOWN = 0;
+    UP = 1;
+  }
+
+  message HIDTouch {
+    Point point = 1;
+  }
+
+  enum HIDButtonType {
+    APPLE_PAY = 0;
+    HOME = 1;
+    LOCK = 2;
+    SIDE_BUTTON = 3;
+    SIRI = 4;
+  }
+
+  message HIDButton {
+    HIDButtonType button = 1;
+  }
+
+  message HIDKey {
+    uint64 keycode = 1;
+  }
+
+  message HIDPressAction {
+    oneof action {
+      HIDTouch touch = 1;
+      HIDButton button = 2;
+      HIDKey key = 3;
+    }
+  }
+
+  message HIDPress {
+    HIDPressAction action = 1;
+    HIDDirection direction = 2;
+  }
+
+  message HIDSwipe {
+    Point start = 1;
+    Point end = 2;
+    double delta = 5;
+    double duration = 6;
+  }
+
+  message HIDDelay {
+    double duration = 1;
+  }
+
+  oneof event {
+    HIDPress press = 1;
+    HIDSwipe swipe = 2;
+    HIDDelay delay = 3;
+  }
+}
+
+message HIDResponse {}
+
+message VideoStreamRequest {
+  enum Format {
+    H264 = 0;
+    RBGA = 1;
+    MJPEG = 2;
+    MINICAP = 3;
+    I420 = 4;
+  }
+  message Start {
+    string file_path = 1;
+    uint64 fps = 2;
+    Format format = 3;
+    double compression_quality = 4;
+    double scale_factor = 5;
+    double avg_bitrate = 6;
+  }
+  message Stop {}
+  oneof control {
+    Start start = 1;
+    Stop stop = 2;
+  }
+}
+
+message VideoStreamResponse {
+  oneof output {
+    bytes log_output = 1;
+    Payload payload = 2;
+  }
+}

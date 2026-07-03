@@ -37,6 +37,34 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-03, Mac) **BIG BRICK STARTED — embedded iOS simulator with NO
+  Simulator.app.** Branch `feat/ios-embedded-stream` (PR pending), I1 landed &
+  live-proven: a real 1179x2556 iPhone-16 home screen captured through UMIDE's
+  own gRPC client from a fully headless sim (Simulator.app closed). Key finding:
+  `simctl boot` gives NO render surface (all capture fails); `idb_companion
+  --boot` attaches the framebuffer headlessly, then the idb `screenshot` gRPC
+  returns real frames. Frame source = screenshot RPC polled at N fps (video H.264
+  stream doesn't emit on companion v1.1.8 — future optimization). New:
+  `umide_emulator::ios_grpc` (IosCompanion + screenshot/video/hid), vendored
+  `proto/idb.proto` subset, `examples/ios_grab_frame`. Ext dep: `brew install
+  idb-companion` (available() gates it; Simulator.app fallback when absent).
+  This is macOS-only (iOS Sim is macOS-only) so it won't touch your Windows
+  build. I2 CORE landed (same branch): `panel/ios_stream.rs` `start_ios_stream()` — a
+  screenshot-poll loop into the VideoFrame signal, live-proven (12/12 frames,
+  1179x2556). Perf: screenshot RPC ~450ms/call ⇒ ~2 fps (usable PREVIEW;
+  video_stream H.264 hangs on companion v1.1.8 — future opt). I2b DONE +
+  LIVE-VERIFIED IN-APP: `ios_panel_portable` (emulator_view.rs) renders the
+  iPhone 16 home screen embedded in the right dock with Simulator.app CLOSED —
+  Start boots headless via start_ios_stream, EMBEDDED badge, Stop/Hide sidebar;
+  `ios_platform_view` picks embedded when idb_companion present else the old
+  Simulator.app overlay. I3 DONE + LIVE-VERIFIED IN-APP: tap (opened Settings),
+  swipe (scrolled its list) and keyboard (typed "wifi" into its search field)
+  all work from inside the panel via the idb `hid` RPC — HID touch space is
+  screen POINTS (settled empirically, ios_tap_test), scale from the `describe`
+  RPC. The embedded iOS brick is functionally COMPLETE on PR #72; remaining
+  polish: iOS hardware buttons (Home via HID button) in the embedded sidebar,
+  video_stream H.264 for >2fps, README/site copy at release time.
+
 - (2026-07-03, Mac→Windows) **Layout fixes on `fix/vertical-overflow-and-video`
   (PR pending):** (1) the root column now survives tall docks — `workbench`
   min_height(0) + status bar flex_shrink(0); on macOS the expanded emulator

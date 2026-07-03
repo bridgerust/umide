@@ -620,6 +620,446 @@ fn emulator_sidebar(
     })
 }
 
+/// Choose the iOS panel implementation on macOS: the EMBEDDED headless view
+/// (no Simulator.app) when `idb_companion` is installed, else the Simulator.app
+/// overlay (`platform_panel`). Boxed to `AnyView` because the two branches are
+/// different view types.
+#[cfg(target_os = "macos")]
+fn ios_platform_view(
+    devices: RwSignal<Vec<DeviceInfo>>,
+    running_device: RwSignal<Option<DeviceInfo>>,
+    is_visible: RwSignal<bool>,
+    frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
+    current_device_id: RwSignal<String>,
+    config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
+) -> floem::AnyView {
+    use floem::IntoView;
+    if crate::panel::ios_stream::embedded_ios_available() {
+        ios_panel_portable(
+            devices,
+            running_device,
+            is_visible,
+            frame_signal,
+            current_device_id,
+            config,
+        )
+        .into_any()
+    } else {
+        platform_panel(
+            DevicePlatform::Ios,
+            devices,
+            running_device,
+            is_visible,
+            frame_signal,
+            current_device_id,
+            config,
+        )
+        .into_any()
+    }
+}
+
+/// EMBEDDED iOS simulator panel (macOS) — renders the simulator's screen
+/// directly in UMIDE via floem's `video_frame`, fed by
+/// [`crate::panel::ios_stream::start_ios_stream`] (headless boot + screenshot
+/// poll over idb gRPC), with NO Simulator.app window. This is the iOS
+/// counterpart to `android_panel_portable`; it is chosen over the Simulator.app
+/// `platform_panel` only when `idb_companion` is installed
+/// (`embedded_ios_available`). Pointer/keyboard input over the idb `hid` RPC is
+/// a follow-up (I3); this milestone delivers the live embedded view.
+#[cfg(target_os = "macos")]
+fn ios_panel_portable(
+    devices: RwSignal<Vec<DeviceInfo>>,
+    running_device: RwSignal<Option<DeviceInfo>>,
+    is_visible: RwSignal<bool>,
+    frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
+    current_device_id: RwSignal<String>,
+    config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
+) -> impl View {
+    use crate::panel::emulator_stream::view_to_device;
+    use crate::panel::ios_stream::{IosInput, IosStreamHandle, start_ios_stream};
+    use floem::event::{Event, EventListener};
+    use floem::kurbo::Size;
+    use floem::prelude::{Key, NamedKey};
+    use floem::style::Position;
+    use floem::views::{RgbaFrame, video_frame};
+    use umide_emulator::ios_grpc::hid_usage;
+
+    // The running stream (boots the sim headless + polls frames). Held for the
+    // panel's lifetime of the run; dropped on Stop to end the loop and kill the
+    // companion. `native_size` (pixels, from the first frame) + `point_scale`
+    // (pixels per point, from `describe`) drive input mapping; `status` drives
+    // the connecting overlay; `input_handle` sends HID gestures.
+    let stream_handle: RwSignal<Option<Rc<IosStreamHandle>>> = RwSignal::new(None);
+    let native_size: RwSignal<Option<(u32, u32)>> = RwSignal::new(None);
+    let status: RwSignal<Option<String>> = RwSignal::new(None);
+    let input_handle: RwSignal<Option<IosInput>> = RwSignal::new(None);
+    let point_scale: RwSignal<Option<f64>> = RwSignal::new(None);
+    let stream_started = RwSignal::new(false);
+
+    // Start the headless stream once a device begins running. Unlike the
+    // Simulator.app path, we never `launch_device` (which opens Simulator.app) —
+    // `start_ios_stream` boots the device headless itself.
+    Effect::new(move |_| {
+        if let Some(dev) = running_device.get() {
+            if !stream_started.get_untracked() {
+                if let Some(handle) = start_ios_stream(
+                    dev.id.clone(),
+                    frame_signal,
+                    native_size,
+                    status,
+                    input_handle,
+                    point_scale,
+                ) {
+                    stream_handle.set(Some(Rc::new(handle)));
+                    stream_started.set(true);
+                }
+            }
+        }
+    });
+
+    let stop_stream = move || {
+        // Dropping the handle stops the poll loop + kills the companion.
+        stream_handle.set(None);
+        stream_started.set(false);
+        frame_signal.set(None);
+        native_size.set(None);
+        status.set(None);
+        input_handle.set(None);
+        point_scale.set(None);
+    };
+
+    // Pointer → HID mapping. The idb HID has no touch-move: a gesture is a tap
+    // (press down/up) or a swipe (interpolated path), so we record where the
+    // pointer went down and decide on release — moved beyond a small threshold
+    // ⇒ swipe with the measured duration, else tap. Coordinates go view →
+    // native pixels (aspect-preserving letterbox, same mapping as Android) →
+    // POINTS (÷ point_scale).
+    let view_size = RwSignal::new(Size::ZERO);
+    let press_start: RwSignal<Option<((f64, f64), std::time::Instant)>> =
+        RwSignal::new(None);
+
+    let to_points = move |e: &Event| -> Option<(f64, f64)> {
+        let p = e.point()?;
+        let sz = view_size.get_untracked();
+        let f = frame_signal.get_untracked()?;
+        let (dw, dh) = match native_size.get_untracked() {
+            Some((w, h)) if w > 0 && h > 0 => (w, h),
+            _ => (f.width, f.height),
+        };
+        let (px, py) = view_to_device(p.x, p.y, sz.width, sz.height, dw, dh)?;
+        let scale = point_scale.get_untracked().unwrap_or(3.0);
+        Some((px as f64 / scale, py as f64 / scale))
+    };
+
+    // Below this movement (in points) a gesture is a tap, not a swipe.
+    const TAP_SLOP_PTS: f64 = 8.0;
+
+    // Named keys → HID usage codes; characters go through char_to_hid.
+    let to_hid_key = |key: &Key| -> Option<u64> {
+        Some(match key {
+            Key::Named(NamedKey::Enter) => hid_usage::ENTER,
+            Key::Named(NamedKey::Backspace) => hid_usage::BACKSPACE,
+            Key::Named(NamedKey::Tab) => hid_usage::TAB,
+            Key::Named(NamedKey::Escape) => hid_usage::ESCAPE,
+            Key::Named(NamedKey::ArrowUp) => hid_usage::ARROW_UP,
+            Key::Named(NamedKey::ArrowDown) => hid_usage::ARROW_DOWN,
+            Key::Named(NamedKey::ArrowLeft) => hid_usage::ARROW_LEFT,
+            Key::Named(NamedKey::ArrowRight) => hid_usage::ARROW_RIGHT,
+            _ => return None,
+        })
+    };
+
+    let device_item = move |device: DeviceInfo| {
+        let dev_start = device.clone();
+        let dev_stop = device.clone();
+        let dev_resume = device.clone();
+        let is_running = device.state == DeviceState::Running;
+        let is_disconnected = device.state == DeviceState::Disconnected;
+
+        Stack::new((
+            Label::new(device.name.clone())
+                .style(|s| s.flex_grow(1.0).padding_horiz(6.0).text_ellipsis()),
+            // Start / Show
+            clickable_icon(
+                || UmideIcons::DEBUG_CONTINUE,
+                move || {
+                    if let Some(ref running) = running_device.get_untracked() {
+                        if running.id == dev_resume.id {
+                            current_device_id.set(dev_resume.id.clone());
+                            is_visible.set(true);
+                            return;
+                        }
+                    }
+                    let mut d = dev_start.clone();
+                    d.state = DeviceState::Running;
+                    running_device.set(Some(d));
+                    current_device_id.set(dev_start.id.clone());
+                    is_visible.set(true);
+                },
+                || false,
+                move || {
+                    if is_running {
+                        is_visible.get()
+                    } else {
+                        !is_disconnected
+                    }
+                },
+                move || if is_running { "Show" } else { "Start" },
+                config,
+            ),
+            // Stop
+            clickable_icon(
+                || UmideIcons::DEBUG_STOP,
+                move || {
+                    let _ = stop_device(&dev_stop);
+                    running_device.set(None);
+                    is_visible.set(false);
+                    current_device_id.set(String::new());
+                    stop_stream();
+                },
+                || false,
+                move || !is_running,
+                || "Stop",
+                config,
+            ),
+        ))
+        .style(|s| {
+            s.width_full()
+                .flex_row()
+                .items_center()
+                .padding_vert(5.0)
+                .border_bottom(1.0)
+                .gap(2.0)
+        })
+    };
+
+    Stack::new((
+        // Header + PREVIEW badge (mirrors the Android portable header).
+        Container::new(
+            Stack::horizontal((
+                Label::new("iOS".to_string())
+                    .style(move |s| s.font_size(12.0).font_bold().padding(6.0)),
+                Label::new("EMBEDDED".to_string()).style(move |s| {
+                    let c = config.get();
+                    s.font_size(9.0)
+                        .padding_horiz(5.0)
+                        .padding_vert(1.0)
+                        .color(c.color(UmideColor::EDITOR_DIM))
+                        .border(1.0)
+                        .border_color(c.color(UmideColor::LAPCE_BORDER))
+                        .border_radius(3.0)
+                }),
+                Label::derived(move || {
+                    running_device
+                        .get()
+                        .map(|d| {
+                            if is_visible.get() {
+                                format!(" - {}", d.name)
+                            } else {
+                                format!(" - {} (hidden)", d.name)
+                            }
+                        })
+                        .unwrap_or_default()
+                })
+                .style(|s| s.font_size(10.0).flex_grow(1.0).padding_horiz(6.0)),
+            ))
+            .style(|s| s.width_full().items_center()),
+        )
+        .style(move |s| {
+            s.width_full()
+                .border_bottom(1.0)
+                .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+        }),
+        Stack::new((
+            // Device list — shown unless a device is running AND visible.
+            Scroll::new(
+                dyn_stack(
+                    move || {
+                        let visible = is_visible.get();
+                        let has_running = running_device.get().is_some();
+                        if has_running && visible {
+                            return Vec::new();
+                        }
+                        devices
+                            .get()
+                            .into_iter()
+                            .filter(|d| d.platform == DevicePlatform::Ios)
+                            .collect::<Vec<_>>()
+                    },
+                    |d| format!("{}-{}", d.id, d.state as u32),
+                    device_item,
+                )
+                .style(|s| s.flex_col().width_full()),
+            )
+            .style(move |s| {
+                let hide = running_device.get().is_some() && is_visible.get();
+                s.flex_grow(1.0)
+                    .width_full()
+                    .min_width(0.0)
+                    .min_height(0.0)
+                    .apply_if(hide, |s| s.hide())
+            }),
+            // Live embedded view + Stop/Hide sidebar.
+            Stack::horizontal((
+                Stack::new((
+                    video_frame(move || {
+                        frame_signal.get().and_then(|f| {
+                            f.rgba_arc().map(|data| RgbaFrame {
+                                data,
+                                width: f.width,
+                                height: f.height,
+                            })
+                        })
+                    })
+                    .on_resize(move |rect| view_size.set(rect.size()))
+                    // Tap-or-swipe: record the press, decide on release (the
+                    // idb HID has no touch-move — see `to_points`).
+                    .on_event_stop(EventListener::PointerDown, move |e| {
+                        if let Some(pt) = to_points(e) {
+                            press_start.set(Some((pt, std::time::Instant::now())));
+                        }
+                    })
+                    .on_event_stop(EventListener::PointerUp, move |e| {
+                        let Some((start, at)) = press_start.get_untracked() else {
+                            return;
+                        };
+                        press_start.set(None);
+                        let Some(input) = input_handle.get_untracked() else {
+                            return;
+                        };
+                        let end = to_points(e).unwrap_or(start);
+                        let dist = ((end.0 - start.0).powi(2)
+                            + (end.1 - start.1).powi(2))
+                        .sqrt();
+                        if dist < TAP_SLOP_PTS {
+                            input.tap(end.0, end.1);
+                        } else {
+                            // Swipe over the measured gesture time, clamped to
+                            // something the synthesizer animates sensibly.
+                            let secs = at.elapsed().as_secs_f64().clamp(0.05, 1.0);
+                            input.swipe(start, end, secs);
+                        }
+                    })
+                    // Keyboard: characters + the common named keys, as HID
+                    // usage codes. The view is focusable, so clicking into the
+                    // device routes typing here (same as the Android panel).
+                    .on_event_stop(EventListener::KeyDown, move |e| {
+                        if let Event::Key(ke) = e {
+                            let Some(input) = input_handle.get_untracked() else {
+                                return;
+                            };
+                            match &ke.key {
+                                // Space arrives as Character(" "), so the
+                                // char arm covers it too.
+                                Key::Character(text) => {
+                                    for c in text.chars() {
+                                        input.ch(c);
+                                    }
+                                }
+                                other => {
+                                    if let Some(usage) = to_hid_key(other) {
+                                        input.key(usage, false);
+                                    }
+                                }
+                            }
+                        }
+                    })
+                    .style(|s| s.size_full().focusable(true)),
+                    // Status overlay (boot/connect messages), pointer-transparent,
+                    // hidden once frames arrive.
+                    Container::new(
+                        Label::derived(move || {
+                            if frame_signal.get().is_some() {
+                                String::new()
+                            } else {
+                                status
+                                    .get()
+                                    .filter(|s| !s.is_empty())
+                                    .unwrap_or_else(|| "Starting…".to_string())
+                            }
+                        })
+                        .style(move |s| {
+                            s.font_size(13.0)
+                                .color(config.get().color(UmideColor::EDITOR_DIM))
+                        }),
+                    )
+                    .style(move |s| {
+                        s.position(Position::Absolute)
+                            .size_full()
+                            .items_center()
+                            .justify_center()
+                            .pointer_events_none()
+                            .apply_if(frame_signal.get().is_some(), |s| s.hide())
+                    }),
+                ))
+                .style(|s| s.flex_grow(1.0).min_width(0.0).min_height(0.0)),
+                // Minimal sidebar: Stop / Hide.
+                Stack::new((
+                    clickable_icon(
+                        || UmideIcons::DEBUG_STOP,
+                        move || {
+                            if let Some(device) = running_device.get_untracked() {
+                                let _ = stop_device(&device);
+                            }
+                            running_device.set(None);
+                            is_visible.set(false);
+                            current_device_id.set(String::new());
+                            stop_stream();
+                        },
+                        || false,
+                        || false,
+                        || "Stop",
+                        config,
+                    ),
+                    Label::new("Stop").style(|s| s.font_size(10.0)),
+                    Label::new("").style(|s| s.height(8.0)),
+                    clickable_icon(
+                        || UmideIcons::CLOSE,
+                        move || is_visible.set(false),
+                        || false,
+                        || false,
+                        || "Hide",
+                        config,
+                    ),
+                    Label::new("Hide").style(|s| s.font_size(10.0)),
+                ))
+                .style(move |s| {
+                    s.flex_col()
+                        .items_center()
+                        .padding(4.0)
+                        .gap(2.0)
+                        .border_left(1.0)
+                        .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+                }),
+            ))
+            .style(move |s| {
+                let show = running_device.get().is_some() && is_visible.get();
+                s.flex_grow(1.0)
+                    .width_full()
+                    .min_width(0.0)
+                    .min_height(0.0)
+                    .apply_if(!show, |s| s.hide())
+            }),
+        ))
+        .style(|s| {
+            s.flex_col()
+                .flex_grow(1.0)
+                .width_full()
+                .min_width(0.0)
+                .min_height(0.0)
+        }),
+    ))
+    .style(move |s| {
+        s.flex_col()
+            .flex_grow(1.0)
+            .flex_basis(0.0)
+            .min_width(0.0)
+            .min_height(0.0)
+            .border(1.0)
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+    })
+}
+
 /// Cross-platform Android emulator panel using floem's `video_frame` view to
 /// render frames from `start_emulator_stream` directly on the GPU, with
 /// pointer input forwarded to the device via M3's `start_emulator_input`.
@@ -1330,8 +1770,10 @@ pub fn emulator_panel(
                         .style(move |s| {
                             s.apply_if(!android_panel_visible.get(), |s| s.hide())
                         }),
-                        platform_panel(
-                            DevicePlatform::Ios,
+                        // Embedded iOS (headless, no Simulator.app) when
+                        // idb_companion is installed; otherwise the Simulator.app
+                        // overlay path.
+                        ios_platform_view(
                             devices,
                             running_ios,
                             ios_visible,

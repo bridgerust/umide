@@ -11,6 +11,10 @@ pub mod emulator_stream;
 pub mod emulator_view;
 pub mod global_search_view;
 pub mod implementation_view;
+// The embedded iOS simulator stream is macOS-only (iOS Simulator + idb_companion
+// are macOS-only); other OSes never reference it.
+#[cfg(target_os = "macos")]
+pub mod ios_stream;
 pub mod kind;
 pub mod plugin_view;
 pub mod position;

@@ -183,13 +183,16 @@ pub fn device_logs_panel(
         .style(|s| s.flex_col().width_full().min_width(0.0)),
     )
     .style(|s| s.flex_grow(1.0).width_full().min_height(0.0))
-    // Tail the log: scroll to the very bottom as batches arrive. A concrete
-    // origin (y = MAX, clamped to the real bottom) tails reliably where a
-    // constant `scroll_to_percent(100)` races the re-layout and can stick at
-    // the top (e.g. when the buffer filled while the tab was hidden).
+    // Tail the log: scroll to the very bottom as batches arrive. The y must be
+    // LARGE BUT FINITE: the scroll clamp adds the viewport height to it, and
+    // `f64::MAX + h == inf` poisons the viewport rect — the clamp never
+    // converges, which both breaks the tail AND re-schedules layout every
+    // frame (a self-sustaining ~100% CPU repaint storm; shipped in v0.3.2 as
+    // "the app freezes"). 1e9 px is beyond any real log buffer and clamps to
+    // the true bottom in one step.
     .scroll_to(move || {
         lines.with(|buf| buf.len());
-        Some(Point::new(0.0, f64::MAX))
+        Some(Point::new(0.0, 1e9))
     });
 
     Stack::new((header_bar, log_list))

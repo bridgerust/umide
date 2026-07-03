@@ -23,9 +23,13 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- _None right now._ **v0.3.2 tagged & publishing (2026-07-02, Windows):** #67
-  (Device Logs panel + non-UTF-8 stream fix) merged, release-prep #69 merged,
-  tag `v0.3.2` pushed — the Release workflow is building/notarizing/publishing.
+- **Windows** → `fix/floem-central-queue-gc` — **v0.3.3 HOTFIX in flight.
+  ⚠ v0.3.2 freezes (100% core) whenever a device streams logs — pull main
+  before any further testing.** Root cause in the floem fork: messages for
+  removed views retained + re-scanned forever; Device-Logs row churn grew the
+  pile unbounded. Fixed in `bridgerust/floem@ee8cd8a` (feat/external-texture:
+  drop-on-removal + 64-pass retention budget); umide re-pins the rev, bumps
+  0.3.3. Verified live on Windows: pegged core → ~7% while streaming.
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 

@@ -57,7 +57,12 @@ pub fn default_panel_order() -> PanelOrder {
     // RightBottom stays empty: the Video demo panel is undocked (its console
     // icon duplicated Device Logs' in the picker); open it on demand.
     order.insert(PanelPosition::RightBottom, im::vector![]);
-    order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
+    // LeftBottom stays empty: the terminal lives in the bottom dock
+    // (BottomLeft) only. A stray Terminal here rendered a SECOND, duplicate
+    // terminal icon in the LEFT sidebar — and because it belonged to the left
+    // dock, clicking it opened the terminal under File Explorer instead of
+    // switching the bottom dock's active tab (e.g. from Device Logs).
+    order.insert(PanelPosition::LeftBottom, im::vector![]);
     // BottomRight stays empty: the AI assistant moved to the left sidebar.
     order.insert(PanelPosition::BottomRight, im::vector![]);
 
@@ -140,6 +145,24 @@ pub fn migrate_dock_layout(order: &mut PanelOrder) -> bool {
             migrated = true;
         }
     }
+    // v7: drop the stray duplicate Terminal from the LEFT dock's bottom section.
+    // The old default listed Terminal in BOTH the bottom dock (BottomLeft) and
+    // the left sidebar (LeftBottom), so the sidebar showed a second terminal
+    // icon whose click opened the terminal under File Explorer instead of
+    // switching the bottom dock's tab. Only DE-DUPE: remove it from LeftBottom
+    // when it's ALSO in BottomLeft (its real home), so a user who deliberately
+    // moved the terminal into the left dock is left untouched.
+    let terminal_in_bottom = order
+        .get(&PanelPosition::BottomLeft)
+        .is_some_and(|b| b.contains(&PanelKind::Terminal));
+    if terminal_in_bottom {
+        if let Some(lb) = order.get_mut(&PanelPosition::LeftBottom) {
+            if lb.contains(&PanelKind::Terminal) {
+                lb.retain(|k| k != &PanelKind::Terminal);
+                migrated = true;
+            }
+        }
+    }
     migrated
 }
 
@@ -179,7 +202,9 @@ pub struct PanelSize {
 ///     terminal on orders saved before the panel existed.
 /// v6: AI assistant moved from the bottom dock (BottomRight) into the left
 ///     sidebar tab group; bottom dock left to the terminal + device logs.
-pub const PANEL_LAYOUT_VERSION: u32 = 6;
+/// v7: removed the stray duplicate Terminal from the left sidebar (LeftBottom);
+///     the terminal lives in the bottom dock (BottomLeft) alone.
+pub const PANEL_LAYOUT_VERSION: u32 = 7;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PanelInfo {
@@ -540,10 +565,11 @@ pub fn panel_position(
 mod tests {
     use super::*;
 
-    /// The v5 target: emulator alone owns the right column, assistant heads
-    /// the bottom dock's right section, RightBottom is empty (Video undocked),
-    /// and Device Logs sits in the bottom-left dock.
-    fn assert_v6_shape(order: &PanelOrder) {
+    /// The v7 target: emulator alone owns the right column, the AI assistant
+    /// lives in the left sidebar (LeftTop), RightBottom is empty (Video
+    /// undocked), Device Logs sits in the bottom-left dock, and the left
+    /// sidebar's bottom section carries no stray duplicate Terminal.
+    fn assert_v7_shape(order: &PanelOrder) {
         assert_eq!(
             order.get(&PanelPosition::RightTop),
             Some(&im::vector![PanelKind::Emulator])
@@ -566,6 +592,12 @@ mod tests {
                 .get(&PanelPosition::BottomLeft)
                 .is_some_and(|v| v.contains(&PanelKind::DeviceLogs))
         );
+        // v7: no stray duplicate Terminal in the left sidebar's bottom section.
+        assert!(
+            order
+                .get(&PanelPosition::LeftBottom)
+                .is_none_or(|v| !v.contains(&PanelKind::Terminal))
+        );
     }
 
     #[test]
@@ -583,7 +615,7 @@ mod tests {
         order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
         order.insert(PanelPosition::BottomLeft, im::vector![PanelKind::Terminal]);
         assert!(migrate_dock_layout(&mut order));
-        assert_v6_shape(&order);
+        assert_v7_shape(&order);
         // Device Logs lands right after the terminal.
         assert_eq!(
             order.get(&PanelPosition::BottomLeft),
@@ -600,7 +632,7 @@ mod tests {
         );
         v1.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
         assert!(migrate_dock_layout(&mut v1));
-        assert_v6_shape(&v1);
+        assert_v7_shape(&v1);
 
         // v2: emulator alone up top, assistant docked below it.
         let mut v2 = PanelOrder::new();
@@ -610,7 +642,7 @@ mod tests {
             im::vector![PanelKind::AiAssistant, PanelKind::Video],
         );
         assert!(migrate_dock_layout(&mut v2));
-        assert_v6_shape(&v2);
+        assert_v7_shape(&v2);
 
         // v4 (both dev boxes): current dock shape but Video still docked and
         // no Device Logs yet — exactly what the v5 pass fixes.
@@ -620,7 +652,7 @@ mod tests {
             bl.retain(|k| k != &PanelKind::DeviceLogs);
         }
         assert!(migrate_dock_layout(&mut v4));
-        assert_v6_shape(&v4);
+        assert_v7_shape(&v4);
     }
 
     #[test]
@@ -640,7 +672,53 @@ mod tests {
     }
 
     #[test]
-    fn fresh_default_is_the_v6_shape() {
-        assert_v6_shape(&default_panel_order());
+    fn fresh_default_is_the_v7_shape() {
+        assert_v7_shape(&default_panel_order());
+        // The terminal has exactly one home: the bottom dock, not the sidebar.
+        assert!(
+            default_panel_order()
+                .get(&PanelPosition::BottomLeft)
+                .is_some_and(|v| v.contains(&PanelKind::Terminal))
+        );
+        assert_eq!(
+            default_panel_order().get(&PanelPosition::LeftBottom),
+            Some(&im::vector![])
+        );
+    }
+
+    #[test]
+    fn migrate_removes_the_duplicate_left_dock_terminal() {
+        // An order carrying the old default's stray LeftBottom Terminal (which
+        // duplicated the bottom dock's) is de-duped: the sidebar copy is
+        // dropped, the bottom-dock one stays.
+        let mut order = default_panel_order();
+        order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
+        assert!(migrate_dock_layout(&mut order));
+        assert_v7_shape(&order);
+        assert_eq!(order.get(&PanelPosition::LeftBottom), Some(&im::vector![]));
+        // Terminal still lives in the bottom dock.
+        assert!(
+            order
+                .get(&PanelPosition::BottomLeft)
+                .is_some_and(|v| v.contains(&PanelKind::Terminal))
+        );
+        // Converged: a second pass is a no-op.
+        assert!(!migrate_dock_layout(&mut order));
+    }
+
+    #[test]
+    fn migrate_keeps_a_deliberately_left_docked_terminal() {
+        // If the user moved the terminal to ONLY the left dock (not also in the
+        // bottom dock), that's a deliberate arrangement — leave it be.
+        let mut order = default_panel_order();
+        if let Some(bl) = order.get_mut(&PanelPosition::BottomLeft) {
+            bl.retain(|k| k != &PanelKind::Terminal);
+        }
+        order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
+        migrate_dock_layout(&mut order);
+        assert_eq!(
+            order.get(&PanelPosition::LeftBottom),
+            Some(&im::vector![PanelKind::Terminal])
+        );
     }
 }

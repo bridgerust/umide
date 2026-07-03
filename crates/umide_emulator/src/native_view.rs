@@ -291,10 +291,16 @@ impl NativeEmulatorView {
 
                 tracing::info!("Android gRPC stream: connecting to {}...", endpoint);
 
-                // Connect STREAMING client with retry
+                // Connect STREAMING client with retry.
+                // NOTE (token auth): the portable panel resolves the emulator's
+                // gRPC token (AndroidEmulator::grpc_discovery) so it can stream
+                // externally-launched emulators (Android Studio); this macOS
+                // native path still passes None — wire the token here to get the
+                // same for the native view.
                 let mut stream_client = match EmulatorGrpcClient::connect_with_retry(
                     &endpoint,
                     std::time::Duration::from_secs(60),
+                    None,
                 ).await {
                     Ok(c) => {
                         tracing::info!("Android gRPC stream: streaming client connected!");
@@ -318,6 +324,7 @@ impl NativeEmulatorView {
                     let mut cmd_client = match EmulatorGrpcClient::connect_with_retry(
                         &cmd_endpoint,
                         std::time::Duration::from_secs(10),
+                        None,
                     ).await {
                         Ok(c) => {
                             tracing::info!("Android gRPC: command client connected!");

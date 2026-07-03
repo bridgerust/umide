@@ -16,6 +16,7 @@ async fn main() {
     let mut client = EmulatorGrpcClient::connect_with_retry(
         "http://localhost:8554",
         Duration::from_secs(30),
+        None,
     )
     .await
     .expect("connect to emulator gRPC");

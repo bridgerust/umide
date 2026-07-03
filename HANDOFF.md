@@ -25,22 +25,41 @@ and add a note under *Open asks* before touching the other's area.
 
 - **v0.3.3 SHIPPED** — the streaming-logs freeze is fixed on `main`
   (`bridgerust/floem@ee8cd8a`: GC unroutable central-queue messages). Pull main.
-- **Windows** → `fix/run-on-device-windows` (PR pending) — ▶ Run-on-Device did
-  nothing on Windows: the run terminal's CreateProcess can't execute `npx.cmd`/
-  `flutter.bat` shims, so it spawned a ConPTY and died silently. Now wraps as
-  `cmd /C <tool> …` on Windows only (args are fixed tool words + serials, no
-  metachars). Verifying the full build+install on the Pixel now.
-- **Mac** → AI assistant → LEFT icon rail (task #40, user request) — chat gets
-  full vertical height. **⚠ coordinate the `PANEL_LAYOUT_VERSION` bump +
-  `migrate_dock_layout` arm with Windows's duplicate-Terminal fix (task #41),
-  which edits the same `default_panel_order`/migration — one of us bumps the
-  version, the other rebases.**
+- **All merged to `main`** (pull): #75 Windows run-on-device `cmd /C` shim,
+  #76/#77 top-bar per-platform Run buttons, #74 AI→left-sidebar (v6), #78
+  emulator frame-stream reconnect backoff, **#80 duplicate-Terminal fix
+  (`PANEL_LAYOUT_VERSION` → 7)**. The v6/v7 coordination is done — v6 (Mac) and
+  v7 (Windows) both landed, no rebase pending.
+- **Windows** → `feat/grpc-token-auth` (**PR #81**, task #45) — gRPC token auth
+  so UMIDE streams emulators launched OUTSIDE it (Android Studio). See the
+  Windows→Mac note below for the beta rebase + the macOS wiring ask.
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 ## Open asks / notes
 
 _Short, dated messages. Delete when resolved._
+
+- (2026-07-03, Windows→Mac) **gRPC TOKEN AUTH landed (PR #81) — two asks for the
+  beta.** UMIDE now streams emulators launched OUTSIDE it (Android Studio, or
+  `emulator` with no `-grpc`), which use token auth: `AndroidEmulator::
+  grpc_discovery(serial)` reads `grpc.token` from the discovery ini, and
+  `EmulatorGrpcClient`'s new `AuthInterceptor` sends `authorization: Bearer
+  <token>` (pass-through when there's no token, so UMIDE-launched emulators are
+  unchanged). Live-proven on Windows: token-mode Pixel_9a, a call without the
+  token is rejected (`Unauthenticated`), with it returns a real 1080x2424 frame
+  (`examples/token_grab`).
+  1. **Beta rebase:** please rebase `release/v0.4.0-beta.1` onto `main` once #81
+     merges so the beta includes it **and** #80 (the duplicate-Terminal fix) —
+     both are user-requested. #81 touches shared `grpc_client.rs` but your
+     release branch only changes version/docs, so **no code conflict**.
+  2. **macOS parity (your file):** the full fix is the Windows/Linux **portable**
+     path. The macOS **native** view still passes `None` — I left a `NOTE` at the
+     two `connect_with_retry` calls in `umide_emulator/src/native_view.rs`
+     (~L295/L318). Wire the token there (via `grpc_discovery`) for macOS to
+     stream Android-Studio-launched emulators too; your call whether it makes the
+     beta. CHANGELOG-worthy: “Stream emulators started outside UMIDE (gRPC token
+     auth)” + “Fixed duplicate Terminal / wrong-dock tab switching (layout v7)”.
 
 - (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
   shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);

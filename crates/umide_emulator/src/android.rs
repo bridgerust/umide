@@ -81,6 +81,50 @@ pub struct AndroidEmulator {
     pub grpc_address: String,
 }
 
+/// A running emulator's discovered gRPC endpoint: the port plus, when the
+/// emulator uses token auth, the bearer token to authenticate with.
+///
+/// UMIDE-launched emulators pass an explicit `-grpc <port>` and need no token.
+/// Emulators launched OUTSIDE UMIDE — Android Studio, or `emulator` with no
+/// `-grpc` — enable token auth and reject every gRPC call that doesn't send
+/// `authorization: Bearer <token>`. The token lives beside the port in the same
+/// discovery ini (`grpc.token=…`), so streaming an already-running external
+/// emulator just needs us to read and forward it.
+#[derive(Debug, Clone)]
+pub struct GrpcDiscovery {
+    pub port: u16,
+    pub token: Option<String>,
+}
+
+/// Parse one emulator discovery ini's text, returning its gRPC endpoint only if
+/// its `port.serial` matches `console` (so we bind to the right instance among
+/// several running emulators). Returns `None` when the file is for a different
+/// device or carries no `grpc.port`.
+fn parse_discovery_ini(text: &str, console: u32) -> Option<GrpcDiscovery> {
+    let mut this_serial: Option<u32> = None;
+    let mut this_grpc: Option<u16> = None;
+    let mut this_token: Option<String> = None;
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix("port.serial=") {
+            this_serial = v.trim().parse().ok();
+        } else if let Some(v) = line.strip_prefix("grpc.port=") {
+            this_grpc = v.trim().parse().ok();
+        } else if let Some(v) = line.strip_prefix("grpc.token=") {
+            let t = v.trim();
+            if !t.is_empty() {
+                this_token = Some(t.to_string());
+            }
+        }
+    }
+    if this_serial != Some(console) {
+        return None;
+    }
+    this_grpc.map(|port| GrpcDiscovery {
+        port,
+        token: this_token,
+    })
+}
+
 impl AndroidEmulator {
     pub fn new(device_id: String, grpc_address: String) -> Self {
         Self {
@@ -181,13 +225,15 @@ impl AndroidEmulator {
         cmd
     }
 
-    /// The gRPC port a running emulator is serving on, read from its discovery
-    /// file so the panel connects to the *right* device instead of assuming the
+    /// The gRPC discovery info (port + optional auth token) for a running
+    /// emulator, read from its discovery file so the panel connects to — and
+    /// authenticates against — the *right* device instead of assuming the
     /// default 8554. Each running emulator writes `<temp>/avd/running/pid_*.ini`
-    /// with `port.serial=<consolePort>` and `grpc.port=<port>`; we match on the
-    /// serial's console port. `None` (→ caller falls back to 8554) if the file
-    /// isn't found, e.g. the emulator predates discovery files.
-    pub fn grpc_port(serial: &str) -> Option<u16> {
+    /// with `port.serial=<consolePort>`, `grpc.port=<port>` and (for token auth)
+    /// `grpc.token=<token>`; we match on the serial's console port. `None` (→
+    /// caller falls back to 8554, no token) if no discovery file matches, e.g.
+    /// the emulator predates discovery files.
+    pub fn grpc_discovery(serial: &str) -> Option<GrpcDiscovery> {
         let console: u32 = serial.strip_prefix("emulator-")?.parse().ok()?;
         let dir = std::env::temp_dir().join("avd").join("running");
         for entry in std::fs::read_dir(dir).ok()?.flatten() {
@@ -198,20 +244,18 @@ impl AndroidEmulator {
             let Ok(text) = std::fs::read_to_string(&path) else {
                 continue;
             };
-            let mut this_serial: Option<u32> = None;
-            let mut this_grpc: Option<u16> = None;
-            for line in text.lines() {
-                if let Some(v) = line.strip_prefix("port.serial=") {
-                    this_serial = v.trim().parse().ok();
-                } else if let Some(v) = line.strip_prefix("grpc.port=") {
-                    this_grpc = v.trim().parse().ok();
-                }
-            }
-            if this_serial == Some(console) {
-                return this_grpc;
+            if let Some(disc) = parse_discovery_ini(&text, console) {
+                return Some(disc);
             }
         }
         None
+    }
+
+    /// The gRPC port a running emulator is serving on (see [`grpc_discovery`]).
+    ///
+    /// [`grpc_discovery`]: Self::grpc_discovery
+    pub fn grpc_port(serial: &str) -> Option<u16> {
+        Self::grpc_discovery(serial).map(|d| d.port)
     }
 
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
@@ -452,5 +496,37 @@ mod tests {
         // A well-formed serial for a device that isn't running → None (no
         // discovery file matches the console port).
         assert_eq!(AndroidEmulator::grpc_port("emulator-1"), None);
+    }
+
+    #[test]
+    fn parse_discovery_reads_port_and_token() {
+        // Android Studio-launched emulator: token auth (grpc.token present).
+        let ini = "port.serial=5554\ngrpc.port=8554\n\
+                   grpc.token=YOYgTZw0cTW1abc==\ngrpc.certificate=/x\n";
+        let d = parse_discovery_ini(ini, 5554).expect("matches console 5554");
+        assert_eq!(d.port, 8554);
+        assert_eq!(d.token.as_deref(), Some("YOYgTZw0cTW1abc=="));
+    }
+
+    #[test]
+    fn parse_discovery_no_token_when_absent_or_empty() {
+        // UMIDE-launched emulator (explicit -grpc, no token line).
+        let no_token = "port.serial=5556\ngrpc.port=8555\n";
+        let d = parse_discovery_ini(no_token, 5556).unwrap();
+        assert_eq!(d.port, 8555);
+        assert_eq!(d.token, None);
+        // An empty token value is treated as no token, not Some("").
+        let empty = "port.serial=5556\ngrpc.port=8555\ngrpc.token=\n";
+        assert_eq!(parse_discovery_ini(empty, 5556).unwrap().token, None);
+    }
+
+    #[test]
+    fn parse_discovery_ignores_other_devices_and_missing_port() {
+        let ini = "port.serial=5554\ngrpc.port=8554\ngrpc.token=t\n";
+        // Console port must match the requested instance.
+        assert!(parse_discovery_ini(ini, 5600).is_none());
+        // No grpc.port → not a usable endpoint even if the serial matches.
+        let no_port = "port.serial=5554\ngrpc.token=t\n";
+        assert!(parse_discovery_ini(no_port, 5554).is_none());
     }
 }

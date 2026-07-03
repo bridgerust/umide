@@ -11,7 +11,7 @@ use std::time::Duration;
 use umide_app::panel::emulator_stream::start_emulator_input;
 
 fn main() {
-    let input = start_emulator_input("http://localhost:8554".to_string());
+    let input = start_emulator_input("http://localhost:8554".to_string(), None);
     std::thread::sleep(Duration::from_secs(3)); // let the command client connect
 
     // Swipe down from the very top → pulls down the notification shade.

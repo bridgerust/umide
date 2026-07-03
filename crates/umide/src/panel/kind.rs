@@ -71,10 +71,11 @@ impl PanelKind {
             PanelKind::Implementation => PanelPosition::BottomLeft,
             PanelKind::Emulator => PanelPosition::RightTop,
             PanelKind::Video => PanelPosition::RightBottom,
-            // Bottom dock, beside the terminal: the chat gets real width there,
-            // and the emulator keeps the right column's FULL height (a phone
-            // screen is tall — splitting the right dock starved both panels).
-            PanelKind::AiAssistant => PanelPosition::BottomRight,
+            // LEFT sidebar tab group (with File Explorer / Extensions / Git /
+            // Debug): the chat gets the full editor HEIGHT — long conversations
+            // read far better tall than wide — and the bottom dock is left to
+            // the terminal + device logs so neither is squeezed.
+            PanelKind::AiAssistant => PanelPosition::LeftTop,
             // Bottom dock beside the terminal — native device logs live where
             // build/run output already does.
             PanelKind::DeviceLogs => PanelPosition::BottomLeft,

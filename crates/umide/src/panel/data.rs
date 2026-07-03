@@ -51,7 +51,9 @@ pub fn default_panel_order() -> PanelOrder {
     // independently. DocumentSymbol is deliberately not docked by default
     // (open it on demand); it isn't part of the mobile core loop.
     order.insert(PanelPosition::RightTop, im::vector![PanelKind::Emulator]);
-    order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
+    // RightBottom stays empty: the Video demo panel is undocked (its console
+    // icon duplicated Device Logs' in the picker); open it on demand.
+    order.insert(PanelPosition::RightBottom, im::vector![]);
     order.insert(PanelPosition::LeftBottom, im::vector![PanelKind::Terminal]);
     order.insert(
         PanelPosition::BottomRight,
@@ -92,18 +94,38 @@ pub fn migrate_dock_layout(order: &mut PanelOrder) -> bool {
         && order
             .get(&PanelPosition::RightBottom)
             .is_some_and(|b| b.front() == Some(&PanelKind::AiAssistant));
-    if !from_old_top && !from_v2 {
-        return false;
+    let mut migrated = from_old_top || from_v2;
+    if migrated {
+        order.insert(PanelPosition::RightTop, im::vector![PanelKind::Emulator]);
+        if let Some(rb) = order.get_mut(&PanelPosition::RightBottom) {
+            rb.retain(|k| k != &PanelKind::AiAssistant);
+        }
+        let bottom_right = order.entry(PanelPosition::BottomRight).or_default();
+        if !bottom_right.contains(&PanelKind::AiAssistant) {
+            bottom_right.push_front(PanelKind::AiAssistant);
+        }
     }
-    order.insert(PanelPosition::RightTop, im::vector![PanelKind::Emulator]);
+    // v5: undock the Video demo panel from the right dock — its console icon
+    // duplicated Device Logs' in the picker (still openable on demand).
     if let Some(rb) = order.get_mut(&PanelPosition::RightBottom) {
-        rb.retain(|k| k != &PanelKind::AiAssistant);
+        if rb.contains(&PanelKind::Video) {
+            rb.retain(|k| k != &PanelKind::Video);
+            migrated = true;
+        }
     }
-    let bottom_right = order.entry(PanelPosition::BottomRight).or_default();
-    if !bottom_right.contains(&PanelKind::AiAssistant) {
-        bottom_right.push_front(PanelKind::AiAssistant);
+    // v5: dock Device Logs beside the terminal for orders saved before the
+    // panel existed (fresh defaults already carry it).
+    let bottom_left = order.entry(PanelPosition::BottomLeft).or_default();
+    if !bottom_left.contains(&PanelKind::DeviceLogs) {
+        let at = bottom_left
+            .iter()
+            .position(|k| k == &PanelKind::Terminal)
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        bottom_left.insert(at, PanelKind::DeviceLogs);
+        migrated = true;
     }
-    true
+    migrated
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
@@ -138,7 +160,9 @@ pub struct PanelSize {
 /// v3: assistant moved to the bottom dock; emulator owns the right column.
 /// v4: v3's style rewrite also normalizes BottomLeft (terminal active+shown) —
 ///     v3 never shipped beyond a dev box.
-pub const PANEL_LAYOUT_VERSION: u32 = 4;
+/// v5: Video undocked from the right dock; Device Logs docked beside the
+///     terminal on orders saved before the panel existed.
+pub const PANEL_LAYOUT_VERSION: u32 = 5;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PanelInfo {
@@ -499,22 +523,25 @@ pub fn panel_position(
 mod tests {
     use super::*;
 
-    /// The v3 target: emulator alone owns the right column, assistant heads
-    /// the bottom dock's right section, nothing left in RightBottom but Video.
-    fn assert_v3_shape(order: &PanelOrder) {
+    /// The v5 target: emulator alone owns the right column, assistant heads
+    /// the bottom dock's right section, RightBottom is empty (Video undocked),
+    /// and Device Logs sits in the bottom-left dock.
+    fn assert_v5_shape(order: &PanelOrder) {
         assert_eq!(
             order.get(&PanelPosition::RightTop),
             Some(&im::vector![PanelKind::Emulator])
         );
-        assert_eq!(
-            order.get(&PanelPosition::RightBottom),
-            Some(&im::vector![PanelKind::Video])
-        );
+        assert_eq!(order.get(&PanelPosition::RightBottom), Some(&im::vector![]));
         assert_eq!(
             order
                 .get(&PanelPosition::BottomRight)
                 .and_then(|v| v.front()),
             Some(&PanelKind::AiAssistant)
+        );
+        assert!(
+            order
+                .get(&PanelPosition::BottomLeft)
+                .is_some_and(|v| v.contains(&PanelKind::DeviceLogs))
         );
     }
 
@@ -531,9 +558,15 @@ mod tests {
             ],
         );
         order.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
+        order.insert(PanelPosition::BottomLeft, im::vector![PanelKind::Terminal]);
         assert!(migrate_dock_layout(&mut order));
-        assert_v3_shape(&order);
-        // Running it again is a no-op (no longer matches any old default).
+        assert_v5_shape(&order);
+        // Device Logs lands right after the terminal.
+        assert_eq!(
+            order.get(&PanelPosition::BottomLeft),
+            Some(&im::vector![PanelKind::Terminal, PanelKind::DeviceLogs])
+        );
+        // Running it again is a no-op (already the current shape).
         assert!(!migrate_dock_layout(&mut order));
 
         // v1: [Emulator, DocumentSymbol] up top.
@@ -544,7 +577,7 @@ mod tests {
         );
         v1.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
         assert!(migrate_dock_layout(&mut v1));
-        assert_v3_shape(&v1);
+        assert_v5_shape(&v1);
 
         // v2: emulator alone up top, assistant docked below it.
         let mut v2 = PanelOrder::new();
@@ -554,24 +587,37 @@ mod tests {
             im::vector![PanelKind::AiAssistant, PanelKind::Video],
         );
         assert!(migrate_dock_layout(&mut v2));
-        assert_v3_shape(&v2);
+        assert_v5_shape(&v2);
+
+        // v4 (both dev boxes): current dock shape but Video still docked and
+        // no Device Logs yet — exactly what the v5 pass fixes.
+        let mut v4 = default_panel_order();
+        v4.insert(PanelPosition::RightBottom, im::vector![PanelKind::Video]);
+        if let Some(bl) = v4.get_mut(&PanelPosition::BottomLeft) {
+            bl.retain(|k| k != &PanelKind::DeviceLogs);
+        }
+        assert!(migrate_dock_layout(&mut v4));
+        assert_v5_shape(&v4);
     }
 
     #[test]
-    fn migrate_dock_layout_leaves_customized_layouts_alone() {
-        // The user moved the assistant somewhere deliberate → untouched.
+    fn migrate_dock_layout_respects_customized_docks() {
+        // The user moved the assistant somewhere deliberate → the arrangement
+        // is untouched; only the additive v5 Device Logs docking applies.
         let mut order = PanelOrder::new();
         order.insert(
             PanelPosition::RightTop,
             im::vector![PanelKind::AiAssistant, PanelKind::Emulator],
         );
-        let before = order.clone();
+        let before_top = order.get(&PanelPosition::RightTop).cloned();
+        assert!(migrate_dock_layout(&mut order)); // DeviceLogs injection only
+        assert_eq!(order.get(&PanelPosition::RightTop).cloned(), before_top);
+        // Second run: fully converged, no-op.
         assert!(!migrate_dock_layout(&mut order));
-        assert_eq!(order, before);
     }
 
     #[test]
-    fn fresh_default_is_the_v3_shape() {
-        assert_v3_shape(&default_panel_order());
+    fn fresh_default_is_the_v5_shape() {
+        assert_v5_shape(&default_panel_order());
     }
 }

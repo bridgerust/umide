@@ -2287,7 +2287,14 @@ fn workbench(window_tab_data: Rc<WindowTabData>) -> impl View {
             workbench_size.set(size);
         }
     })
-    .style(move |s| s.size_full())
+    // min_height(0): the vertical twin of the min_width(0) above — the
+    // workbench must be allowed to shrink below its content's min height.
+    // Otherwise a tall dock (e.g. the macOS emulator panel's expanded device
+    // lists) inflates the root column's min-content height and pushes the
+    // status bar off the bottom window edge (seen live on macOS; Windows only
+    // lists one device so it never overflowed). Paired with flex_shrink(0) on
+    // the status bar.
+    .style(move |s| s.size_full().min_height(0.0))
     .debug_name("Workbench")
 }
 

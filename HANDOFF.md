@@ -53,7 +53,13 @@ _Short, dated messages. Delete when resolved._
   iPhone 16 home screen embedded in the right dock with Simulator.app CLOSED —
   Start boots headless via start_ios_stream, EMBEDDED badge, Stop/Hide sidebar;
   `ios_platform_view` picks embedded when idb_companion present else the old
-  Simulator.app overlay. NEXT: I3 pointer/keyboard over the idb `hid` RPC.
+  Simulator.app overlay. I3 DONE + LIVE-VERIFIED IN-APP: tap (opened Settings),
+  swipe (scrolled its list) and keyboard (typed "wifi" into its search field)
+  all work from inside the panel via the idb `hid` RPC — HID touch space is
+  screen POINTS (settled empirically, ios_tap_test), scale from the `describe`
+  RPC. The embedded iOS brick is functionally COMPLETE on PR #72; remaining
+  polish: iOS hardware buttons (Home via HID button) in the embedded sidebar,
+  video_stream H.264 for >2fps, README/site copy at release time.
 
 - (2026-07-03, Mac→Windows) **Layout fixes on `fix/vertical-overflow-and-video`
   (PR pending):** (1) the root column now survives tall docks — `workbench`

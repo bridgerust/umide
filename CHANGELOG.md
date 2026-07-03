@@ -32,6 +32,8 @@ public beta. Please try it and tell us what breaks:
   panel is undocked; Device Logs docks beside the terminal on upgrade.
 - Emulator frame-stream reconnects now back off, so a failing gRPC auth can't
   peg the UI in a tight reconnect loop.
+- Removed a stray duplicate Terminal that appeared in the left sidebar (it
+  opened under File Explorer instead of switching the bottom dock's tab).
 
 **Known beta limitations:** embedded iOS needs `idb_companion` and refreshes at
 ~2 fps; the Windows installer isn't Authenticode-signed yet (SmartScreen may

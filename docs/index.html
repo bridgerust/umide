@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UMIDE — The Unified IDE for Mobile Development</title>
-  <meta name="description" content="One IDE with Android Emulator and iOS Simulator embedded as panels, a built-in AI assistant that sees and drives your devices, and your own Claude Code / Codex / Gemini agents. Built in Rust." />
-  <meta property="og:title" content="UMIDE — The Unified IDE for Mobile Development" />
-  <meta property="og:description" content="Emulators, an AI assistant, and your own agent CLIs — all in one Rust-powered IDE." />
+  <title>UMIDE — The Cross-Platform Mobile AI IDE</title>
+  <meta name="description" content="A cross-platform mobile AI IDE with the Android emulator and iOS Simulator embedded right in the editor, plus a built-in AI assistant that sees and drives your devices. Built in Rust for React Native & Flutter." />
+  <meta property="og:title" content="UMIDE — The Cross-Platform Mobile AI IDE" />
+  <meta property="og:description" content="Android & iOS emulators embedded in the editor, plus an AI assistant that sees and drives your devices. For React Native & Flutter, built in Rust." />
   <meta name="theme-color" content="#0a0b12" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -307,16 +307,16 @@
       <a href="https://github.com/bridgerust/umide">GitHub</a>
       <a href="https://github.com/bridgerust/umide/releases">Releases</a>
     </div>
-    <a class="nav-cta" href="https://github.com/bridgerust/umide/releases/latest">Download</a>
+    <a class="nav-cta" href="https://github.com/bridgerust/umide/releases">Download</a>
   </div>
 
   <!-- HERO -->
   <section class="hero" id="top">
-    <div class="eyebrow"><span class="pip"></span> <b>v0.3.3</b> &nbsp;·&nbsp; macOS · Windows · Linux</div>
-    <h1 class="title">The mobile IDE that<br><span class="grad">codes with you</span></h1>
-    <p class="sub">Android &amp; iOS emulators, a built-in AI assistant that <b>sees and drives your devices</b>, and your own <b>Claude Code · Codex · Gemini</b> agents — all in one blazing-fast, Rust-powered IDE.</p>
+    <div class="eyebrow"><span class="pip"></span> <b>v0.4.0-beta.1</b> &nbsp;·&nbsp; Beta &nbsp;·&nbsp; macOS · Windows · Linux</div>
+    <h1 class="title">The cross-platform<br><span class="grad">mobile AI IDE</span></h1>
+    <p class="sub">React Native &amp; Flutter, with the <b>Android emulator and iOS Simulator embedded</b> right in the editor — and a built-in <b>AI assistant that sees and drives your devices</b>. One window, no context-switching. Rust-powered.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" id="download-btn" href="https://github.com/bridgerust/umide/releases/latest">
+      <a class="btn btn-primary" id="download-btn" href="https://github.com/bridgerust/umide/releases">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
         <span id="download-label">Download UMIDE</span>
       </a>
@@ -325,7 +325,7 @@
         Star on GitHub
       </a>
     </div>
-    <p class="platform-note">Android emulator embedded on every platform — interactive preview (tap/drag, hardware buttons + volume/rotate, keyboard, screenshot) on Windows &amp; Linux. iOS Simulator is macOS-only. Open source, Apache-2.0. <br>macOS build is signed &amp; notarized; the Windows installer isn&rsquo;t code-signed yet, so SmartScreen may warn on first run (choose <i>More info → Run anyway</i>).</p>
+    <p class="platform-note"><b>🧪 Public beta.</b> Try it and tell us what breaks — <a href="https://github.com/bridgerust/umide/issues/new?labels=beta&amp;template=beta_feedback.yml">report a bug</a> · <a href="https://github.com/bridgerust/umide/discussions">discuss</a> · <a href="https://github.com/bridgerust/umide/blob/main/BETA.md">testing guide</a>. <br>Embedded iOS Simulator (no Simulator.app) on macOS — needs <code>brew install idb-companion</code>, ~2&nbsp;fps preview. Android emulator embedded on every platform (Linux preview only). iOS Simulator is macOS-only. Open source, Apache-2.0. macOS build is signed &amp; notarized; the Windows installer isn&rsquo;t code-signed yet (SmartScreen may warn — <i>More info → Run anyway</i>).</p>
   </section>
 
   <!-- PRODUCT SHOT -->
@@ -364,7 +364,7 @@
       <div class="card col-3 reveal">
         <div class="ic">📱</div>
         <h3>Embedded emulators</h3>
-        <p>Android Emulator and iOS Simulator live inside the IDE as panels — launch, stop, tap, type, and press hardware buttons without ever leaving your editor.</p>
+        <p>The Android emulator and iOS Simulator live inside the IDE as panels — launch, stop, tap, type, and press hardware buttons without leaving your editor. On macOS the iOS Simulator runs <strong>headless, with no Simulator.app window</strong>.</p>
       </div>
       <div class="card col-3 reveal">
         <div class="ic">✨</div>
@@ -379,7 +379,7 @@
       <div class="card col-3 reveal">
         <div class="ic">▶️</div>
         <h3>Run on Device</h3>
-        <p>One click from code to the embedded emulator: the status-bar badge builds &amp; runs your React Native, Flutter, or Expo app on the device you're viewing, in a live terminal.</p>
+        <p>A prominent <strong>▶ Run</strong> button in the top bar — on macOS you pick <strong>▶ Android or ▶ iOS</strong>. One click builds &amp; runs your React Native, Flutter, or Expo app in a live terminal.</p>
       </div>
       <div class="card col-2 reveal">
         <div class="ic">⚡</div>
@@ -411,7 +411,7 @@
           <div class="agent"><span class="chip">Codex</span><p><b>Sandboxed writes</b> confined to your workspace (no network), behind a one-click session-consent gate.</p></div>
           <div class="agent"><span class="chip">Gemini</span><p><b>Read-only</b> — reads and searches your project to answer, never mutates.</p></div>
         </div>
-        <a class="btn btn-primary" href="https://github.com/bridgerust/umide/releases/latest">
+        <a class="btn btn-primary" href="https://github.com/bridgerust/umide/releases">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
           Try it now
         </a>
@@ -471,7 +471,7 @@
       <h2>Ship mobile apps faster.</h2>
       <p>Editor, emulators, and AI agents in one place. Free &amp; open source.</p>
       <div class="cta-row">
-        <a class="btn btn-primary" id="download-btn-2" href="https://github.com/bridgerust/umide/releases/latest">
+        <a class="btn btn-primary" id="download-btn-2" href="https://github.com/bridgerust/umide/releases">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
           <span id="download-label-2">Download UMIDE</span>
         </a>

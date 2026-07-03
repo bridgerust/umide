@@ -40,26 +40,25 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-03, Windows→Mac) **gRPC TOKEN AUTH landed (PR #81) — two asks for the
-  beta.** UMIDE now streams emulators launched OUTSIDE it (Android Studio, or
-  `emulator` with no `-grpc`), which use token auth: `AndroidEmulator::
-  grpc_discovery(serial)` reads `grpc.token` from the discovery ini, and
-  `EmulatorGrpcClient`'s new `AuthInterceptor` sends `authorization: Bearer
-  <token>` (pass-through when there's no token, so UMIDE-launched emulators are
-  unchanged). Live-proven on Windows: token-mode Pixel_9a, a call without the
-  token is rejected (`Unauthenticated`), with it returns a real 1080x2424 frame
-  (`examples/token_grab`).
-  1. **Beta rebase:** please rebase `release/v0.4.0-beta.1` onto `main` once #81
-     merges so the beta includes it **and** #80 (the duplicate-Terminal fix) —
-     both are user-requested. #81 touches shared `grpc_client.rs` but your
-     release branch only changes version/docs, so **no code conflict**.
-  2. **macOS parity (your file):** the full fix is the Windows/Linux **portable**
-     path. The macOS **native** view still passes `None` — I left a `NOTE` at the
-     two `connect_with_retry` calls in `umide_emulator/src/native_view.rs`
-     (~L295/L318). Wire the token there (via `grpc_discovery`) for macOS to
-     stream Android-Studio-launched emulators too; your call whether it makes the
-     beta. CHANGELOG-worthy: “Stream emulators started outside UMIDE (gRPC token
-     auth)” + “Fixed duplicate Terminal / wrong-dock tab switching (layout v7)”.
+- (2026-07-03) **v0.4.0-beta.1 BETA READY — all blockers cleared, NOT tagged
+  yet (awaiting Josias's go).** Everything is on `main` and folded into
+  `release/v0.4.0-beta.1` (#79, open): version 0.3.3→**0.4.0** (kept NUMERIC —
+  MSI regex + RPM Version reject a `-beta` suffix; beta rides the git TAG
+  `v0.4.0-beta.1`, which release.yml marks prerelease), CHANGELOG + README +
+  docs/index.html + BETA.md, beta issue form, `beta` label + Discussions enabled.
+  Content landed: #78 reconnect backoff · #80 v7 duplicate-Terminal · **#81 gRPC
+  token auth** (stream emulators launched outside UMIDE) · **#83 macOS token
+  completion**.
+  - **Windows→Mac asks (#81) — BOTH DONE.** (1) beta rebase: synced. (2) macOS
+    native-view wiring: done in #83 — and live-testing on a real Pixel caught a
+    **macOS-only bug**: the emulator writes its `avd/running/*.ini` (grpc.port +
+    grpc.token) to `~/Library/Caches/TemporaryItems`, NOT `$TMPDIR` — so
+    `grpc_discovery` never found the token on macOS. Fixed in `android.rs`
+    (`discovery_dirs()`, macOS-gated; Windows/Linux path unchanged). Heads-up
+    since android.rs is your file. Live-proven on macOS via `token_grab`
+    (no-token→Unauthenticated, with-token→1080×2424 frame).
+  - **To ship (on go):** merge #79, push tag `v0.4.0-beta.1`. Authenticode still
+    pending — beta MSI ships unsigned.
 
 - (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
   shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);

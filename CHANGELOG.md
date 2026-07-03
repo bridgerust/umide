@@ -5,6 +5,46 @@ UMIDE's releases; the inherited upstream Lapce changelog is preserved below unde
 **Upstream (Lapce)**. Full per-release notes are on the
 [Releases page](https://github.com/bridgerust/umide/releases).
 
+## v0.4.0-beta.1 — BETA
+
+**The iOS Simulator, embedded — plus a mobile-first run experience.** First
+public beta. Please try it and tell us what breaks:
+[report a bug](https://github.com/bridgerust/umide/issues/new?labels=beta&template=beta_feedback.yml)
+· [discuss](https://github.com/bridgerust/umide/discussions).
+
+- **Embedded iOS Simulator on macOS — no Simulator.app window.** The simulator
+  boots headless (framebuffer attached via `idb_companion`) and renders live
+  inside the IDE panel, with tap, swipe, and keyboard input — the iOS twin of
+  the embedded Android emulator. Requires `brew install idb-companion`; falls
+  back to the Simulator.app view when it's absent. Preview-quality (~2 fps
+  screen refresh) — smoother streaming is coming.
+- **Run, front and centre.** The Run button moved out of the status-bar footer
+  into the **top bar**, where you can't miss it. On macOS you get **one button
+  per platform — ▶ Android and ▶ iOS** — so you choose the target; other OSes
+  show a single ▶ Run. The old generic "Run and Debug" icon is gone.
+- **AI assistant in the left sidebar.** The assistant moved from the bottom
+  dock into the left tab group (with File Explorer / Extensions / Git / Debug),
+  so the chat gets full editor height and the terminal gets the bottom dock to
+  itself. The backend picker wraps to fit the sidebar.
+- **Stream emulators started outside UMIDE.** Android emulators launched from
+  Android Studio (or `emulator` with no `-grpc`) use gRPC token auth — UMIDE now
+  reads the emulator's discovery token and authenticates, so you can attach to
+  an already-running emulator instead of only ones UMIDE launched. Works on all
+  three platforms.
+- **Run on Device works on Windows** (npx/flutter `.cmd` shims run via `cmd /C`;
+  the `\\?\` verbatim CWD that broke `gradlew.bat` is stripped).
+- Status bar no longer disappears behind tall device lists; the Video demo
+  panel is undocked; Device Logs docks beside the terminal on upgrade.
+- Emulator frame-stream reconnects now back off, so a failing gRPC auth can't
+  peg the UI in a tight reconnect loop.
+- Removed a stray duplicate Terminal that appeared in the left sidebar (it
+  opened under File Explorer instead of switching the bottom dock's tab).
+
+**Known beta limitations:** embedded iOS needs `idb_companion` and refreshes at
+~2 fps; the Windows installer isn't Authenticode-signed yet (SmartScreen may
+warn — *More info → Run anyway*); the Linux build is **preview only** (never
+run live end-to-end).
+
 ## v0.3.3
 
 **Hotfix: the freeze under streaming device logs.**

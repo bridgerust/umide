@@ -262,6 +262,7 @@ fn middle(
     workspace: Arc<UmideWorkspace>,
     main_split: MainSplitData,
     workbench_command: Listener<UmideWorkbenchCommand>,
+    project_kind: RwSignal<Option<crate::project::ProjectKind>>,
     config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let local_workspace = workspace.clone();
@@ -483,6 +484,56 @@ fn middle(
                 .background(config.color(UmideColor::EDITOR_BACKGROUND))
         }),
         Stack::new((
+            // Prominent "▶ Run" button — the mobile core loop's RUN step, up
+            // top where it can't be missed (the status-bar footer is for
+            // passive info, not the first place you look for Run). Runs the
+            // detected RN/Flutter app on the viewed device; shown only for a
+            // detected mobile project, labelled with the stack.
+            Stack::new((
+                svg(move || config.get().ui_svg(UmideIcons::DEBUG_CONTINUE)).style(
+                    move |s| {
+                        s.size(13.0, 13.0).color(
+                            config
+                                .get()
+                                .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+                        )
+                    },
+                ),
+                Label::derived(move || {
+                    project_kind
+                        .get()
+                        .map(|k| format!("Run · {}", k.label()))
+                        .unwrap_or_else(|| "Run".to_string())
+                })
+                .style(move |s| {
+                    s.margin_left(6.0)
+                        .font_size(12.0)
+                        .font_bold()
+                        .color(
+                            config
+                                .get()
+                                .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+                        )
+                        .selectable(false)
+                }),
+            ))
+            .on_click_stop(move |_| {
+                workbench_command.send(UmideWorkbenchCommand::RunOnDevice);
+            })
+            .style(move |s| {
+                let config = config.get();
+                s.apply_if(project_kind.get().is_none(), |s| s.hide())
+                    .items_center()
+                    .height(26.0)
+                    .padding_horiz(12.0)
+                    .margin_horiz(8.0)
+                    .border_radius(6.0)
+                    .background(
+                        config.color(UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
+                    )
+                    .cursor(CursorStyle::Pointer)
+                    .hover(|s| s.opacity(0.85))
+            }),
             clickable_icon(
                 || UmideIcons::START,
                 move || {
@@ -829,6 +880,7 @@ pub fn title(window_tab_data: Rc<WindowTabData>) -> impl View {
             workspace,
             window_tab_data.main_split.clone(),
             workbench_command,
+            window_tab_data.common.project_kind,
             config,
         ),
         right(

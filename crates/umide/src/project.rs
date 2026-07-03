@@ -65,6 +65,22 @@ pub fn is_expo(workspace: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// A workspace path as a plain string for a child process's working directory.
+/// Strips the Windows extended-length ("verbatim", `\\?\`) prefix that
+/// `canonicalize()` produces: `cmd.exe` and Gradle's `gradlew.bat` refuse to
+/// run with a `\\?\`-prefixed CWD (`'gradlew.bat' is not recognized …`), which
+/// silently breaks Run on Device. `\\?\UNC\server\share` → `\\server\share`.
+pub fn plain_cwd(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s.into_owned()
+    }
+}
+
 /// The command "▶ Run on device" executes in UMIDE's terminal: build, install
 /// and launch the app on the embedded emulator/simulator — the step that
 /// otherwise sends people to Android Studio / Xcode.
@@ -132,9 +148,23 @@ pub fn run_on_device_command(
             ("React Native", "npx", a)
         }
     };
+    // On Windows, `npx` and `flutter` are batch shims (npx.cmd / flutter.bat):
+    // the run terminal spawns the program directly via CreateProcess, which
+    // only executes real executables — the spawn dies instantly and silently
+    // (found live: ▶ produced a ConPTY and nothing else; no node, no gradle).
+    // Route through `cmd /C`. The args are fixed tool words plus adb serials /
+    // simulator UDIDs — no user-controlled strings — so cmd's re-parsing
+    // (the #41 footgun) has nothing to bite on.
+    let (program, args) = if cfg!(target_os = "windows") {
+        let mut wrapped = vec!["/C".to_string(), program.to_string()];
+        wrapped.extend(args);
+        ("cmd".to_string(), wrapped)
+    } else {
+        (program.to_string(), args)
+    };
     RunOnDevice {
         name: format!("Run · {stack_label} · {platform_label}"),
-        program: program.to_string(),
+        program,
         args,
     }
 }
@@ -171,19 +201,40 @@ mod tests {
         }
     }
 
+    /// The (program, args) the platform actually spawns: Windows wraps batch
+    /// shims (npx.cmd / flutter.bat) in `cmd /C` because CreateProcess only
+    /// executes real executables; elsewhere the tool runs bare.
+    fn spawned(program: &str, args: &[&str]) -> (String, Vec<String>) {
+        if cfg!(target_os = "windows") {
+            let mut a = vec!["/C".to_string(), program.to_string()];
+            a.extend(args.iter().map(|s| s.to_string()));
+            ("cmd".to_string(), a)
+        } else {
+            (
+                program.to_string(),
+                args.iter().map(|s| s.to_string()).collect(),
+            )
+        }
+    }
+
+    fn assert_cmd(run: &RunOnDevice, program: &str, args: &[&str]) {
+        let (p, a) = spawned(program, args);
+        assert_eq!(run.program, p);
+        assert_eq!(run.args, a);
+    }
+
     #[test]
     fn run_command_matrix() {
         // Flutter pins the viewed device by id (adb serial / sim UDID).
         let f =
             run_on_device_command(ProjectKind::Flutter, false, Some(&android_dev()));
-        assert_eq!(f.program, "flutter");
-        assert_eq!(f.args, ["run", "-d", "emulator-5554"]);
+        assert_cmd(&f, "flutter", &["run", "-d", "emulator-5554"]);
         let fi =
             run_on_device_command(ProjectKind::Flutter, false, Some(&ios_dev()));
-        assert_eq!(fi.args, ["run", "-d", "UDID-42"]);
+        assert_cmd(&fi, "flutter", &["run", "-d", "UDID-42"]);
         // No device: flutter's own picker handles it in the terminal.
         let fnone = run_on_device_command(ProjectKind::Flutter, false, None);
-        assert_eq!(fnone.args, ["run"]);
+        assert_cmd(&fnone, "flutter", &["run"]);
 
         // Bare RN: run-android targets the running emulator itself; run-ios
         // pins the simulator by UDID.
@@ -192,11 +243,14 @@ mod tests {
             false,
             Some(&android_dev()),
         );
-        assert_eq!(rn.program, "npx");
-        assert_eq!(rn.args, ["react-native", "run-android"]);
+        assert_cmd(&rn, "npx", &["react-native", "run-android"]);
         let rni =
             run_on_device_command(ProjectKind::ReactNative, false, Some(&ios_dev()));
-        assert_eq!(rni.args, ["react-native", "run-ios", "--udid", "UDID-42"]);
+        assert_cmd(
+            &rni,
+            "npx",
+            &["react-native", "run-ios", "--udid", "UDID-42"],
+        );
 
         // Expo apps go through `npx expo run:*`.
         let ex = run_on_device_command(
@@ -204,12 +258,40 @@ mod tests {
             true,
             Some(&android_dev()),
         );
-        assert_eq!(ex.args, ["expo", "run:android"]);
+        assert_cmd(&ex, "npx", &["expo", "run:android"]);
         assert!(ex.name.contains("Expo") && ex.name.contains("Android"));
 
         // No device defaults to Android (the platform every OS can run).
         let none = run_on_device_command(ProjectKind::ReactNative, false, None);
-        assert_eq!(none.args, ["react-native", "run-android"]);
+        assert_cmd(&none, "npx", &["react-native", "run-android"]);
+    }
+
+    /// The Windows spawn shape must be exactly `cmd /C <tool> <args…>` — the
+    /// run terminal's CreateProcess can't execute .cmd/.bat shims directly.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn run_command_windows_wraps_in_cmd() {
+        let rn = run_on_device_command(
+            ProjectKind::ReactNative,
+            false,
+            Some(&android_dev()),
+        );
+        assert_eq!(rn.program, "cmd");
+        assert_eq!(rn.args[..2], ["/C".to_string(), "npx".to_string()]);
+    }
+
+    #[test]
+    fn plain_cwd_strips_verbatim_prefix() {
+        use std::path::Path;
+        assert_eq!(
+            plain_cwd(Path::new(r"\\?\C:\Users\me\app")),
+            r"C:\Users\me\app"
+        );
+        assert_eq!(plain_cwd(Path::new(r"C:\Users\me\app")), r"C:\Users\me\app");
+        assert_eq!(
+            plain_cwd(Path::new(r"\\?\UNC\srv\share\app")),
+            r"\\srv\share\app"
+        );
     }
 
     #[test]

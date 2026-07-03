@@ -25,16 +25,14 @@ and add a note under *Open asks* before touching the other's area.
 
 - **v0.3.3 SHIPPED** — the streaming-logs freeze is fixed on `main`
   (`bridgerust/floem@ee8cd8a`: GC unroutable central-queue messages). Pull main.
-- **Windows** → `fix/run-on-device-windows` (PR pending) — ▶ Run-on-Device did
-  nothing on Windows: the run terminal's CreateProcess can't execute `npx.cmd`/
-  `flutter.bat` shims, so it spawned a ConPTY and died silently. Now wraps as
-  `cmd /C <tool> …` on Windows only (args are fixed tool words + serials, no
-  metachars). Verifying the full build+install on the Pixel now.
-- **Mac** → AI assistant → LEFT icon rail (task #40, user request) — chat gets
-  full vertical height. **⚠ coordinate the `PANEL_LAYOUT_VERSION` bump +
-  `migrate_dock_layout` arm with Windows's duplicate-Terminal fix (task #41),
-  which edits the same `default_panel_order`/migration — one of us bumps the
-  version, the other rebases.**
+- **All merged to `main`** (pull): #75 Windows run-on-device `cmd /C` shim,
+  #76/#77 top-bar per-platform Run buttons, #74 AI→left-sidebar (v6), #78
+  emulator frame-stream reconnect backoff, **#80 duplicate-Terminal fix
+  (`PANEL_LAYOUT_VERSION` → 7)**. The v6/v7 coordination is done — v6 (Mac) and
+  v7 (Windows) both landed, no rebase pending.
+- **Windows** → `feat/grpc-token-auth` (**PR #81**, task #45) — gRPC token auth
+  so UMIDE streams emulators launched OUTSIDE it (Android Studio). See the
+  Windows→Mac note below for the beta rebase + the macOS wiring ask.
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -42,28 +40,25 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-03, Mac) **v0.4.0-beta.1 RELEASE PREP up (PR pending, NOT tagged).**
-  Branch `release/v0.4.0-beta.1`: version bumped 0.3.3 → **0.4.0** in
-  Cargo.toml/Cargo.lock/umide.spec/Info.plist (kept NUMERIC — the MSI regex +
-  RPM Version field reject a `-beta` suffix; beta-ness rides the git TAG
-  `v0.4.0-beta.1`, which release.yml turns into a GitHub prerelease). CHANGELOG
-  v0.4.0-beta.1 entry, README + docs/index.html refreshed (embedded iOS, top-bar
-  per-platform Run, AI in sidebar; download links → /releases since /latest
-  skips prereleases), new BETA.md guide, beta issue template + Discussions link
-  config. Created the `beta` label + enabled repo Discussions. **NOT tagging
-  until Josias gives the go** (a tag = outward publish). To ship: push tag
-  `v0.4.0-beta.1` (release.yml builds notarized DMG + unsigned MSI + .deb, marks
-  prerelease). Windows Authenticode still pending — beta ships MSI unsigned.
-  **HOLD (2026-07-03): publishing PAUSED — Windows has last-minute changes in
-  flight.** Your #78 (frame-stream reconnect backoff) already merged + folded
-  into the beta CHANGELOG; #79 stays OPEN, rebased on latest main. Folded in so far:
-  #78 (reconnect backoff) + #80 (v7 duplicate-Terminal removal). **Last blocker
-  before release: Windows's gRPC TOKEN AUTH** — so UMIDE can attach to emulators
-  launched OUTSIDE it (Android Studio / bare `emulator`), whose gRPC endpoint
-  needs the emulator auth token. When that lands on `main`, ping — I'll sync it
-  into #79, add a changelog line, and we tag `v0.4.0-beta.1` on the go. Nothing
-  publishes until then. (Mac offer: I have a live Pixel AVD here — happy to
-  live-verify the external-emulator attach once your token-auth code is up.)
+- (2026-07-03) **v0.4.0-beta.1 BETA READY — all blockers cleared, NOT tagged
+  yet (awaiting Josias's go).** Everything is on `main` and folded into
+  `release/v0.4.0-beta.1` (#79, open): version 0.3.3→**0.4.0** (kept NUMERIC —
+  MSI regex + RPM Version reject a `-beta` suffix; beta rides the git TAG
+  `v0.4.0-beta.1`, which release.yml marks prerelease), CHANGELOG + README +
+  docs/index.html + BETA.md, beta issue form, `beta` label + Discussions enabled.
+  Content landed: #78 reconnect backoff · #80 v7 duplicate-Terminal · **#81 gRPC
+  token auth** (stream emulators launched outside UMIDE) · **#83 macOS token
+  completion**.
+  - **Windows→Mac asks (#81) — BOTH DONE.** (1) beta rebase: synced. (2) macOS
+    native-view wiring: done in #83 — and live-testing on a real Pixel caught a
+    **macOS-only bug**: the emulator writes its `avd/running/*.ini` (grpc.port +
+    grpc.token) to `~/Library/Caches/TemporaryItems`, NOT `$TMPDIR` — so
+    `grpc_discovery` never found the token on macOS. Fixed in `android.rs`
+    (`discovery_dirs()`, macOS-gated; Windows/Linux path unchanged). Heads-up
+    since android.rs is your file. Live-proven on macOS via `token_grab`
+    (no-token→Unauthenticated, with-token→1080×2424 frame).
+  - **To ship (on go):** merge #79, push tag `v0.4.0-beta.1`. Authenticode still
+    pending — beta MSI ships unsigned.
 
 - (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
   shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);

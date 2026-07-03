@@ -26,6 +26,11 @@ public beta. Please try it and tell us what breaks:
   dock into the left tab group (with File Explorer / Extensions / Git / Debug),
   so the chat gets full editor height and the terminal gets the bottom dock to
   itself. The backend picker wraps to fit the sidebar.
+- **Stream emulators started outside UMIDE.** Android emulators launched from
+  Android Studio (or `emulator` with no `-grpc`) use gRPC token auth — UMIDE now
+  reads the emulator's discovery token and authenticates, so you can attach to
+  an already-running emulator instead of only ones UMIDE launched. Works on all
+  three platforms.
 - **Run on Device works on Windows** (npx/flutter `.cmd` shims run via `cmd /C`;
   the `\\?\` verbatim CWD that broke `gradlew.bat` is stripped).
 - Status bar no longer disappears behind tall device lists; the Video demo

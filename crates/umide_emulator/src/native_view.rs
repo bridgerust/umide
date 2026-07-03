@@ -245,7 +245,11 @@ impl NativeEmulatorView {
     /// Start gRPC frame streaming for Android emulator.
     /// Uses TWO separate gRPC clients: one for streaming frames, one for commands.
     /// This avoids the deadlock where stream_screenshots holds a mutex forever.
-    pub fn start_grpc_stream(&mut self, grpc_endpoint: &str) {
+    /// Stream the emulator at `grpc_endpoint`. `token` is the gRPC auth bearer
+    /// for emulators launched OUTSIDE UMIDE (Android Studio, or `emulator` with
+    /// no `-grpc`), resolved from the discovery ini via
+    /// `AndroidEmulator::grpc_discovery`; `None` for UMIDE-launched emulators.
+    pub fn start_grpc_stream(&mut self, grpc_endpoint: &str, token: Option<String>) {
         if !self.is_android {
             tracing::warn!("gRPC streaming is only for Android emulators");
             return;
@@ -291,10 +295,14 @@ impl NativeEmulatorView {
 
                 tracing::info!("Android gRPC stream: connecting to {}...", endpoint);
 
-                // Connect STREAMING client with retry
+                // Connect STREAMING client with retry, presenting the emulator's
+                // gRPC token when it has one (externally-launched emulators),
+                // pass-through otherwise — parity with the portable panel.
+                let cmd_token = token.clone();
                 let mut stream_client = match EmulatorGrpcClient::connect_with_retry(
                     &endpoint,
                     std::time::Duration::from_secs(60),
+                    token.as_deref(),
                 ).await {
                     Ok(c) => {
                         tracing::info!("Android gRPC stream: streaming client connected!");
@@ -318,6 +326,7 @@ impl NativeEmulatorView {
                     let mut cmd_client = match EmulatorGrpcClient::connect_with_retry(
                         &cmd_endpoint,
                         std::time::Duration::from_secs(10),
+                        cmd_token.as_deref(),
                     ).await {
                         Ok(c) => {
                             tracing::info!("Android gRPC: command client connected!");

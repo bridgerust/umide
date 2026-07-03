@@ -5,6 +5,9 @@
 
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tonic::metadata::{Ascii, MetadataValue};
+use tonic::service::interceptor::InterceptedService;
+use tonic::service::Interceptor;
 use tonic::transport::Channel;
 use tracing::{error, info, warn};
 
@@ -31,15 +34,50 @@ pub enum GrpcError {
     DecodeError(String),
 }
 
+/// Attaches the emulator's gRPC auth token to every request.
+///
+/// An emulator launched outside UMIDE (Android Studio, or `emulator` with no
+/// `-grpc`) enables token auth and rejects any call lacking
+/// `authorization: Bearer <token>`. When a token is present we insert that
+/// header on every RPC; with no token (UMIDE-launched, explicit `-grpc`) the
+/// interceptor is a pass-through, so this is safe for both cases.
+#[derive(Clone)]
+pub struct AuthInterceptor {
+    bearer: Option<MetadataValue<Ascii>>,
+}
+
+impl Interceptor for AuthInterceptor {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> Result<tonic::Request<()>, tonic::Status> {
+        if let Some(bearer) = &self.bearer {
+            request
+                .metadata_mut()
+                .insert("authorization", bearer.clone());
+        }
+        Ok(request)
+    }
+}
+
 /// gRPC streaming client for Android emulator
 pub struct EmulatorGrpcClient {
-    client: EmulatorControllerClient<Channel>,
+    client: EmulatorControllerClient<InterceptedService<Channel, AuthInterceptor>>,
 }
 
 impl EmulatorGrpcClient {
-    /// Connect to the Android emulator gRPC endpoint
-    pub async fn connect(endpoint: &str) -> Result<Self, GrpcError> {
-        info!("Connecting to Android emulator gRPC at {}", endpoint);
+    /// Connect to the Android emulator gRPC endpoint. `token` is the emulator's
+    /// gRPC auth token (from its discovery ini) when it uses token auth, or
+    /// `None` for UMIDE-launched emulators that don't require one.
+    pub async fn connect(
+        endpoint: &str,
+        token: Option<&str>,
+    ) -> Result<Self, GrpcError> {
+        info!(
+            "Connecting to Android emulator gRPC at {} ({} auth)",
+            endpoint,
+            if token.is_some() { "token" } else { "no" }
+        );
 
         let channel = Channel::from_shared(endpoint.to_string())
             .map_err(|e| GrpcError::ConnectionFailed(e.to_string()))?
@@ -47,19 +85,36 @@ impl EmulatorGrpcClient {
             .await
             .map_err(|e| GrpcError::ConnectionFailed(e.to_string()))?;
 
+        // Build the bearer header once; a malformed token is a connect error
+        // rather than a silent per-call rejection.
+        let bearer = match token {
+            Some(t) => Some(
+                format!("Bearer {t}")
+                    .parse::<MetadataValue<Ascii>>()
+                    .map_err(|e| {
+                        GrpcError::ConnectionFailed(format!(
+                            "invalid gRPC token: {e}"
+                        ))
+                    })?,
+            ),
+            None => None,
+        };
+        let interceptor = AuthInterceptor { bearer };
+
         // Raw RGBA frames at device resolution can be large (1080x2400x4 = ~10MB)
         // Default tonic limit is 4MB — increase to 50MB
-        let client = EmulatorControllerClient::new(channel)
-            .max_decoding_message_size(50 * 1024 * 1024);
+        let client =
+            EmulatorControllerClient::with_interceptor(channel, interceptor)
+                .max_decoding_message_size(50 * 1024 * 1024);
 
         info!("Connected to Android emulator gRPC");
 
         Ok(Self { client })
     }
 
-    /// Connect to default emulator endpoint (localhost:8554)
+    /// Connect to default emulator endpoint (localhost:8554), no token.
     pub async fn connect_default() -> Result<Self, GrpcError> {
-        Self::connect("http://localhost:8554").await
+        Self::connect("http://localhost:8554", None).await
     }
 
     /// Connect with retry and exponential backoff.
@@ -67,13 +122,14 @@ impl EmulatorGrpcClient {
     pub async fn connect_with_retry(
         endpoint: &str,
         max_duration: std::time::Duration,
+        token: Option<&str>,
     ) -> Result<Self, GrpcError> {
         let start = std::time::Instant::now();
         let mut delay = std::time::Duration::from_millis(200);
         let max_delay = std::time::Duration::from_secs(2);
 
         loop {
-            match Self::connect(endpoint).await {
+            match Self::connect(endpoint, token).await {
                 Ok(client) => return Ok(client),
                 Err(e) => {
                     if start.elapsed() >= max_duration {

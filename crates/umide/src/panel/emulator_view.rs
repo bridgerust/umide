@@ -215,12 +215,29 @@ impl View for NativeEmulatorWidget {
                                         view.attach_device(&device.id);
                                     }
 
-                                    // Android: start gRPC frame streaming (headless, no window)
-                                    // iOS: uses ScreenCaptureKit via attach_device (no gRPC needed)
+                                    // Android: start gRPC frame streaming (headless, no window).
+                                    // iOS: uses ScreenCaptureKit via attach_device (no gRPC needed).
+                                    // Resolve the device's discovered gRPC port + auth token from
+                                    // its serial so the native view streams externally-launched
+                                    // emulators (Android Studio) too — mirrors the portable path.
+                                    // Falls back to 8554 + no token (what UMIDE launches with).
                                     if view.is_android() {
-                                        view.start_grpc_stream(
-                                            "http://localhost:8554",
-                                        );
+                                        let (endpoint, token) = device
+                                            .serial
+                                            .as_deref()
+                                            .and_then(
+                                                umide_emulator::AndroidEmulator::grpc_discovery,
+                                            )
+                                            .map(|d| {
+                                                (
+                                                    format!("http://localhost:{}", d.port),
+                                                    d.token,
+                                                )
+                                            })
+                                            .unwrap_or_else(|| {
+                                                ("http://localhost:8554".to_string(), None)
+                                            });
+                                        view.start_grpc_stream(&endpoint, token);
                                     }
 
                                     *self.native_view.borrow_mut() = Some(view);
@@ -1090,19 +1107,21 @@ fn android_panel_portable(
 
     const ENDPOINT: &str = "http://localhost:8554";
 
-    // The gRPC endpoint of the device being viewed: its discovered port (so the
-    // panel connects to the *right* emulator, not just the default 8554) or the
-    // 8554 fallback. The serial resolves after boot; before then — or if the
-    // discovery file is absent — we use 8554, which is what the panel launches
-    // with. (A running emulator detected at app start already carries its
-    // serial, so an external emulator on a non-default port connects correctly.)
-    let endpoint_for = move || -> String {
+    // The gRPC endpoint + auth token of the device being viewed: its discovered
+    // port and (for an emulator launched outside UMIDE, e.g. Android Studio) the
+    // token it requires, so the panel connects to — and authenticates against —
+    // the *right* emulator instead of assuming the default 8554 with no token.
+    // The serial resolves after boot; before then — or if the discovery file is
+    // absent — we use 8554 with no token, which is what UMIDE launches with. (A
+    // running emulator detected at app start already carries its serial, so an
+    // external, token-authed emulator on a non-default port connects correctly.)
+    let endpoint_for = move || -> (String, Option<String>) {
         running_device
             .get_untracked()
             .and_then(|d| d.serial)
-            .and_then(|s| umide_emulator::AndroidEmulator::grpc_port(&s))
-            .map(|port| format!("http://localhost:{port}"))
-            .unwrap_or_else(|| ENDPOINT.to_string())
+            .and_then(|s| umide_emulator::AndroidEmulator::grpc_discovery(&s))
+            .map(|d| (format!("http://localhost:{}", d.port), d.token))
+            .unwrap_or_else(|| (ENDPOINT.to_string(), None))
     };
 
     // Start the gRPC frame stream and the input command connection exactly once
@@ -1117,9 +1136,14 @@ fn android_panel_portable(
     let native_size: RwSignal<Option<(u32, u32)>> = RwSignal::new(None);
     Effect::new(move |_| {
         if running_device.get().is_some() && !stream_started.get_untracked() {
-            let endpoint = endpoint_for();
-            start_emulator_stream(endpoint.clone(), frame_signal, native_size);
-            input_handle.set(Some(start_emulator_input(endpoint)));
+            let (endpoint, token) = endpoint_for();
+            start_emulator_stream(
+                endpoint.clone(),
+                token.clone(),
+                frame_signal,
+                native_size,
+            );
+            input_handle.set(Some(start_emulator_input(endpoint, token)));
             stream_started.set(true);
         }
     });
@@ -1564,8 +1588,10 @@ fn android_panel_portable(
                     clickable_icon(
                         || UmideIcons::DEVICE_SCREENSHOT,
                         move || {
+                            let (endpoint, token) = endpoint_for();
                             capture_screenshot(
-                                endpoint_for(),
+                                endpoint,
+                                token,
                                 default_screenshot_path(),
                             );
                         },

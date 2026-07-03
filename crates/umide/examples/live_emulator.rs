@@ -33,8 +33,8 @@ const ENDPOINT: &str = "http://localhost:8554";
 fn app() -> impl IntoView {
     let frame_signal: RwSignal<Option<Arc<DecodedFrame>>> = RwSignal::new(None);
     let native_size: RwSignal<Option<(u32, u32)>> = RwSignal::new(None);
-    start_emulator_stream(ENDPOINT.to_string(), frame_signal, native_size);
-    let input = start_emulator_input(ENDPOINT.to_string());
+    start_emulator_stream(ENDPOINT.to_string(), None, frame_signal, native_size);
+    let input = start_emulator_input(ENDPOINT.to_string(), None);
 
     let view_size = RwSignal::new(Size::ZERO);
     let pressed = RwSignal::new(false);

@@ -220,6 +220,14 @@ pub enum UmideWorkbenchCommand {
     #[strum(message = "Run on Device (Emulator/Simulator)")]
     RunOnDevice,
 
+    #[strum(serialize = "run_on_device_android")]
+    #[strum(message = "Run on Android")]
+    RunOnDeviceAndroid,
+
+    #[strum(serialize = "run_on_device_ios")]
+    #[strum(message = "Run on iOS")]
+    RunOnDeviceIos,
+
     #[strum(serialize = "reveal_active_file_in_file_explorer")]
     #[strum(message = "Reveal Active File in File Explorer")]
     RevealActiveFileInFileExplorer,

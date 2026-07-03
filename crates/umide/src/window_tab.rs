@@ -1652,54 +1652,15 @@ impl WindowTabData {
                     editor_data.go_to_implementation(self.clone());
                 }
             }
-            RunOnDevice => {
-                // The mobile core loop's RUN step: build + launch the detected
-                // RN/Flutter app on the embedded emulator/simulator, in a live
-                // terminal (interactive — flutter's hot-reload keys work). The
-                // target platform follows the device the user is viewing.
-                let Some(kind) = self.common.project_kind.get_untracked() else {
-                    self.show_message(
-                        "Run on Device",
-                        &ShowMessageParams {
-                            typ: MessageType::INFO,
-                            message: "No React Native / Flutter project \
-                                      detected in this workspace."
-                                .to_string(),
-                        },
-                    );
-                    return;
-                };
-                let workspace = self.common.workspace.path.clone();
-                let expo = workspace
-                    .as_deref()
-                    .is_some_and(crate::project::is_expo);
-                let device = self.panel.active_device.get_untracked();
-                let run = crate::project::run_on_device_command(
-                    kind,
-                    expo,
-                    device.as_ref(),
-                );
-                let config = RunDebugConfig {
-                    ty: None,
-                    name: run.name,
-                    program: run.program,
-                    args: (!run.args.is_empty()).then_some(run.args),
-                    // Strip the `\\?\` verbatim prefix — Gradle's gradlew.bat
-                    // won't run with a `\\?\`-prefixed CWD on Windows.
-                    cwd: workspace.as_deref().map(crate::project::plain_cwd),
-                    env: None,
-                    prelaunch: None,
-                    debug_command: None,
-                    dap_id: Default::default(),
-                    tracing_output: false,
-                    config_source: ConfigSource::RunInTerminal,
-                };
-                self.common.internal_command.send(
-                    InternalCommand::RunAndDebug {
-                        mode: RunDebugMode::Run,
-                        config,
-                    },
-                );
+            // The mobile core loop's RUN step. macOS can target either iOS or
+            // Android, so the top-bar buttons pick the platform explicitly;
+            // the palette `RunOnDevice` follows the viewed device.
+            RunOnDevice => self.run_on_device(None),
+            RunOnDeviceAndroid => {
+                self.run_on_device(Some(umide_emulator::DevicePlatform::Android))
+            }
+            RunOnDeviceIos => {
+                self.run_on_device(Some(umide_emulator::DevicePlatform::Ios))
             }
             RunInTerminal => {
                 if let Some(editor_data) =
@@ -3085,6 +3046,58 @@ impl WindowTabData {
         self.messages.update(|messages| {
             messages.push((title.to_string(), message.clone()));
         });
+    }
+
+    /// Build + launch the detected RN/Flutter app in a live terminal.
+    /// `platform` = the explicit target (a top-bar platform button), or `None`
+    /// to follow the device the user is viewing (defaulting to Android).
+    fn run_on_device(&self, platform: Option<umide_emulator::DevicePlatform>) {
+        let Some(kind) = self.common.project_kind.get_untracked() else {
+            self.show_message(
+                "Run on Device",
+                &ShowMessageParams {
+                    typ: MessageType::INFO,
+                    message: "No React Native / Flutter project detected in \
+                              this workspace."
+                        .to_string(),
+                },
+            );
+            return;
+        };
+        let workspace = self.common.workspace.path.clone();
+        let expo = workspace.as_deref().is_some_and(crate::project::is_expo);
+        let device = self.panel.active_device.get_untracked();
+        // Explicit platform wins; otherwise the viewed device's; else Android.
+        let platform = platform
+            .or(device.as_ref().map(|d| d.platform))
+            .unwrap_or(umide_emulator::DevicePlatform::Android);
+        let run = crate::project::run_on_device_command(
+            kind,
+            expo,
+            platform,
+            device.as_ref(),
+        );
+        let config = RunDebugConfig {
+            ty: None,
+            name: run.name,
+            program: run.program,
+            args: (!run.args.is_empty()).then_some(run.args),
+            // Strip the `\\?\` verbatim prefix — Gradle's gradlew.bat won't
+            // run with a `\\?\`-prefixed CWD on Windows.
+            cwd: workspace.as_deref().map(crate::project::plain_cwd),
+            env: None,
+            prelaunch: None,
+            debug_command: None,
+            dap_id: Default::default(),
+            tracing_output: false,
+            config_source: ConfigSource::RunInTerminal,
+        };
+        self.common
+            .internal_command
+            .send(InternalCommand::RunAndDebug {
+                mode: RunDebugMode::Run,
+                config,
+            });
     }
 
     pub fn update_code_lens_id(&self, view_id: Option<ViewId>) {

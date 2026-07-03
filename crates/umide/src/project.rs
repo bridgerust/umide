@@ -92,29 +92,29 @@ pub struct RunOnDevice {
     pub args: Vec<String>,
 }
 
-/// Compose the run command for the detected stack and the device the user is
-/// viewing (the panel's `active_device`). The target platform follows that
-/// device; with none running it defaults to Android (the emulator every OS
-/// has), and the tool's own device picker/errors surface in the terminal.
-/// Device pinning uses only well-supported flags: `flutter run -d <id>`
-/// everywhere, `react-native run-ios --udid`; bare `run-android` and Expo
-/// target the running emulator themselves.
+/// Compose the run command for the detected stack on an EXPLICIT target
+/// `platform` (macOS can run either iOS or Android, so the caller decides —
+/// from a platform button, or the viewed device). `device`, when it matches
+/// that platform, pins the target; otherwise the tool's own picker/boot
+/// handles it. Device pinning uses only well-supported flags: `flutter run
+/// -d <id>` everywhere, `react-native run-ios --udid`; bare `run-android` and
+/// Expo target the running emulator themselves.
 pub fn run_on_device_command(
     kind: ProjectKind,
     expo: bool,
+    platform: umide_emulator::DevicePlatform,
     device: Option<&umide_emulator::DeviceInfo>,
 ) -> RunOnDevice {
     use umide_emulator::DevicePlatform;
-    let platform = device
-        .map(|d| d.platform)
-        .unwrap_or(DevicePlatform::Android);
     let (platform_label, ios) = match platform {
         DevicePlatform::Android => ("Android", false),
         DevicePlatform::Ios => ("iOS", true),
     };
-    // Flutter pins by `-d <device id>`: the adb serial for Android, the
-    // simulator UDID for iOS (`DeviceInfo.id`).
-    let flutter_target = device.and_then(|d| match d.platform {
+    // Only pin the device if it's on the chosen platform (the viewed device
+    // may be the other kind). Flutter pins by `-d <device id>`: the adb serial
+    // for Android, the simulator UDID for iOS (`DeviceInfo.id`).
+    let device = device.filter(|d| d.platform == platform);
+    let flutter_target = device.and_then(|d| match platform {
         DevicePlatform::Android => d.serial.clone(),
         DevicePlatform::Ios => Some(d.id.clone()),
     });
@@ -225,15 +225,25 @@ mod tests {
 
     #[test]
     fn run_command_matrix() {
-        // Flutter pins the viewed device by id (adb serial / sim UDID).
-        let f =
-            run_on_device_command(ProjectKind::Flutter, false, Some(&android_dev()));
+        use umide_emulator::DevicePlatform::{Android, Ios};
+        // Flutter pins the chosen-platform device by id (adb serial / sim UDID).
+        let f = run_on_device_command(
+            ProjectKind::Flutter,
+            false,
+            Android,
+            Some(&android_dev()),
+        );
         assert_cmd(&f, "flutter", &["run", "-d", "emulator-5554"]);
-        let fi =
-            run_on_device_command(ProjectKind::Flutter, false, Some(&ios_dev()));
+        let fi = run_on_device_command(
+            ProjectKind::Flutter,
+            false,
+            Ios,
+            Some(&ios_dev()),
+        );
         assert_cmd(&fi, "flutter", &["run", "-d", "UDID-42"]);
         // No device: flutter's own picker handles it in the terminal.
-        let fnone = run_on_device_command(ProjectKind::Flutter, false, None);
+        let fnone =
+            run_on_device_command(ProjectKind::Flutter, false, Android, None);
         assert_cmd(&fnone, "flutter", &["run"]);
 
         // Bare RN: run-android targets the running emulator itself; run-ios
@@ -241,11 +251,16 @@ mod tests {
         let rn = run_on_device_command(
             ProjectKind::ReactNative,
             false,
+            Android,
             Some(&android_dev()),
         );
         assert_cmd(&rn, "npx", &["react-native", "run-android"]);
-        let rni =
-            run_on_device_command(ProjectKind::ReactNative, false, Some(&ios_dev()));
+        let rni = run_on_device_command(
+            ProjectKind::ReactNative,
+            false,
+            Ios,
+            Some(&ios_dev()),
+        );
         assert_cmd(
             &rni,
             "npx",
@@ -256,13 +271,26 @@ mod tests {
         let ex = run_on_device_command(
             ProjectKind::ReactNative,
             true,
+            Android,
             Some(&android_dev()),
         );
         assert_cmd(&ex, "npx", &["expo", "run:android"]);
         assert!(ex.name.contains("Expo") && ex.name.contains("Android"));
 
-        // No device defaults to Android (the platform every OS can run).
-        let none = run_on_device_command(ProjectKind::ReactNative, false, None);
+        // Explicit iOS while viewing an ANDROID device: the mismatched device
+        // is ignored, so no `--udid` — the tool boots/selects a simulator.
+        let ios_no_pin = run_on_device_command(
+            ProjectKind::ReactNative,
+            false,
+            Ios,
+            Some(&android_dev()),
+        );
+        assert_cmd(&ios_no_pin, "npx", &["react-native", "run-ios"]);
+        assert!(ios_no_pin.name.contains("iOS"));
+
+        // No device, explicit Android.
+        let none =
+            run_on_device_command(ProjectKind::ReactNative, false, Android, None);
         assert_cmd(&none, "npx", &["react-native", "run-android"]);
     }
 
@@ -271,9 +299,11 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn run_command_windows_wraps_in_cmd() {
+        use umide_emulator::DevicePlatform::Android;
         let rn = run_on_device_command(
             ProjectKind::ReactNative,
             false,
+            Android,
             Some(&android_dev()),
         );
         assert_eq!(rn.program, "cmd");

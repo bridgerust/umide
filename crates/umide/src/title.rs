@@ -427,6 +427,60 @@ fn middle(
         }
     };
 
+    // A prominent primary-accent Run button. `cmd` runs the app on the given
+    // platform; `label` names it. Shown only for a detected mobile project.
+    let run_button = move |cmd: UmideWorkbenchCommand, label: &'static str| {
+        Stack::new((
+            svg(move || config.get().ui_svg(UmideIcons::DEBUG_CONTINUE)).style(
+                move |s| {
+                    s.size(13.0, 13.0).color(
+                        config
+                            .get()
+                            .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+                    )
+                },
+            ),
+            Label::new(label.to_string()).style(move |s| {
+                s.margin_left(6.0)
+                    .font_size(12.0)
+                    .font_bold()
+                    .selectable(false)
+                    .color(
+                        config
+                            .get()
+                            .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
+                    )
+            }),
+        ))
+        .on_click_stop(move |_| workbench_command.send(cmd.clone()))
+        .style(move |s| {
+            let config = config.get();
+            s.apply_if(project_kind.get().is_none(), |s| s.hide())
+                .items_center()
+                .height(26.0)
+                .padding_horiz(12.0)
+                .margin_horiz(4.0)
+                .border_radius(6.0)
+                .background(
+                    config.color(UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
+                )
+                .cursor(CursorStyle::Pointer)
+                .hover(|s| s.opacity(0.85))
+        })
+    };
+    // macOS can run either platform → one button each; other OSes only have
+    // Android (iOS Simulator is macOS-only) → a single "Run" button.
+    #[cfg(target_os = "macos")]
+    let run_buttons = Stack::new((
+        run_button(UmideWorkbenchCommand::RunOnDeviceAndroid, "Android"),
+        run_button(UmideWorkbenchCommand::RunOnDeviceIos, "iOS"),
+    ))
+    .style(|s| s.items_center())
+    .into_any();
+    #[cfg(not(target_os = "macos"))]
+    let run_buttons =
+        run_button(UmideWorkbenchCommand::RunOnDeviceAndroid, "Run").into_any();
+
     Stack::new((
         Stack::new((
             drag_window_area(Empty::new())
@@ -484,67 +538,12 @@ fn middle(
                 .background(config.color(UmideColor::EDITOR_BACKGROUND))
         }),
         Stack::new((
-            // Prominent "▶ Run" button — the mobile core loop's RUN step, up
-            // top where it can't be missed (the status-bar footer is for
-            // passive info, not the first place you look for Run). Runs the
-            // detected RN/Flutter app on the viewed device; shown only for a
-            // detected mobile project, labelled with the stack.
-            Stack::new((
-                svg(move || config.get().ui_svg(UmideIcons::DEBUG_CONTINUE)).style(
-                    move |s| {
-                        s.size(13.0, 13.0).color(
-                            config
-                                .get()
-                                .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
-                        )
-                    },
-                ),
-                Label::derived(move || {
-                    project_kind
-                        .get()
-                        .map(|k| format!("Run · {}", k.label()))
-                        .unwrap_or_else(|| "Run".to_string())
-                })
-                .style(move |s| {
-                    s.margin_left(6.0)
-                        .font_size(12.0)
-                        .font_bold()
-                        .color(
-                            config
-                                .get()
-                                .color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND),
-                        )
-                        .selectable(false)
-                }),
-            ))
-            .on_click_stop(move |_| {
-                workbench_command.send(UmideWorkbenchCommand::RunOnDevice);
-            })
-            .style(move |s| {
-                let config = config.get();
-                s.apply_if(project_kind.get().is_none(), |s| s.hide())
-                    .items_center()
-                    .height(26.0)
-                    .padding_horiz(12.0)
-                    .margin_horiz(8.0)
-                    .border_radius(6.0)
-                    .background(
-                        config.color(UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
-                    )
-                    .cursor(CursorStyle::Pointer)
-                    .hover(|s| s.opacity(0.85))
-            }),
-            clickable_icon(
-                || UmideIcons::START,
-                move || {
-                    workbench_command.send(UmideWorkbenchCommand::PaletteRunAndDebug)
-                },
-                || false,
-                || false,
-                || "Run and Debug",
-                config,
-            )
-            .style(move |s| s.margin_horiz(6.0)),
+            // Prominent Run button(s) — the mobile core loop's RUN step, up top
+            // where it can't be missed (the status-bar footer is for passive
+            // info). On macOS one button per platform so the user picks iOS or
+            // Android; elsewhere a single Run (Android). The generic Run-and-
+            // Debug palette icon is gone — for mobile these ARE the run entry.
+            run_buttons,
             drag_window_area(Empty::new())
                 .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
         ))

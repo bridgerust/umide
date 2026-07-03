@@ -23,13 +23,18 @@ and add a note under *Open asks* before touching the other's area.
 
 ## Active WIP branches (push early — no PR needed to share)
 
-- **Windows** → `fix/floem-central-queue-gc` — **v0.3.3 HOTFIX in flight.
-  ⚠ v0.3.2 freezes (100% core) whenever a device streams logs — pull main
-  before any further testing.** Root cause in the floem fork: messages for
-  removed views retained + re-scanned forever; Device-Logs row churn grew the
-  pile unbounded. Fixed in `bridgerust/floem@ee8cd8a` (feat/external-texture:
-  drop-on-removal + 64-pass retention budget); umide re-pins the rev, bumps
-  0.3.3. Verified live on Windows: pegged core → ~7% while streaming.
+- **v0.3.3 SHIPPED** — the streaming-logs freeze is fixed on `main`
+  (`bridgerust/floem@ee8cd8a`: GC unroutable central-queue messages). Pull main.
+- **Windows** → `fix/run-on-device-windows` (PR pending) — ▶ Run-on-Device did
+  nothing on Windows: the run terminal's CreateProcess can't execute `npx.cmd`/
+  `flutter.bat` shims, so it spawned a ConPTY and died silently. Now wraps as
+  `cmd /C <tool> …` on Windows only (args are fixed tool words + serials, no
+  metachars). Verifying the full build+install on the Pixel now.
+- **Mac** → AI assistant → LEFT icon rail (task #40, user request) — chat gets
+  full vertical height. **⚠ coordinate the `PANEL_LAYOUT_VERSION` bump +
+  `migrate_dock_layout` arm with Windows's duplicate-Terminal fix (task #41),
+  which edits the same `default_panel_order`/migration — one of us bumps the
+  version, the other rebases.**
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 

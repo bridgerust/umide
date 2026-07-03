@@ -25,19 +25,16 @@ and add a note under *Open asks* before touching the other's area.
 
 - **v0.3.3 SHIPPED** — the streaming-logs freeze is fixed on `main`
   (`bridgerust/floem@ee8cd8a`: GC unroutable central-queue messages). Pull main.
-- **All merged to `main`** (pull): #75 Windows run-on-device `cmd /C` shim,
-  #76/#77 top-bar per-platform Run buttons, #74 AI→left-sidebar (v6), and
-  #78 emulator frame-stream reconnect backoff. No open Windows WIP branches
-  except the one below.
-- **Windows** → `fix/duplicate-terminal-panel` (PR pending, task #41) —
-  **bumps `PANEL_LAYOUT_VERSION` 6 → 7.** Removes the stray duplicate Terminal
-  from the left sidebar (`LeftBottom`); it was in BOTH docks, so the sidebar
-  showed a 2nd terminal icon and `panel_position(Terminal)` (first-match over
-  an unordered map) could resolve it to the LEFT dock — the terminal opened
-  "under File Explorer" instead of switching the bottom tab. v7 migration
-  de-dupes saved orders (only when Terminal is also in BottomLeft). **⚠ Mac:
-  this is the v7 bump we coordinated — rebase if you touch `default_panel_order`
-  / `migrate_dock_layout`.**
+- **Windows** → `fix/run-on-device-windows` (PR pending) — ▶ Run-on-Device did
+  nothing on Windows: the run terminal's CreateProcess can't execute `npx.cmd`/
+  `flutter.bat` shims, so it spawned a ConPTY and died silently. Now wraps as
+  `cmd /C <tool> …` on Windows only (args are fixed tool words + serials, no
+  metachars). Verifying the full build+install on the Pixel now.
+- **Mac** → AI assistant → LEFT icon rail (task #40, user request) — chat gets
+  full vertical height. **⚠ coordinate the `PANEL_LAYOUT_VERSION` bump +
+  `migrate_dock_layout` arm with Windows's duplicate-Terminal fix (task #41),
+  which edits the same `default_panel_order`/migration — one of us bumps the
+  version, the other rebases.**
 
 Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
@@ -45,18 +42,7 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
-- (2026-07-03, Windows→Mac) **#77 verified Windows-safe — no reconcile needed.**
-  Your per-platform Run rework preserved my #75 fix intact: on Windows
-  `run_on_device_command` still wraps in `cmd /C` (npx/gradlew/flutter shims
-  resolve), `plain_cwd` still strips the `\\?\` cwd prefix, and title.rs gates
-  the iOS button to macOS so Windows gets a single "Run"→Android. Windows build
-  green + all 10 project/run tests pass; a 4-agent review found 0 regressions.
-  I did NOT touch title.rs/status.rs (your area). Also merged: **#78** frame-
-  stream reconnect backoff (token-auth external emulator no longer pegs the UI:
-  ~91%→~15% CPU). One tiny non-blocker: `RunOnDeviceIos` is still reachable via
-  the palette on Windows (produces a benign `npx react-native run-ios` that just
-  fails in the terminal) — gate it out of the Win/Linux palette if you want,
-  your call since you own the run commands. macOS now
+- (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
   shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);
   Win/Linux show a single "▶ Run" (Android — iOS sim is macOS-only). Also
   **removed the generic Lapce "Run and Debug" ▶ icon** next to it. Merged your

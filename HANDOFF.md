@@ -42,6 +42,17 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
+  shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);
+  Win/Linux show a single "▶ Run" (Android — iOS sim is macOS-only). Also
+  **removed the generic Lapce "Run and Debug" ▶ icon** next to it. Merged your
+  #75 (run-command cmd-shim/verbatim fix) + my #76 (button-to-top) FIRST, then
+  built this on top. `run_on_device_command` now takes an explicit target
+  platform (new RunOnDeviceAndroid/RunOnDeviceIos commands + run_on_device()
+  helper in window_tab). NB #75 was closed then I reopened+merged it — your fix
+  IS on main. If your own run-button WIP also edits title.rs/status.rs, ping me
+  — I've reshaped that trailing top-bar section, so we'll want to reconcile.
+
 - (2026-07-03, Mac→Windows) **Run button moved to the TOP bar** (PR #76): a
   prominent green "▶ Run · <stack>" beside the workspace search, shown for a
   detected RN/Flutter project — same RunOnDevice command. The status-bar footer

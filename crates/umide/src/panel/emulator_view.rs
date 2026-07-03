@@ -675,17 +675,25 @@ fn ios_panel_portable(
     current_device_id: RwSignal<String>,
     config: floem::reactive::ReadSignal<Arc<crate::config::UmideConfig>>,
 ) -> impl View {
-    use crate::panel::ios_stream::{IosStreamHandle, start_ios_stream};
+    use crate::panel::emulator_stream::view_to_device;
+    use crate::panel::ios_stream::{IosInput, IosStreamHandle, start_ios_stream};
+    use floem::event::{Event, EventListener};
+    use floem::kurbo::Size;
+    use floem::prelude::{Key, NamedKey};
     use floem::style::Position;
     use floem::views::{RgbaFrame, video_frame};
+    use umide_emulator::ios_grpc::hid_usage;
 
     // The running stream (boots the sim headless + polls frames). Held for the
     // panel's lifetime of the run; dropped on Stop to end the loop and kill the
-    // companion. `native_size` is probed from the first frame (for future input
-    // mapping); `status` drives the connecting overlay.
+    // companion. `native_size` (pixels, from the first frame) + `point_scale`
+    // (pixels per point, from `describe`) drive input mapping; `status` drives
+    // the connecting overlay; `input_handle` sends HID gestures.
     let stream_handle: RwSignal<Option<Rc<IosStreamHandle>>> = RwSignal::new(None);
     let native_size: RwSignal<Option<(u32, u32)>> = RwSignal::new(None);
     let status: RwSignal<Option<String>> = RwSignal::new(None);
+    let input_handle: RwSignal<Option<IosInput>> = RwSignal::new(None);
+    let point_scale: RwSignal<Option<f64>> = RwSignal::new(None);
     let stream_started = RwSignal::new(false);
 
     // Start the headless stream once a device begins running. Unlike the
@@ -699,6 +707,8 @@ fn ios_panel_portable(
                     frame_signal,
                     native_size,
                     status,
+                    input_handle,
+                    point_scale,
                 ) {
                     stream_handle.set(Some(Rc::new(handle)));
                     stream_started.set(true);
@@ -714,6 +724,49 @@ fn ios_panel_portable(
         frame_signal.set(None);
         native_size.set(None);
         status.set(None);
+        input_handle.set(None);
+        point_scale.set(None);
+    };
+
+    // Pointer → HID mapping. The idb HID has no touch-move: a gesture is a tap
+    // (press down/up) or a swipe (interpolated path), so we record where the
+    // pointer went down and decide on release — moved beyond a small threshold
+    // ⇒ swipe with the measured duration, else tap. Coordinates go view →
+    // native pixels (aspect-preserving letterbox, same mapping as Android) →
+    // POINTS (÷ point_scale).
+    let view_size = RwSignal::new(Size::ZERO);
+    let press_start: RwSignal<Option<((f64, f64), std::time::Instant)>> =
+        RwSignal::new(None);
+
+    let to_points = move |e: &Event| -> Option<(f64, f64)> {
+        let p = e.point()?;
+        let sz = view_size.get_untracked();
+        let f = frame_signal.get_untracked()?;
+        let (dw, dh) = match native_size.get_untracked() {
+            Some((w, h)) if w > 0 && h > 0 => (w, h),
+            _ => (f.width, f.height),
+        };
+        let (px, py) = view_to_device(p.x, p.y, sz.width, sz.height, dw, dh)?;
+        let scale = point_scale.get_untracked().unwrap_or(3.0);
+        Some((px as f64 / scale, py as f64 / scale))
+    };
+
+    // Below this movement (in points) a gesture is a tap, not a swipe.
+    const TAP_SLOP_PTS: f64 = 8.0;
+
+    // Named keys → HID usage codes; characters go through char_to_hid.
+    let to_hid_key = |key: &Key| -> Option<u64> {
+        Some(match key {
+            Key::Named(NamedKey::Enter) => hid_usage::ENTER,
+            Key::Named(NamedKey::Backspace) => hid_usage::BACKSPACE,
+            Key::Named(NamedKey::Tab) => hid_usage::TAB,
+            Key::Named(NamedKey::Escape) => hid_usage::ESCAPE,
+            Key::Named(NamedKey::ArrowUp) => hid_usage::ARROW_UP,
+            Key::Named(NamedKey::ArrowDown) => hid_usage::ARROW_DOWN,
+            Key::Named(NamedKey::ArrowLeft) => hid_usage::ARROW_LEFT,
+            Key::Named(NamedKey::ArrowRight) => hid_usage::ARROW_RIGHT,
+            _ => return None,
+        })
     };
 
     let device_item = move |device: DeviceInfo| {
@@ -858,7 +911,60 @@ fn ios_panel_portable(
                             })
                         })
                     })
-                    .style(|s| s.size_full()),
+                    .on_resize(move |rect| view_size.set(rect.size()))
+                    // Tap-or-swipe: record the press, decide on release (the
+                    // idb HID has no touch-move — see `to_points`).
+                    .on_event_stop(EventListener::PointerDown, move |e| {
+                        if let Some(pt) = to_points(e) {
+                            press_start.set(Some((pt, std::time::Instant::now())));
+                        }
+                    })
+                    .on_event_stop(EventListener::PointerUp, move |e| {
+                        let Some((start, at)) = press_start.get_untracked() else {
+                            return;
+                        };
+                        press_start.set(None);
+                        let Some(input) = input_handle.get_untracked() else {
+                            return;
+                        };
+                        let end = to_points(e).unwrap_or(start);
+                        let dist = ((end.0 - start.0).powi(2)
+                            + (end.1 - start.1).powi(2))
+                        .sqrt();
+                        if dist < TAP_SLOP_PTS {
+                            input.tap(end.0, end.1);
+                        } else {
+                            // Swipe over the measured gesture time, clamped to
+                            // something the synthesizer animates sensibly.
+                            let secs = at.elapsed().as_secs_f64().clamp(0.05, 1.0);
+                            input.swipe(start, end, secs);
+                        }
+                    })
+                    // Keyboard: characters + the common named keys, as HID
+                    // usage codes. The view is focusable, so clicking into the
+                    // device routes typing here (same as the Android panel).
+                    .on_event_stop(EventListener::KeyDown, move |e| {
+                        if let Event::Key(ke) = e {
+                            let Some(input) = input_handle.get_untracked() else {
+                                return;
+                            };
+                            match &ke.key {
+                                // Space arrives as Character(" "), so the
+                                // char arm covers it too.
+                                Key::Character(text) => {
+                                    for c in text.chars() {
+                                        input.ch(c);
+                                    }
+                                }
+                                other => {
+                                    if let Some(usage) = to_hid_key(other) {
+                                        input.key(usage, false);
+                                    }
+                                }
+                            }
+                        }
+                    })
+                    .style(|s| s.size_full().focusable(true)),
                     // Status overlay (boot/connect messages), pointer-transparent,
                     // hidden once frames arrive.
                     Container::new(

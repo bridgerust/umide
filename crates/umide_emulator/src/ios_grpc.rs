@@ -7,7 +7,8 @@
 //! `idb_companion --udid <udid>` is spawned per device, prints its gRPC port
 //! on stdout, and serves the `idb.CompanionService` from `proto/idb.proto`
 //! (vendored at the installed companion's version, v1.1.8). Input rides the
-//! `hid` RPC (a follow-up).
+//! `hid` RPC: taps/swipes in screen POINTS (verified live — a points-space tap
+//! opened Safari; pixel-space landed nowhere), keys as USB-HID usage codes.
 //!
 //! **Headless recipe (verified live).** The load-bearing discovery: a device
 //! booted with `simctl boot` has NO rendering surface, so every frame-capture
@@ -214,6 +215,198 @@ pub async fn screenshot(
         .await?
         .into_inner();
     Ok((resp.image_data, resp.image_format))
+}
+
+/// The device's screen geometry from the `describe` RPC:
+/// `(width_px, height_px, width_points, height_points, density)`. The HID
+/// touch space is POINTS, the frames are PIXELS — the panel divides by
+/// `width_px / width_points` (or `density`) to map between them.
+pub async fn screen_dimensions(
+    client: &mut CompanionClient,
+) -> Result<Option<(u64, u64, u64, u64, f64)>, tonic::Status> {
+    let resp = client
+        .describe(idb_proto::TargetDescriptionRequest {
+            fetch_diagnostics: false,
+        })
+        .await?
+        .into_inner();
+    Ok(resp
+        .target_description
+        .and_then(|t| t.screen_dimensions)
+        .map(|d| {
+            (
+                d.width,
+                d.height,
+                d.width_points,
+                d.height_points,
+                d.density,
+            )
+        }))
+}
+
+/// Synthesize a TAP at `(x, y)` via the `hid` client-streaming RPC: touch
+/// press DOWN → short delay → touch press UP, one stream per gesture (the
+/// pattern `idb ui tap` itself uses). Coordinate space: screen POINTS
+/// (logical), not pixels — verified empirically on an iPhone 16 (pixels ÷
+/// scale; see `ios_stream`'s mapping).
+pub async fn hid_tap(
+    client: &mut CompanionClient,
+    x: f64,
+    y: f64,
+) -> Result<(), tonic::Status> {
+    let events = vec![
+        touch_press(hid_event::HidDirection::Down, x, y),
+        hid_delay(0.05),
+        touch_press(hid_event::HidDirection::Up, x, y),
+    ];
+    client.hid(tokio_stream::iter(events)).await?;
+    Ok(())
+}
+
+/// Synthesize a SWIPE from `start` to `end` over `duration` seconds (screen
+/// points). One `HIDSwipe` event; the companion interpolates the path.
+pub async fn hid_swipe(
+    client: &mut CompanionClient,
+    start: (f64, f64),
+    end: (f64, f64),
+    duration: f64,
+) -> Result<(), tonic::Status> {
+    let ev = idb_proto::HidEvent {
+        event: Some(hid_event::Event::Swipe(hid_event::HidSwipe {
+            start: Some(idb_proto::Point {
+                x: start.0,
+                y: start.1,
+            }),
+            end: Some(idb_proto::Point { x: end.0, y: end.1 }),
+            delta: 0.0,
+            duration,
+        })),
+    };
+    client.hid(tokio_stream::iter(vec![ev])).await?;
+    Ok(())
+}
+
+/// Press-and-release one USB-HID keyboard usage code (page 0x07), with
+/// optional Left-Shift wrapped around it for shifted characters.
+pub async fn hid_key(
+    client: &mut CompanionClient,
+    keycode: u64,
+    shifted: bool,
+) -> Result<(), tonic::Status> {
+    const LEFT_SHIFT: u64 = 225;
+    let mut events = Vec::new();
+    if shifted {
+        events.push(key_press(hid_event::HidDirection::Down, LEFT_SHIFT));
+    }
+    events.push(key_press(hid_event::HidDirection::Down, keycode));
+    events.push(key_press(hid_event::HidDirection::Up, keycode));
+    if shifted {
+        events.push(key_press(hid_event::HidDirection::Up, LEFT_SHIFT));
+    }
+    client.hid(tokio_stream::iter(events)).await?;
+    Ok(())
+}
+
+fn touch_press(
+    direction: hid_event::HidDirection,
+    x: f64,
+    y: f64,
+) -> idb_proto::HidEvent {
+    idb_proto::HidEvent {
+        event: Some(hid_event::Event::Press(hid_event::HidPress {
+            action: Some(hid_event::HidPressAction {
+                action: Some(hid_event::hid_press_action::Action::Touch(
+                    hid_event::HidTouch {
+                        point: Some(idb_proto::Point { x, y }),
+                    },
+                )),
+            }),
+            direction: direction as i32,
+        })),
+    }
+}
+
+fn key_press(
+    direction: hid_event::HidDirection,
+    keycode: u64,
+) -> idb_proto::HidEvent {
+    idb_proto::HidEvent {
+        event: Some(hid_event::Event::Press(hid_event::HidPress {
+            action: Some(hid_event::HidPressAction {
+                action: Some(hid_event::hid_press_action::Action::Key(
+                    hid_event::HidKey { keycode },
+                )),
+            }),
+            direction: direction as i32,
+        })),
+    }
+}
+
+fn hid_delay(seconds: f64) -> idb_proto::HidEvent {
+    idb_proto::HidEvent {
+        event: Some(hid_event::Event::Delay(hid_event::HidDelay {
+            duration: seconds,
+        })),
+    }
+}
+
+use idb_proto::hid_event;
+
+/// Map a typed character to its USB-HID usage code (page 0x07) + whether Shift
+/// is needed. Covers the practical typing set; `None` for unmapped chars.
+pub fn char_to_hid(c: char) -> Option<(u64, bool)> {
+    Some(match c {
+        'a'..='z' => (4 + (c as u64 - 'a' as u64), false),
+        'A'..='Z' => (4 + (c.to_ascii_lowercase() as u64 - 'a' as u64), true),
+        '1'..='9' => (30 + (c as u64 - '1' as u64), false),
+        '0' => (39, false),
+        '!' => (30, true),
+        '@' => (31, true),
+        '#' => (32, true),
+        '$' => (33, true),
+        '%' => (34, true),
+        '^' => (35, true),
+        '&' => (36, true),
+        '*' => (37, true),
+        '(' => (38, true),
+        ')' => (39, true),
+        ' ' => (44, false),
+        '-' => (45, false),
+        '_' => (45, true),
+        '=' => (46, false),
+        '+' => (46, true),
+        '[' => (47, false),
+        '{' => (47, true),
+        ']' => (48, false),
+        '}' => (48, true),
+        '\\' => (49, false),
+        '|' => (49, true),
+        ';' => (51, false),
+        ':' => (51, true),
+        '\'' => (52, false),
+        '"' => (52, true),
+        '`' => (53, false),
+        '~' => (53, true),
+        ',' => (54, false),
+        '<' => (54, true),
+        '.' => (55, false),
+        '>' => (55, true),
+        '/' => (56, false),
+        '?' => (56, true),
+        _ => return None,
+    })
+}
+
+/// USB-HID usage codes for the named keys the panel forwards.
+pub mod hid_usage {
+    pub const ENTER: u64 = 40;
+    pub const ESCAPE: u64 = 41;
+    pub const BACKSPACE: u64 = 42;
+    pub const TAB: u64 = 43;
+    pub const ARROW_RIGHT: u64 = 79;
+    pub const ARROW_LEFT: u64 = 80;
+    pub const ARROW_DOWN: u64 = 81;
+    pub const ARROW_UP: u64 = 82;
 }
 
 /// H.264 payload bytes out of one stream message, if it carries any.

@@ -16,6 +16,7 @@ syntax = "proto3";
 package idb;
 
 service CompanionService {
+  rpc describe(TargetDescriptionRequest) returns (TargetDescriptionResponse) {}
   rpc hid(stream HIDEvent) returns (HIDResponse) {}
   rpc screenshot(ScreenshotRequest) returns (ScreenshotResponse) {}
   rpc video_stream(stream VideoStreamRequest)
@@ -33,6 +34,29 @@ message Payload {
     GZIP = 0;
     ZSTD = 1;
   }
+}
+
+// describe: only the fields UMIDE reads are declared — proto3 skips unknown
+// fields, so the companion's fuller TargetDescription decodes fine against
+// this subset (field numbers match the full v1.1.8 file).
+message TargetDescriptionRequest {
+  bool fetch_diagnostics = 1;
+}
+
+message TargetDescriptionResponse {
+  TargetDescription target_description = 1;
+}
+
+message TargetDescription {
+  ScreenDimensions screen_dimensions = 3;
+}
+
+message ScreenDimensions {
+  uint64 width = 1;
+  uint64 height = 2;
+  double density = 3;
+  uint64 width_points = 4;
+  uint64 height_points = 5;
 }
 
 message ScreenshotRequest {}

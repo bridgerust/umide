@@ -59,6 +59,81 @@ pub fn embedded_ios_available() -> bool {
     ios_grpc::IosCompanion::available()
 }
 
+/// One queued input gesture for the worker.
+enum IosInputEvent {
+    /// Tap at (x, y) in screen POINTS.
+    Tap(f64, f64),
+    /// Swipe start→end in screen POINTS over `duration` seconds.
+    Swipe((f64, f64), (f64, f64), f64),
+    /// One USB-HID keyboard usage code (+ shift).
+    Key(u64, bool),
+    /// One typed character (mapped to usage + shift internally).
+    Char(char),
+}
+
+/// Input sender for the embedded iOS panel — the iOS twin of `EmulatorInput`.
+/// Gestures are queued over a bounded channel into a worker task that performs
+/// them via the companion's `hid` RPC (one short client-stream per gesture,
+/// the same pattern `idb ui tap` uses). `try_send` + bounded: input is dropped
+/// rather than queued unboundedly if the device can't keep up.
+#[derive(Clone)]
+pub struct IosInput {
+    tx: tokio::sync::mpsc::Sender<IosInputEvent>,
+}
+
+impl IosInput {
+    pub fn tap(&self, x: f64, y: f64) {
+        let _ = self.tx.try_send(IosInputEvent::Tap(x, y));
+    }
+    pub fn swipe(&self, start: (f64, f64), end: (f64, f64), duration: f64) {
+        let _ = self.tx.try_send(IosInputEvent::Swipe(start, end, duration));
+    }
+    pub fn key(&self, usage: u64, shifted: bool) {
+        let _ = self.tx.try_send(IosInputEvent::Key(usage, shifted));
+    }
+    pub fn ch(&self, c: char) {
+        let _ = self.tx.try_send(IosInputEvent::Char(c));
+    }
+}
+
+/// Spawn the input worker on the stream's runtime: its own gRPC connection to
+/// the same companion, draining the gesture queue.
+fn spawn_input_worker(port: u16) -> (IosInput, tokio::task::JoinHandle<()>) {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<IosInputEvent>(64);
+    let handle = tokio::spawn(async move {
+        let mut client = match ios_grpc::connect(port).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("ios input connect failed: {e}");
+                return;
+            }
+        };
+        while let Some(ev) = rx.recv().await {
+            let res = match ev {
+                IosInputEvent::Tap(x, y) => {
+                    ios_grpc::hid_tap(&mut client, x, y).await
+                }
+                IosInputEvent::Swipe(s, e, d) => {
+                    ios_grpc::hid_swipe(&mut client, s, e, d).await
+                }
+                IosInputEvent::Key(usage, shifted) => {
+                    ios_grpc::hid_key(&mut client, usage, shifted).await
+                }
+                IosInputEvent::Char(c) => match ios_grpc::char_to_hid(c) {
+                    Some((usage, shifted)) => {
+                        ios_grpc::hid_key(&mut client, usage, shifted).await
+                    }
+                    None => Ok(()),
+                },
+            };
+            if let Err(e) = res {
+                tracing::warn!("ios hid gesture failed: {e}");
+            }
+        }
+    });
+    (IosInput { tx }, handle)
+}
+
 /// Boot `udid` headless, serve it over gRPC, and poll frames into
 /// `frame_signal`. `native_size` receives the device's native pixel size once
 /// (first frame), so pointer input can map to native coordinates like the
@@ -72,6 +147,10 @@ pub fn start_ios_stream(
     frame_signal: RwSignal<Option<Arc<DecodedFrame>>>,
     native_size: RwSignal<Option<(u32, u32)>>,
     status: RwSignal<Option<String>>,
+    // Set once connected: the HID input sender and the pixels-per-point scale
+    // (from the `describe` RPC; HID touch is in POINTS, frames in PIXELS).
+    input_out: RwSignal<Option<IosInput>>,
+    point_scale: RwSignal<Option<f64>>,
 ) -> Option<IosStreamHandle> {
     if !embedded_ios_available() {
         return None;
@@ -83,6 +162,10 @@ pub fn start_ios_stream(
     update_signal_from_channel(native_size.write_only(), nrx);
     let (stx, srx) = mpsc::channel::<String>();
     update_signal_from_channel(status.write_only(), srx);
+    let (itx, irx) = mpsc::channel::<IosInput>();
+    update_signal_from_channel(input_out.write_only(), irx);
+    let (sctx, scrx) = mpsc::channel::<f64>();
+    update_signal_from_channel(point_scale.write_only(), scrx);
 
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = stop.clone();
@@ -126,6 +209,22 @@ pub fn start_ios_stream(
                     }
                 };
 
+                // Pixels-per-point scale for HID mapping (frames are pixels,
+                // touch is points). `describe` gives both; fall back to @3x —
+                // right for every current iPhone — if it doesn't answer.
+                let scale = match ios_grpc::screen_dimensions(&mut client).await {
+                    Ok(Some((w_px, _, w_pts, _, density))) if w_pts > 0 => {
+                        let s = w_px as f64 / w_pts as f64;
+                        if s > 0.5 { s } else { density.max(1.0) }
+                    }
+                    Ok(_) | Err(_) => 3.0,
+                };
+                let _ = sctx.send(scale);
+
+                // Input worker: its own connection to the same companion.
+                let (input, input_task) = spawn_input_worker(port);
+                let _ = itx.send(input);
+
                 let interval = Duration::from_millis(1000 / TARGET_FPS.max(1));
                 let mut decoder_for_size_probe = true;
                 let mut announced = false;
@@ -166,7 +265,8 @@ pub fn start_ios_stream(
                         tokio::time::sleep(rem).await;
                     }
                 }
-                // `companion` drops here → the child idb_companion is killed.
+                // Wind down: stop the input worker, then kill the companion.
+                input_task.abort();
                 drop(companion);
             });
         })

@@ -1,5 +1,8 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
+  - name: 💬 Beta discussion & questions
+    url: https://github.com/bridgerust/umide/discussions
+    about: "Open-ended feedback, ideas, and Q&A about the beta — no repro needed."
   - name: Umide community on Discord
     url: https://discord.gg/n8tGJ6Rn6D
     about: Please ask and answer questions here.

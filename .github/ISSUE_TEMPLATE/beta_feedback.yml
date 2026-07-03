@@ -1,0 +1,71 @@
+name: "Beta feedback / bug report"
+description: "Report a bug or share feedback on the UMIDE v0.4.0 beta."
+title: "[beta] "
+labels: ["beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the UMIDE beta! For open-ended questions or ideas,
+        prefer [Discussions](https://github.com/bridgerust/umide/discussions).
+        Use this form for something that's broken or wrong.
+  - type: input
+    id: version
+    attributes:
+      label: UMIDE version
+      description: "Help → About, or the download you installed."
+      placeholder: "v0.4.0-beta.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - "macOS (Apple Silicon)"
+        - "macOS (Intel)"
+        - "Windows"
+        - "Linux"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - "Embedded iOS Simulator"
+        - "Embedded Android emulator"
+        - "Run on Device"
+        - "Device Logs"
+        - "AI assistant"
+        - "Editor / layout"
+        - "Install / update"
+        - "Other"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device / framework (if relevant)
+      placeholder: "iPhone 16 sim / Pixel_9a · React Native 0.75 / Flutter 3.x"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: "What did you do, what did you expect, what happened instead?"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a React Native project
+        2. Click ▶ iOS
+        3. …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: "Relevant Device Logs output, a screenshot, or the debug log (temp dir → umide_debug.log). Drag files in."
+      render: shell

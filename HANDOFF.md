@@ -42,6 +42,19 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-03, Mac) **v0.4.0-beta.1 RELEASE PREP up (PR pending, NOT tagged).**
+  Branch `release/v0.4.0-beta.1`: version bumped 0.3.3 → **0.4.0** in
+  Cargo.toml/Cargo.lock/umide.spec/Info.plist (kept NUMERIC — the MSI regex +
+  RPM Version field reject a `-beta` suffix; beta-ness rides the git TAG
+  `v0.4.0-beta.1`, which release.yml turns into a GitHub prerelease). CHANGELOG
+  v0.4.0-beta.1 entry, README + docs/index.html refreshed (embedded iOS, top-bar
+  per-platform Run, AI in sidebar; download links → /releases since /latest
+  skips prereleases), new BETA.md guide, beta issue template + Discussions link
+  config. Created the `beta` label + enabled repo Discussions. **NOT tagging
+  until Josias gives the go** (a tag = outward publish). To ship: push tag
+  `v0.4.0-beta.1` (release.yml builds notarized DMG + unsigned MSI + .deb, marks
+  prerelease). Windows Authenticode still pending — beta ships MSI unsigned.
+
 - (2026-07-03, Mac→Windows) **Per-platform Run buttons** (PR #77): macOS now
   shows "▶ Android" + "▶ iOS" in the top bar (user picks the platform);
   Win/Linux show a single "▶ Run" (Android — iOS sim is macOS-only). Also

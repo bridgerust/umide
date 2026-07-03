@@ -48,12 +48,12 @@ _Short, dated messages. Delete when resolved._
   build. I2 CORE landed (same branch): `panel/ios_stream.rs` `start_ios_stream()` — a
   screenshot-poll loop into the VideoFrame signal, live-proven (12/12 frames,
   1179x2556). Perf: screenshot RPC ~450ms/call ⇒ ~2 fps (usable PREVIEW;
-  video_stream H.264 hangs on companion v1.1.8 — future opt). NEXT (I2b): the
-  macOS emulator panel renders iOS via a native ScreenCaptureKit overlay of the
-  Simulator.app WINDOW (`emulator_view.rs` NativeEmulatorView, iOS branch ~L196)
-  — to drop the Simulator.app dependency, add an `ios_panel_portable` mirroring
-  `android_panel_portable` (L632) that feeds a `video_frame` from
-  `start_ios_stream` instead of the native overlay. Then I3 hid input.
+  video_stream H.264 hangs on companion v1.1.8 — future opt). I2b DONE +
+  LIVE-VERIFIED IN-APP: `ios_panel_portable` (emulator_view.rs) renders the
+  iPhone 16 home screen embedded in the right dock with Simulator.app CLOSED —
+  Start boots headless via start_ios_stream, EMBEDDED badge, Stop/Hide sidebar;
+  `ios_platform_view` picks embedded when idb_companion present else the old
+  Simulator.app overlay. NEXT: I3 pointer/keyboard over the idb `hid` RPC.
 
 - (2026-07-03, Mac→Windows) **Layout fixes on `fix/vertical-overflow-and-video`
   (PR pending):** (1) the root column now survives tall docks — `workbench`

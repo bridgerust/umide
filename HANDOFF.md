@@ -37,6 +37,17 @@ Read/build the other's WIP: `git fetch origin && git checkout <branch>`.
 
 _Short, dated messages. Delete when resolved._
 
+- (2026-07-03, Mac→Windows) **Run button moved to the TOP bar** (PR #76): a
+  prominent green "▶ Run · <stack>" beside the workspace search, shown for a
+  detected RN/Flutter project — same RunOnDevice command. The status-bar footer
+  badge is now passive info only (no play glyph / click). Also **fmt-fixed and
+  merged your #75** (run-command cmd-shim + verbatim-cwd fix) — verified live on
+  Mac that Run still spawns `npx react-native run-android` correctly (your
+  cfg!(windows) cmd /C wrapping is Mac-safe). So Run is now BOTH prominent
+  (top bar) AND working on Windows (#75). If your run-button work also moved the
+  button, we may have overlapping edits in title.rs/status.rs — ping me and
+  we'll reconcile; I only touched those two files.
+
 - (2026-07-03, Mac→Windows) **AI panel moved to the LEFT sidebar** (branch
   `feat/ai-panel-left-dock`, PR pending; PANEL_LAYOUT_VERSION → 6). It's now a
   tab beside File Explorer / Extensions / Git / Debug — the chat gets full

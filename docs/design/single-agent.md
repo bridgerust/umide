@@ -54,8 +54,40 @@ tools + the ApprovalQueue) — which is already provider-agnostic via
    read-crash / visual-check tools live in our loop, consistent across providers.
 3. **No external CLI install dependency.**
 
-Providers (v1 candidates): **Anthropic, OpenAI, Gemini, DeepSeek** — each via its
-own API with the user's key. (Final set: decision below.)
+Providers (**v1: Anthropic (Claude) + OpenAI**; Gemini/DeepSeek follow) — each
+via its own API with the user's key.
+
+## Model selection & cost-aware routing
+Requirement: **don't burn the user's credits.** A simple "explain this" must not
+go to the flagship (Opus 4.8 / Fable 5); route each request to the cheapest model
+that can do it well, and reserve the deep model for hard, agentic turns. This
+applies to every provider.
+
+**Per-provider tiers (fast → deep):**
+- **Claude:** Haiku 4.5 (fast) · Sonnet 5 (balanced, default) · Opus 4.8 (deep) ·
+  Fable 5 (flagship, opt-in only).
+- **OpenAI:** a mini/fast tier · a balanced default · a deep/reasoning tier
+  (exact model IDs pinned to the current OpenAI catalog at implementation).
+
+**Auto routing (the default):**
+- **Fast tier** for simple/read turns: questions, explanations, small single-file
+  edits, lookups.
+- **Deep tier** for agentic/multi-step turns: the see→act→verify device loop,
+  multi-file changes, debugging, tool-heavy tasks.
+- A lightweight heuristic classifier decides per turn from the request shape +
+  whether the agent loop/tools engage. Bias **cheap when clearly simple, deep
+  when agentic or uncertain — never default to the flagship.**
+
+**Manual override (anytime):** a compact model control in the panel header (next
+to the provider switch) — "Auto" by default, or pin a specific model/tier for
+the session. Auto by default, full control when wanted.
+
+**Transparency:** label each response with the model that handled it (and,
+optionally, token/cost usage) so the user can see the savings.
+
+**Phasing:** v1 = per-provider tiers + heuristic Auto router + manual override +
+per-turn model label. Later = escalation (start cheap, bump up when the cheap
+model is uncertain or fails) and tunable/learned routing.
 
 ## What we remove
 - The three vendor CLIs: `CliKind::{ClaudeCode, Codex, GeminiCli}` and
@@ -103,8 +135,10 @@ own API with the user's key. (Final set: decision below.)
 6. Phase-2 hooks (auto-verify contract + read-crash / visual-check tools) land
    on the LlmRunner tool set — one agent, one place to make the loop reliable.
 
-## Open (small) decisions
-1. **Provider set for v1** — all four (Claude/OpenAI/Gemini/DeepSeek), or a
-   tighter start? More providers = more per-provider tool-calling quirks to test.
-2. **Compliance patch timing** — remove the "use your login" messaging now as a
-   small patch on the beta, or bundle it into this change?
+## Decisions
+1. **Provider set for v1** — ✅ **Anthropic (Claude) + OpenAI.** Gemini + DeepSeek
+   as a fast follow.
+2. **Model routing** — ✅ per-provider tiers + Auto cost-aware routing + manual
+   override (see above). First-class in v1.
+3. **Compliance patch timing** — open: remove the "use your login" messaging now
+   as a small standalone patch on the beta, or bundle it into this change?

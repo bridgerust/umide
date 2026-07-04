@@ -23,6 +23,7 @@ pub mod backend;
 pub mod client;
 pub mod error;
 pub mod event;
+pub mod models;
 pub mod openai;
 pub mod provider;
 pub mod tools;

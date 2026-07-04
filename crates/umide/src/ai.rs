@@ -268,6 +268,24 @@ pub struct LlmRunner {
 #[async_trait(?Send)]
 impl AgentRunner for LlmRunner {
     async fn run(&mut self, user_text: String, push: Push, cancel: CancelHandle) {
+        // Cost-aware model routing (Auto): pick the cheapest tier that fits this
+        // turn, so a simple question doesn't burn credits on the deep model.
+        // Only for providers with real tiers (Claude today); a manual model
+        // pin arrives with the header model switch. Overrides the per-turn
+        // model, so `default_model` is just the pre-first-turn placeholder.
+        if self.provider.kind.has_tiered_models() {
+            let tier = umide_agent::models::route_tier(
+                umide_agent::models::signals_for(&user_text),
+            );
+            self.provider.model =
+                self.provider.kind.model_for_tier(tier).to_string();
+            tracing::debug!(
+                "agent turn routed to {} ({:?} tier)",
+                self.provider.model,
+                tier
+            );
+        }
+
         let tools: Arc<dyn ToolExecutor> = Arc::new(EditorTools::new(
             self.workspace.clone(),
             self.approvals.clone(),

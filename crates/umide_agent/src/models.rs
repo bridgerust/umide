@@ -98,6 +98,52 @@ pub fn auto_model(provider: ProviderKind, signals: RouteSignals) -> &'static str
     }
 }
 
+/// Cheap heuristic: does this user turn look like it will drive the agent loop
+/// (edits, shell commands, the run-on-device loop) rather than a plain
+/// question/explanation? Imperative action verbs ⇒ agentic → the Deep tier;
+/// otherwise it's treated as a simple turn. Deliberately biases action requests
+/// toward Deep (better to spend on a real task than route it to a weak model).
+pub fn looks_agentic(user_text: &str) -> bool {
+    let t = user_text.to_lowercase();
+    const ACTION: &[&str] = &[
+        "implement",
+        "fix",
+        "add ",
+        "change",
+        "modify",
+        "refactor",
+        "build",
+        "run ",
+        "create",
+        "write",
+        "install",
+        "debug",
+        "rename",
+        "delete",
+        "remove",
+        "move ",
+        "generate",
+        "replace",
+        "wire",
+        "integrate",
+        "set up",
+        "make ",
+        "apply",
+        "commit",
+        "test",
+        "deploy",
+    ];
+    ACTION.iter().any(|k| t.contains(k))
+}
+
+/// Build routing signals from a user turn.
+pub fn signals_for(user_text: &str) -> RouteSignals {
+    RouteSignals {
+        agentic: looks_agentic(user_text),
+        user_chars: user_text.chars().count(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +216,26 @@ mod tests {
                 assert_ne!(m, "claude-fable-5", "Auto must never pick the flagship");
             }
         }
+    }
+
+    #[test]
+    fn signals_classify_questions_vs_actions() {
+        // Plain questions → not agentic → cheap.
+        assert!(!looks_agentic("what does this function do?"));
+        assert!(!looks_agentic("explain how navigation works here"));
+        assert_eq!(
+            auto_model(Anthropic, signals_for("what does this do?")),
+            "claude-haiku-4-5-20251001"
+        );
+        // Action requests → agentic → Deep.
+        assert!(looks_agentic(
+            "add a dark-mode toggle and run it on the device"
+        ));
+        assert!(looks_agentic("fix the crash on the login screen"));
+        assert_eq!(
+            auto_model(Anthropic, signals_for("implement the settings screen")),
+            "claude-opus-4-8"
+        );
     }
 
     #[test]

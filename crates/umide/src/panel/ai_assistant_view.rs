@@ -7,21 +7,21 @@ use std::sync::{Arc, Mutex};
 
 use floem::{
     View,
-    ext_event::{ExtSendTrigger, create_trigger, update_signal_from_channel},
+    ext_event::{ExtSendTrigger, create_trigger},
     peniko::Color,
     prelude::{Key, NamedKey, SignalGet, SignalUpdate},
-    reactive::{Effect, ReadSignal, RwSignal},
-    style::FlexWrap,
+    reactive::{ReadSignal, RwSignal},
+    style::{CursorStyle, FlexWrap},
     views::{
         Container, Decorators, Empty, Label, Scroll, Stack, dyn_stack, rich_text,
         text_input,
     },
 };
 use tokio::sync::oneshot;
+use umide_agent::models::ModelTier;
 use umide_agent::{AgentEvent, Message, ProviderConfig, ProviderKind};
 
 use super::ai_sessions;
-use crate::ai::cli::detect::CliStatus;
 use crate::ai::cli::{AssistantBackend, CliKind};
 use crate::markdown::{MarkdownContent, parse_markdown};
 use crate::{
@@ -112,11 +112,14 @@ pub fn ai_assistant_panel(
     let next_id = RwSignal::new(0u64);
     let key_input = RwSignal::new(String::new());
     // Default to the first provider that already has a key (keychain or env).
-    let initial_kind = ProviderKind::all()
+    // v1 providers: Claude + OpenAI. Default to whichever already has a key.
+    let initial_kind = [ProviderKind::Anthropic, ProviderKind::OpenAi]
         .into_iter()
         .find(|&k| ProviderConfig::resolve(k, ai::load_api_key(k)).is_ok())
         .unwrap_or(ProviderKind::Anthropic);
     let provider_kind = RwSignal::new(initial_kind);
+    // Manual model tier for the agent: None = Auto (cost-aware router).
+    let model_sel: RwSignal<Option<ModelTier>> = RwSignal::new(None);
     let has_key = RwSignal::new(
         ProviderConfig::resolve(initial_kind, ai::load_api_key(initial_kind))
             .is_ok(),
@@ -127,9 +130,7 @@ pub fn ai_assistant_panel(
             initial_kind.label()
         )
     } else {
-        "No API key needed — pick Claude Code or Codex above (your own login), \
-         or add an API key below."
-            .to_string()
+        "Add your Claude or OpenAI API key below to start.".to_string()
     });
 
     // Which assistant backend is selected: a BYO-key LLM provider (default) or
@@ -144,60 +145,10 @@ pub fn ai_assistant_panel(
     // Session-scoped consent for Codex's autonomous (sandboxed, no per-action
     // approval) writes. Reset every session; required before the first Codex turn.
     let codex_consent = RwSignal::new(false);
-    let has_workspace = workspace.is_some();
-    // Detect installed agent CLIs OFF the UI thread (each shells out to
-    // `--version`, up to ~5s if a CLI hangs). Tabs start disabled and enable as
-    // results arrive, so detection never stalls the panel at open. Codex is
-    // gated off on Windows — its workspace-write sandbox has no Windows backend,
-    // so we don't offer a backend whose confinement we can't enforce there.
-    let claude_installed = RwSignal::new(None::<bool>);
-    let codex_installed = RwSignal::new(None::<bool>);
-    let gemini_installed = RwSignal::new(None::<bool>);
-    if has_workspace {
-        let (ctx, crx) = std::sync::mpsc::channel();
-        let (dtx, drx) = std::sync::mpsc::channel();
-        let (gtx, grx) = std::sync::mpsc::channel();
-        update_signal_from_channel(claude_installed.write_only(), crx);
-        update_signal_from_channel(codex_installed.write_only(), drx);
-        update_signal_from_channel(gemini_installed.write_only(), grx);
-        std::thread::spawn(move || {
-            let _ = ctx.send(CliStatus::detect(CliKind::ClaudeCode).installed());
-            let _ = dtx.send(
-                cfg!(not(windows)) && CliStatus::detect(CliKind::Codex).installed(),
-            );
-            let _ = gtx.send(CliStatus::detect(CliKind::GeminiCli).installed());
-        });
-    }
-
-    // Key-free by default: if no API key is configured, auto-select an installed
-    // agent CLI (Claude Code, then Codex) once detection finishes, so the
-    // assistant just works with the user's existing login — no key to paste.
-    // Only fires while the backend is still the untouched LLM default, so it
-    // never overrides a manual pick.
-    if has_workspace && !has_key.get_untracked() {
-        Effect::new(move |_| {
-            let claude = claude_installed.get();
-            let codex = codex_installed.get();
-            if !matches!(backend.get_untracked(), AssistantBackend::Llm(_)) {
-                return;
-            }
-            let pick = if claude == Some(true) {
-                Some(CliKind::ClaudeCode)
-            } else if codex == Some(true) {
-                Some(CliKind::Codex)
-            } else {
-                None
-            };
-            if let Some(kind) = pick {
-                backend.set(AssistantBackend::Cli(kind));
-                status.set(format!(
-                    "No API key found — using {} (your existing login). Ask \
-                     away, or pick another backend above.",
-                    kind.label()
-                ));
-            }
-        });
-    }
+    // One agent, bring-your-own key: the backend is always UMIDE's own LLM loop
+    // on the selected provider (v1: Claude / OpenAI). The external agent CLIs
+    // and their key-free auto-select were removed — powering a distributed app
+    // with a provider SUBSCRIPTION login isn't a sanctioned third-party path.
 
     // Lossless cross-thread bridge: the worker pushes AgentEvents into `queue`
     // and pulses `trigger`; a UI-thread effect tracks the trigger and drains the
@@ -432,6 +383,7 @@ pub fn ai_assistant_panel(
         device_consent.clone(),
         window_tab_data.panel.active_device,
         window_tab_data.common.project_kind,
+        model_sel,
         input,
         messages,
         active,
@@ -611,34 +563,11 @@ pub fn ai_assistant_panel(
                 .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
         })
     };
-    let keyfree_row = Stack::new((
-        group_label("No key"),
-        cli_button(
-            CliKind::ClaudeCode,
-            claude_installed,
-            backend,
-            status,
-            config,
-        ),
-        cli_button(CliKind::Codex, codex_installed, backend, status, config),
-        cli_button(
-            CliKind::GeminiCli,
-            gemini_installed,
-            backend,
-            status,
-            config,
-        ),
-    ))
-    // Wrap so the backend chips stay visible in the narrow left sidebar instead
-    // of clipping off the right edge.
-    .style(|s| {
-        s.width_full()
-            .items_center()
-            .flex_wrap(FlexWrap::Wrap)
-            .gap(2.0)
-    });
-    let apikey_row = Stack::new((
-        group_label("API key"),
+    // One agent, bring-your-own key. The provider is a compact switch (v1:
+    // Claude / OpenAI) you can flip any time — not a per-chat menu. Each button
+    // sets `provider_kind` + the LLM backend; the model tier is the row below.
+    let provider_row = Stack::new((
+        group_label("Provider"),
         provider_button(
             ProviderKind::Anthropic,
             provider_kind,
@@ -655,34 +584,59 @@ pub fn ai_assistant_panel(
             status,
             config,
         ),
-        provider_button(
-            ProviderKind::DeepSeek,
-            provider_kind,
-            backend,
-            has_key,
-            status,
-            config,
-        ),
-        provider_button(
-            ProviderKind::Gemini,
-            provider_kind,
-            backend,
-            has_key,
-            status,
-            config,
-        ),
     ))
-    .style(|s| {
+    .style(move |s| {
         s.width_full()
             .items_center()
-            .margin_top(4.0)
             .flex_wrap(FlexWrap::Wrap)
             .gap(2.0)
-    });
-    let provider_row = Stack::new((keyfree_row, apikey_row)).style(move |s| {
-        s.flex_col()
-            .width_full()
             .padding(8.0)
+            .border_bottom(1.0)
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+    });
+
+    // Model switch: Auto (cost-aware router) or pin a tier. Keeps simple turns
+    // on cheap models unless the user overrides. `None` = Auto.
+    let model_chip = move |label: &'static str, value: Option<ModelTier>| {
+        Label::new(label.to_string())
+            .on_click_stop(move |_| model_sel.set(value))
+            .style(move |s| {
+                let active = model_sel.get() == value;
+                let c = config.get();
+                s.padding_horiz(8.0)
+                    .padding_vert(2.0)
+                    .border_radius(6.0)
+                    .font_size(11.0)
+                    .cursor(CursorStyle::Pointer)
+                    .selectable(false)
+                    .color(if active {
+                        c.color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND)
+                    } else {
+                        c.color(UmideColor::PANEL_FOREGROUND_DIM)
+                    })
+                    .apply_if(active, |s| {
+                        s.background(
+                            c.color(UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
+                        )
+                    })
+                    .hover(|s| s.color(c.color(UmideColor::PANEL_FOREGROUND)))
+            })
+    };
+    let model_row = Stack::new((
+        group_label("Model"),
+        model_chip("Auto", None),
+        model_chip("Fast", Some(ModelTier::Fast)),
+        model_chip("Balanced", Some(ModelTier::Balanced)),
+        model_chip("Deep", Some(ModelTier::Deep)),
+        model_chip("Flagship", Some(ModelTier::Flagship)),
+    ))
+    .style(move |s| {
+        s.width_full()
+            .items_center()
+            .gap(2.0)
+            .flex_wrap(FlexWrap::Wrap)
+            .padding_horiz(8.0)
+            .padding_vert(6.0)
             .border_bottom(1.0)
             .border_color(config.get().color(UmideColor::LAPCE_BORDER))
     });
@@ -784,6 +738,7 @@ pub fn ai_assistant_panel(
         header,
         switcher,
         provider_row,
+        model_row,
         transcript,
         approvals_view,
         consent_banner,
@@ -816,11 +771,7 @@ fn provider_button(
             status.set(if ok {
                 format!("{} ready — using your saved API key.", kind.label())
             } else {
-                format!(
-                    "Add your {} API key below — or go key-free with Claude Code \
-                     / Codex above.",
-                    kind.label()
-                )
+                format!("Add your {} API key below to start.", kind.label())
             });
         })
         .style(move |s| {
@@ -844,68 +795,6 @@ fn provider_button(
 /// An external-agent-CLI tab (e.g. Claude Code). Greyed out when the CLI isn't
 /// installed (or no folder is open); clicking it then just shows the install
 /// hint instead of selecting it.
-fn cli_button(
-    kind: CliKind,
-    available: RwSignal<Option<bool>>,
-    backend: RwSignal<AssistantBackend>,
-    status: RwSignal<String>,
-    config: ReadSignal<Arc<UmideConfig>>,
-) -> impl View {
-    Stack::new((Label::new(kind.label()),))
-        .on_click_stop(move |_| {
-            // Three states: detecting (None), installed (Some(true)), missing
-            // (Some(false)) — so during the ~5s async probe we don't lie and say
-            // it's uninstalled.
-            match available.get_untracked() {
-                None => status.set(format!("Checking for {}…", kind.label())),
-                Some(true) => {
-                    backend.set(AssistantBackend::Cli(kind));
-                    status.set(match kind {
-                        CliKind::ClaudeCode => format!(
-                            "{} — no API key needed (uses your Claude login). \
-                             Reads automatically; every edit & command asks your \
-                             approval.",
-                            kind.label()
-                        ),
-                        CliKind::Codex => format!(
-                            "{} — no API key needed (uses your Codex login). \
-                             Autonomous, sandboxed to the workspace; enable it for \
-                             the session below.",
-                            kind.label()
-                        ),
-                        CliKind::GeminiCli => format!(
-                            "{} — no API key needed (uses your Gemini login). \
-                             Read-only: reads & searches your project.",
-                            kind.label()
-                        ),
-                    });
-                }
-                Some(false) => status.set(kind.install_hint().to_string()),
-            }
-        })
-        .style(move |s| {
-            let active = backend.get() == AssistantBackend::Cli(kind);
-            let s = s
-                .padding_horiz(10.0)
-                .padding_vert(4.0)
-                .border_radius(6.0)
-                .cursor(floem::style::CursorStyle::Pointer);
-            // Full-strength only when confirmed installed; dim while detecting or
-            // if missing.
-            let s = if available.get() == Some(true) {
-                s.color(config.get().color(UmideColor::PANEL_FOREGROUND))
-            } else {
-                s.color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
-            };
-            if active {
-                s.background(OVERLAY)
-                    .border(1.0)
-                    .border_color(config.get().color(UmideColor::EDITOR_LINK))
-            } else {
-                s.border(1.0).border_color(TRANSPARENT)
-            }
-        })
-}
 
 /// Render one approval card with Approve/Reject buttons. Approving an edit
 /// applies it through the editor here on the UI thread (undo-preserving).
@@ -1147,21 +1036,18 @@ fn message_view(m: ChatMsg, config: ReadSignal<Arc<UmideConfig>>) -> impl View {
     })
 }
 
-/// One-line summary of the active backend + how it's authenticated, so the user
-/// always knows whether they're key-free (a CLI's own login) or on an API key.
+/// One-line summary of the active provider + whether its API key is set.
 fn mode_line(backend: AssistantBackend, has_key: bool) -> String {
     match backend {
         AssistantBackend::Cli(k) => {
-            format!("● {} — your existing login, no API key needed.", k.label())
+            format!("● {} — using your saved API key.", k.label())
         }
         AssistantBackend::Llm(k) if has_key => {
             format!("● {} — using your saved API key.", k.label())
         }
-        AssistantBackend::Llm(k) => format!(
-            "● {} needs an API key — or pick Claude Code / Codex above to go \
-             key-free.",
-            k.label()
-        ),
+        AssistantBackend::Llm(k) => {
+            format!("● {} — add your API key below to start.", k.label())
+        }
     }
 }
 
@@ -1265,6 +1151,7 @@ fn send_handler(
     device_consent: Arc<Mutex<Option<bool>>>,
     active_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
     project_kind: RwSignal<Option<crate::project::ProjectKind>>,
+    model_sel: RwSignal<Option<ModelTier>>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
     active: RwSignal<Option<ChatMsg>>,
@@ -1362,6 +1249,8 @@ fn send_handler(
                 // agent's emulator tools drive that device for this turn.
                 active_device.get_untracked(),
                 project_kind.get_untracked(),
+                // None = Auto (cost router chooses); Some(tier) = manual pin.
+                model_sel.get_untracked(),
                 cancel.clone(),
             ),
             Launch::Cli(cli_kind, ws) => ai::spawn_cli_turn(

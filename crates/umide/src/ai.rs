@@ -263,17 +263,23 @@ pub struct LlmRunner {
     pub device_consent: Arc<Mutex<Option<bool>>>,
     pub selected_device: Option<umide_emulator::DeviceInfo>,
     pub project_kind: Option<crate::project::ProjectKind>,
+    /// Manual model pick for the turn: `Some(tier)` pins that tier on any
+    /// provider; `None` means Auto (the cost-aware router chooses).
+    pub model_tier: Option<umide_agent::models::ModelTier>,
 }
 
 #[async_trait(?Send)]
 impl AgentRunner for LlmRunner {
     async fn run(&mut self, user_text: String, push: Push, cancel: CancelHandle) {
-        // Cost-aware model routing (Auto): pick the cheapest tier that fits this
-        // turn, so a simple question doesn't burn credits on the deep model.
-        // Only for providers with real tiers (Claude today); a manual model
-        // pin arrives with the header model switch. Overrides the per-turn
-        // model, so `default_model` is just the pre-first-turn placeholder.
-        if self.provider.kind.has_tiered_models() {
+        // Model selection per turn. A manual pin (`model_tier`) wins on any
+        // provider; otherwise Auto routes the cheapest tier that fits this turn
+        // for tiered providers, so a simple question doesn't burn credits on the
+        // deep model. Overrides `default_model` (the pre-first-turn placeholder).
+        if let Some(tier) = self.model_tier {
+            self.provider.model =
+                self.provider.kind.model_for_tier(tier).to_string();
+            tracing::debug!("agent turn: pinned model {}", self.provider.model);
+        } else if self.provider.kind.has_tiered_models() {
             let tier = umide_agent::models::route_tier(
                 umide_agent::models::signals_for(&user_text),
             );
@@ -376,6 +382,7 @@ pub fn spawn_turn(
     device_consent: Arc<Mutex<Option<bool>>>,
     selected_device: Option<umide_emulator::DeviceInfo>,
     project_kind: Option<crate::project::ProjectKind>,
+    model_tier: Option<umide_agent::models::ModelTier>,
     cancel: Arc<AtomicBool>,
 ) {
     let err_queue = queue.clone();
@@ -412,6 +419,7 @@ pub fn spawn_turn(
                     device_consent,
                     selected_device,
                     project_kind,
+                    model_tier,
                 };
                 runner.run(user_text, push, cancel).await;
             });

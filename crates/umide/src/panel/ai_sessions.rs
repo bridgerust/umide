@@ -4,12 +4,10 @@
 //! mid-conversation); this module lets the panel hold *several* such chats,
 //! switch between them, and remember them across restarts.
 //!
-//! On disk we store a **light** form: the visible transcript plus the external
-//! CLI's resume id — never the raw LLM `history`, which carries base64 device
-//! screenshots and is `Serialize`-only anyway. On reload, a text-only LLM
-//! history is rebuilt from the transcript (`StoredSession::history`); CLI
-//! backends (Claude Code / Codex) resume from their own `cli_session` id, so
-//! their full context comes back regardless.
+//! On disk we store a **light** form: the visible transcript — never the raw
+//! LLM `history`, which carries base64 device screenshots and is
+//! `Serialize`-only anyway. On reload, a text-only LLM history is rebuilt from
+//! the transcript (`StoredSession::history`).
 
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -35,16 +33,13 @@ pub struct StoredMessage {
     pub tools: Vec<String>,
 }
 
-/// One chat: its transcript, a derived title, and the CLI resume id (if the
-/// chat ran on an external agent CLI).
+/// One chat: its transcript and a derived title.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StoredSession {
     pub id: u64,
     pub title: String,
     #[serde(default)]
     pub messages: Vec<StoredMessage>,
-    #[serde(default)]
-    pub cli_session: Option<String>,
 }
 
 impl StoredSession {
@@ -53,7 +48,6 @@ impl StoredSession {
             id,
             title: "New chat".to_string(),
             messages: Vec::new(),
-            cli_session: None,
         }
     }
 
@@ -194,13 +188,11 @@ mod tests {
     fn stored_session_round_trips_through_json() {
         let mut s = StoredSession::new(7);
         s.messages = vec![user("q"), asst("a")];
-        s.cli_session = Some("resume-abc".into());
         s.retitle();
         let json = serde_json::to_string(&[s.clone()]).unwrap();
         let back: Vec<StoredSession> = serde_json::from_str(&json).unwrap();
         assert_eq!(back.len(), 1);
         assert_eq!(back[0].id, 7);
-        assert_eq!(back[0].cli_session.as_deref(), Some("resume-abc"));
         assert_eq!(back[0].messages.len(), 2);
         assert_eq!(back[0].messages[0].role, Role::User);
     }

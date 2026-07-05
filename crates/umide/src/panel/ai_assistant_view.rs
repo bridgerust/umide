@@ -22,7 +22,6 @@ use umide_agent::models::ModelTier;
 use umide_agent::{AgentEvent, Message, ProviderConfig, ProviderKind};
 
 use super::ai_sessions;
-use crate::ai::cli::{AssistantBackend, CliKind};
 use crate::markdown::{MarkdownContent, parse_markdown};
 use crate::{
     ai,
@@ -133,22 +132,14 @@ pub fn ai_assistant_panel(
         "Add your Claude or OpenAI API key below to start.".to_string()
     });
 
-    // Which assistant backend is selected: a BYO-key LLM provider (default) or
-    // an external agent CLI. Kept beside `provider_kind` so the LLM key/resolve
-    // path is undisturbed; a CLI is never auto-selected (opt-in only).
-    let backend = RwSignal::new(AssistantBackend::Llm(initial_kind));
-    // The CLI conversation id, threaded across turns for `--resume`.
-    let cli_session: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    // One-time per-session consent for the LLM agent to drive the emulator
+    // One-time per-session consent for the agent to drive the emulator
     // (tap/swipe/type/keys). `None` until asked once, then `Some(granted)`.
     let device_consent: Arc<Mutex<Option<bool>>> = Arc::new(Mutex::new(None));
-    // Session-scoped consent for Codex's autonomous (sandboxed, no per-action
-    // approval) writes. Reset every session; required before the first Codex turn.
-    let codex_consent = RwSignal::new(false);
-    // One agent, bring-your-own key: the backend is always UMIDE's own LLM loop
-    // on the selected provider (v1: Claude / OpenAI). The external agent CLIs
-    // and their key-free auto-select were removed — powering a distributed app
-    // with a provider SUBSCRIPTION login isn't a sanctioned third-party path.
+    // One agent, bring-your-own key: always UMIDE's own LLM loop on the selected
+    // provider (v1: Claude / OpenAI), switchable any time via `provider_kind`.
+    // The external agent CLIs and their key-free auto-select were removed —
+    // powering a distributed app with a provider SUBSCRIPTION login isn't a
+    // sanctioned third-party path.
 
     // Lossless cross-thread bridge: the worker pushes AgentEvents into `queue`
     // and pulses `trigger`; a UI-thread effect tracks the trigger and drains the
@@ -168,7 +159,7 @@ pub fn ai_assistant_panel(
 
     // --- Chat sessions ------------------------------------------------------
     // Several distinct chats, each with its own continuous context. The live
-    // signals above (`messages`/`history`/`cli_session`/…) always hold the
+    // signals above (`messages`/`history`/…) always hold the
     // ACTIVE chat; switching is snapshot-the-current, load-the-target. So
     // context still mends WITHIN a chat — you just get more than one, saved per
     // workspace across restarts.
@@ -197,14 +188,12 @@ pub fn ai_assistant_panel(
         if !first.messages.is_empty() {
             messages.set(rebuild_messages(&first.messages, next_id));
             *history.lock().unwrap() = first.history();
-            *cli_session.lock().unwrap() = first.cli_session.clone();
         }
     }
 
     // Fold the live view back into the active chat (called before switching away
     // and after each turn), keeping its title current.
     let snapshot = {
-        let cli_session = cli_session.clone();
         Rc::new(move || {
             let msgs: Vec<ai_sessions::StoredMessage> = messages
                 .get_untracked()
@@ -215,12 +204,10 @@ pub fn ai_assistant_panel(
                     tools: m.tools.get_untracked(),
                 })
                 .collect();
-            let cli = cli_session.lock().unwrap().clone();
             let id = active_id.get_untracked();
             sessions.update(|list| {
                 if let Some(s) = list.iter_mut().find(|s| s.id == id) {
                     s.messages = msgs;
-                    s.cli_session = cli;
                     s.retitle();
                 }
             });
@@ -228,11 +215,10 @@ pub fn ai_assistant_panel(
     };
 
     // Start a fresh chat: save the current one, clear everything to a clean
-    // slate (fresh history + resume id + consents), keep the chosen backend.
+    // slate (fresh history + consent), keep the chosen provider.
     let new_chat: Rc<dyn Fn()> = {
         let snapshot = snapshot.clone();
         let ws = workspace.clone();
-        let cli_session = cli_session.clone();
         let device_consent = device_consent.clone();
         let history = history.clone();
         let senders = senders.clone();
@@ -248,9 +234,7 @@ pub fn ai_assistant_panel(
             messages.set(Vec::new());
             active.set(None);
             *history.lock().unwrap() = Vec::new();
-            *cli_session.lock().unwrap() = None;
             *device_consent.lock().unwrap() = None;
-            codex_consent.set(false);
             pending.set(Vec::new());
             senders.borrow_mut().clear();
             input.set(String::new());
@@ -264,7 +248,6 @@ pub fn ai_assistant_panel(
     let switch_to: Rc<dyn Fn(u64)> = {
         let snapshot = snapshot.clone();
         let ws = workspace.clone();
-        let cli_session = cli_session.clone();
         let device_consent = device_consent.clone();
         let history = history.clone();
         let senders = senders.clone();
@@ -281,9 +264,7 @@ pub fn ai_assistant_panel(
             messages.set(rebuild_messages(&t.messages, next_id));
             active.set(None);
             *history.lock().unwrap() = t.history();
-            *cli_session.lock().unwrap() = t.cli_session.clone();
             *device_consent.lock().unwrap() = None; // re-ask on a resumed chat
-            codex_consent.set(false);
             pending.set(Vec::new());
             senders.borrow_mut().clear();
             active_id.set(id);
@@ -334,7 +315,7 @@ pub fn ai_assistant_panel(
 
     let transcript = Scroll::new(
         Stack::new((
-            welcome_view(backend, has_key, input, messages, config),
+            welcome_view(provider_kind, has_key, input, messages, config),
             dyn_stack(
                 move || messages.get(),
                 |m| m.id,
@@ -377,9 +358,6 @@ pub fn ai_assistant_panel(
         approvals,
         cancel.clone(),
         provider_kind,
-        backend,
-        codex_consent,
-        cli_session.clone(),
         device_consent.clone(),
         window_tab_data.panel.active_device,
         window_tab_data.common.project_kind,
@@ -480,42 +458,6 @@ pub fn ai_assistant_panel(
         .style(|s| s.flex_col().width_full().padding(6.0))
     };
 
-    // Session-consent banner for Codex (autonomous, sandboxed writes). Shown only
-    // when Codex is selected and not yet enabled this session.
-    let consent_banner = Stack::new((
-        Label::new(
-            "⚠ Codex works on its own: it reads, edits files, and runs commands \
-             in your project folder. Writes are sandboxed to the workspace (no \
-             network, nothing outside it) — but unlike Claude Code it does NOT \
-             ask before each change. Review with git afterward.",
-        )
-        .style(move |s| {
-            s.width_full()
-                .font_size(11.0)
-                .color(config.get().color(UmideColor::PANEL_FOREGROUND))
-        }),
-        pill_button("Enable Codex for this session", config, move || {
-            codex_consent.set(true);
-            status.set("Codex enabled for this session — send your message.".into());
-        }),
-    ))
-    .style(move |s| {
-        let s = s
-            .flex_col()
-            .width_full()
-            .padding(8.0)
-            .border(1.0)
-            .border_radius(6.0)
-            .border_color(config.get().color(UmideColor::LAPCE_BORDER));
-        if backend.get() == AssistantBackend::Cli(CliKind::Codex)
-            && !codex_consent.get()
-        {
-            s
-        } else {
-            s.hide()
-        }
-    });
-
     // Key entry — only visible until a key is stored (keychain or env).
     let key_box = text_input(key_input).style(move |s| {
         s.flex_grow(1.0)
@@ -544,18 +486,13 @@ pub fn ai_assistant_panel(
     });
     let key_row = Stack::new((key_box, save_key)).style(move |s| {
         let s = s.width_full().items_center().padding(6.0);
-        // A CLI backend authenticates itself (account login or its own API key),
-        // so the key entry is irrelevant there.
-        if backend.get().is_cli() || has_key.get() {
-            s.hide()
-        } else {
-            s
-        }
+        // Hidden once a key is stored (nothing left to enter).
+        if has_key.get() { s.hide() } else { s }
     });
 
-    // Backend selector, grouped so the value prop is obvious. Top row = the
-    // key-free path (agent CLIs that sign in with your own subscription); bottom
-    // row = BYO-key API providers. A dim label prefixes each group.
+    // Provider switch, with a dim group label prefix. One agent, bring-your-own
+    // key: the provider is a compact switch (v1: Claude / OpenAI) you can flip
+    // any time — not a per-chat menu. The model tier is the row below.
     let group_label = move |text: &'static str| {
         Label::new(text).style(move |s| {
             s.width(58.0)
@@ -563,15 +500,11 @@ pub fn ai_assistant_panel(
                 .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
         })
     };
-    // One agent, bring-your-own key. The provider is a compact switch (v1:
-    // Claude / OpenAI) you can flip any time — not a per-chat menu. Each button
-    // sets `provider_kind` + the LLM backend; the model tier is the row below.
     let provider_row = Stack::new((
         group_label("Provider"),
         provider_button(
             ProviderKind::Anthropic,
             provider_kind,
-            backend,
             has_key,
             status,
             config,
@@ -579,7 +512,6 @@ pub fn ai_assistant_panel(
         provider_button(
             ProviderKind::OpenAi,
             provider_kind,
-            backend,
             has_key,
             status,
             config,
@@ -741,7 +673,6 @@ pub fn ai_assistant_panel(
         model_row,
         transcript,
         approvals_view,
-        consent_banner,
         status_line,
         key_row,
         input_row,
@@ -753,11 +684,9 @@ pub fn ai_assistant_panel(
 }
 
 /// A provider tab in the selector row; highlights when it's the active provider.
-#[allow(clippy::too_many_arguments)]
 fn provider_button(
     kind: ProviderKind,
     provider_kind: RwSignal<ProviderKind>,
-    backend: RwSignal<AssistantBackend>,
     has_key: RwSignal<bool>,
     status: RwSignal<String>,
     config: ReadSignal<Arc<UmideConfig>>,
@@ -765,7 +694,6 @@ fn provider_button(
     Stack::new((Label::new(kind.label()),))
         .on_click_stop(move |_| {
             provider_kind.set(kind);
-            backend.set(AssistantBackend::Llm(kind));
             let ok = ProviderConfig::resolve(kind, ai::load_api_key(kind)).is_ok();
             has_key.set(ok);
             status.set(if ok {
@@ -775,7 +703,7 @@ fn provider_button(
             });
         })
         .style(move |s| {
-            let active = backend.get() == AssistantBackend::Llm(kind);
+            let active = provider_kind.get() == kind;
             let s = s
                 .padding_horiz(10.0)
                 .padding_vert(4.0)
@@ -791,10 +719,6 @@ fn provider_button(
             }
         })
 }
-
-/// An external-agent-CLI tab (e.g. Claude Code). Greyed out when the CLI isn't
-/// installed (or no folder is open); clicking it then just shows the install
-/// hint instead of selecting it.
 
 /// Render one approval card with Approve/Reject buttons. Approving an edit
 /// applies it through the editor here on the UI thread (undo-preserving).
@@ -828,11 +752,6 @@ fn approval_card(
                     Ok(()) => ai::ApprovalOutcome::EditApplied,
                     Err(e) => ai::ApprovalOutcome::EditFailed(e),
                 },
-                // CLI permission gate: the CLI applies the action itself; we
-                // only signal allow. Nothing is applied on the UMIDE side.
-                ai::ApprovalKind::CliPermission { .. } => {
-                    ai::ApprovalOutcome::Allowed
-                }
                 // One-time per-session device-control consent: approving
                 // unlocks tap/swipe/type/keys for the rest of the session.
                 ai::ApprovalKind::DeviceControl => ai::ApprovalOutcome::Allowed,
@@ -1037,17 +956,11 @@ fn message_view(m: ChatMsg, config: ReadSignal<Arc<UmideConfig>>) -> impl View {
 }
 
 /// One-line summary of the active provider + whether its API key is set.
-fn mode_line(backend: AssistantBackend, has_key: bool) -> String {
-    match backend {
-        AssistantBackend::Cli(k) => {
-            format!("● {} — using your saved API key.", k.label())
-        }
-        AssistantBackend::Llm(k) if has_key => {
-            format!("● {} — using your saved API key.", k.label())
-        }
-        AssistantBackend::Llm(k) => {
-            format!("● {} — add your API key below to start.", k.label())
-        }
+fn mode_line(provider: ProviderKind, has_key: bool) -> String {
+    if has_key {
+        format!("● {} — using your saved API key.", provider.label())
+    } else {
+        format!("● {} — add your API key below to start.", provider.label())
     }
 }
 
@@ -1055,7 +968,7 @@ fn mode_line(backend: AssistantBackend, has_key: bool) -> String {
 /// current auth mode, and a few tappable example prompts. Hidden once the
 /// conversation starts.
 fn welcome_view(
-    backend: RwSignal<AssistantBackend>,
+    provider_kind: RwSignal<ProviderKind>,
     has_key: RwSignal<bool>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
@@ -1104,7 +1017,7 @@ fn welcome_view(
                 .font_size(12.0)
                 .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
         }),
-        Label::derived(move || mode_line(backend.get(), has_key.get())).style(
+        Label::derived(move || mode_line(provider_kind.get(), has_key.get())).style(
             move |s| {
                 s.width_full()
                     .margin_top(12.0)
@@ -1129,13 +1042,6 @@ fn welcome_view(
     })
 }
 
-/// What a send will launch, resolved (and validated) before any UI mutation so
-/// a guard can bail cleanly without leaving a half-started turn.
-enum Launch {
-    Llm(ProviderConfig),
-    Cli(CliKind, PathBuf),
-}
-
 #[allow(clippy::too_many_arguments)]
 fn send_handler(
     trigger: ExtSendTrigger,
@@ -1145,9 +1051,6 @@ fn send_handler(
     approvals: ai::ApprovalQueue,
     cancel: Arc<AtomicBool>,
     provider_kind: RwSignal<ProviderKind>,
-    backend: RwSignal<AssistantBackend>,
-    codex_consent: RwSignal<bool>,
-    cli_session: Arc<Mutex<Option<String>>>,
     device_consent: Arc<Mutex<Option<bool>>>,
     active_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
     project_kind: RwSignal<Option<crate::project::ProjectKind>>,
@@ -1159,7 +1062,6 @@ fn send_handler(
     streaming: RwSignal<bool>,
     status: RwSignal<String>,
 ) -> impl Fn() + 'static {
-    let _ = provider_kind; // retained for symmetry; selection drives via `backend`
     move || {
         if streaming.get_untracked() {
             return;
@@ -1169,45 +1071,17 @@ fn send_handler(
             return;
         }
 
-        // Resolve the backend BEFORE mutating the transcript, so a missing key
-        // (LLM) or missing folder (CLI) bails without a dangling bubble.
-        let launch = match backend.get_untracked() {
-            AssistantBackend::Llm(kind) => {
-                match ProviderConfig::resolve(kind, ai::load_api_key(kind)) {
-                    Ok(p) => Launch::Llm(p),
-                    Err(_) => {
-                        status.set(format!(
-                            "Add your {} API key below to enable it.",
-                            kind.label()
-                        ));
-                        return;
-                    }
-                }
-            }
-            AssistantBackend::Cli(cli_kind) => {
-                // Codex writes autonomously (sandboxed, no per-action approval),
-                // so require an explicit session consent before the first turn.
-                if matches!(cli_kind, CliKind::Codex)
-                    && !codex_consent.get_untracked()
-                {
-                    status.set(
-                        "Codex edits files and runs commands on its own \
-                         (sandboxed to your project). Click \u{201c}Enable Codex \
-                         for this session\u{201d} to proceed."
-                            .into(),
-                    );
-                    return;
-                }
-                match workspace.clone() {
-                    Some(ws) => Launch::Cli(cli_kind, ws),
-                    None => {
-                        status.set(format!(
-                            "Open a folder to use {}.",
-                            cli_kind.label()
-                        ));
-                        return;
-                    }
-                }
+        // Resolve the provider (and its key) BEFORE mutating the transcript, so a
+        // missing key bails without leaving a dangling bubble.
+        let kind = provider_kind.get_untracked();
+        let provider = match ProviderConfig::resolve(kind, ai::load_api_key(kind)) {
+            Ok(p) => p,
+            Err(_) => {
+                status.set(format!(
+                    "Add your {} API key below to enable it.",
+                    kind.label()
+                ));
+                return;
             }
         };
 
@@ -1235,37 +1109,22 @@ fn send_handler(
         status.set("thinking…".into());
 
         cancel.store(false, Ordering::Relaxed);
-        match launch {
-            Launch::Llm(provider) => ai::spawn_turn(
-                workspace.clone(),
-                provider,
-                history.clone(),
-                text,
-                queue.clone(),
-                approvals.clone(),
-                trigger,
-                device_consent.clone(),
-                // Snapshot the device the user is viewing right now, so the
-                // agent's emulator tools drive that device for this turn.
-                active_device.get_untracked(),
-                project_kind.get_untracked(),
-                // None = Auto (cost router chooses); Some(tier) = manual pin.
-                model_sel.get_untracked(),
-                cancel.clone(),
-            ),
-            Launch::Cli(cli_kind, ws) => ai::spawn_cli_turn(
-                cli_kind,
-                ws,
-                cli_session.clone(),
-                text,
-                queue.clone(),
-                approvals.clone(),
-                trigger,
-                // Drive the device the user is viewing (mirrors the LLM arm).
-                active_device.get_untracked(),
-                project_kind.get_untracked(),
-                cancel.clone(),
-            ),
-        }
+        ai::spawn_turn(
+            workspace.clone(),
+            provider,
+            history.clone(),
+            text,
+            queue.clone(),
+            approvals.clone(),
+            trigger,
+            device_consent.clone(),
+            // Snapshot the device the user is viewing right now, so the agent's
+            // emulator tools drive that device for this turn.
+            active_device.get_untracked(),
+            project_kind.get_untracked(),
+            // None = Auto (cost router chooses); Some(tier) = manual pin.
+            model_sel.get_untracked(),
+            cancel.clone(),
+        );
     }
 }

@@ -3,8 +3,8 @@
 //! UMIDE is a mobile-first IDE, so it should *know* when the open workspace is
 //! a React Native or Flutter app instead of treating every folder the same.
 //! Detection is intentionally cheap and offline (two file probes, no shelling
-//! out — same house style as `ai/cli/detect.rs`): it runs once per workspace
-//! open, on local workspaces only. The result feeds the status-bar badge and,
+//! out): it runs once per workspace open, on local workspaces only. The result
+//! feeds the status-bar badge and,
 //! later, the AI agent's project context and run-on-device commands.
 
 use std::path::Path;

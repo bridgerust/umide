@@ -345,7 +345,7 @@
   <!-- TRUST / STATS -->
   <div class="trust reveal">
     <div class="wrap row">
-      <div class="stat"><b class="grad">3</b><span>Agent CLIs</span></div>
+      <div class="stat"><b class="grad">1</b><span>Built-in agent</span></div>
       <div class="sep"></div>
       <div class="stat"><b>2</b><span>Emulators embedded</span></div>
       <div class="sep"></div>
@@ -369,7 +369,7 @@
       <div class="card col-3 reveal">
         <div class="ic">✨</div>
         <h3>AI assistant that sees your screen</h3>
-        <p>A built-in, approval-gated agent (Claude, OpenAI, DeepSeek, Gemini) that reads your code, proposes edits, runs commands, and can <strong>screenshot and drive the running device</strong> to verify its own work.</p>
+        <p>One built-in, approval-gated agent — bring your own <strong>Claude</strong> or <strong>OpenAI</strong> key. It reads your code, proposes edits, runs commands, and can <strong>screenshot and drive the running device</strong> to verify its own work.</p>
       </div>
       <div class="card col-3 reveal">
         <div class="ic">📜</div>
@@ -403,13 +403,13 @@
   <section class="block wrap" id="agents">
     <div class="spotlight">
       <div class="copy reveal">
-        <p class="kicker" style="text-align:left;">New · Bring your own agent</p>
-        <h2>Drive <span class="grad">Claude Code, Codex &amp; Gemini</span> right in the panel</h2>
-        <p>Connect the AI provider you already use — paste your <b>Claude</b> or <b>OpenAI</b> API key — and the agent reads your code, proposes edits and runs commands with per-action approval, streaming every tool call into the panel.</p>
+        <p class="kicker" style="text-align:left;">Bring your own key</p>
+        <h2>One agent, <span class="grad">your provider &amp; model</span> — switchable any time</h2>
+        <p>Paste your <b>Claude</b> or <b>OpenAI</b> API key and the built-in agent reads your code, proposes edits and runs commands with per-action approval, streaming every tool call into the panel. Flip the provider whenever you like — it's a switch, not a new chat.</p>
         <div class="agent-list">
-          <div class="agent"><span class="chip">Claude Code</span><p><b>Reads automatically; edits &amp; commands with per-action approval</b> — every change pops an Approve/Reject card, routed through UMIDE's own approval queue.</p></div>
-          <div class="agent"><span class="chip">Codex</span><p><b>Sandboxed writes</b> confined to your workspace (no network), behind a one-click session-consent gate.</p></div>
-          <div class="agent"><span class="chip">Gemini</span><p><b>Read-only</b> — reads and searches your project to answer, never mutates.</p></div>
+          <div class="agent"><span class="chip">BYO key</span><p><b>Claude or OpenAI, your own key</b> — no lock-in and no forced provider. Switch between them from the panel header any day.</p></div>
+          <div class="agent"><span class="chip">Cost-aware</span><p><b>Auto-routes each turn to the cheapest model that fits</b> — a quick question goes to a fast, cheap model; real work goes deeper. The flagship is opt-in only, so it never quietly burns your credits.</p></div>
+          <div class="agent"><span class="chip">Approval-gated</span><p><b>Reads automatically; edits &amp; commands ask first</b> — every change pops an Approve/Reject card, and it can screenshot &amp; drive the device to verify its own work.</p></div>
         </div>
         <a class="btn btn-primary" href="https://github.com/bridgerust/umide/releases">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
@@ -417,13 +417,13 @@
         </a>
       </div>
       <div class="term reveal">
-        <div class="bar"><i></i><i></i><i></i><span>Claude Code · umide</span></div>
+        <div class="bar"><i></i><i></i><i></i><span>UMIDE · agent</span></div>
         <div class="body">
           <div><span class="u">you ▸</span> add a dark-mode toggle to Settings and run the tests</div>
           <div><span class="tool">⚙ Read</span> src/screens/Settings.tsx</div>
           <div><span class="tool">⚙ Edit</span> Settings.tsx <span class="a">+ theme toggle</span></div>
           <div class="approve">
-            <div class="t">Claude Code wants to edit Settings.tsx</div>
+            <div class="t">UMIDE wants to edit Settings.tsx</div>
             <div class="d">- const [notif, setNotif]…<br>+ const [dark, setDark] = useState(false)</div>
             <div class="btns"><span class="ok">Approve</span><span class="no">Reject</span></div>
           </div>

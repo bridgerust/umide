@@ -43,10 +43,13 @@ impl ProviderKind {
         }
     }
 
+    /// The pre-first-turn placeholder model. Set to the **Balanced** tier, not
+    /// the deep/flagship model — the per-turn Auto router (see `models.rs`)
+    /// overrides this each turn so simple requests don't hit the deep model.
     pub fn default_model(self) -> &'static str {
         match self {
-            ProviderKind::Anthropic => "claude-opus-4-8",
-            ProviderKind::OpenAi => "gpt-4o",
+            ProviderKind::Anthropic => "claude-sonnet-5",
+            ProviderKind::OpenAi => "gpt-5.5",
             ProviderKind::DeepSeek => "deepseek-chat",
             ProviderKind::Gemini => "gemini-2.0-flash",
         }
@@ -125,7 +128,7 @@ mod tests {
     #[test]
     fn anthropic_defaults() {
         let p = ProviderConfig::new(ProviderKind::Anthropic, "k");
-        assert_eq!(p.model, "claude-opus-4-8");
+        assert_eq!(p.model, "claude-sonnet-5");
         assert_eq!(p.base_url, "https://api.anthropic.com");
         assert_eq!(p.effort.as_deref(), Some("xhigh"));
         assert!(p.thinking);
@@ -134,7 +137,7 @@ mod tests {
     #[test]
     fn openai_family_defaults() {
         let o = ProviderConfig::new(ProviderKind::OpenAi, "k");
-        assert_eq!(o.model, "gpt-4o");
+        assert_eq!(o.model, "gpt-5.5");
         assert!(o.base_url.contains("openai.com"));
         assert!(o.effort.is_none());
         assert!(!o.thinking);

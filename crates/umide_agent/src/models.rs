@@ -23,11 +23,9 @@ pub enum ModelTier {
 impl ProviderKind {
     /// The concrete model ID for a tier.
     ///
-    /// Claude IDs are current. **OpenAI tiers are placeholders** pinned to the
-    /// current OpenAI catalog when the OpenAI backend is wired (next slice) —
-    /// they conservatively fall back to the provider default for now. DeepSeek
-    /// and Gemini aren't in the v1 provider set; they map to their single
-    /// default so the match stays total.
+    /// Claude + OpenAI (the v1 providers) have current per-tier IDs. DeepSeek
+    /// and Gemini aren't in the v1 set; they map to their single default so the
+    /// match stays total.
     pub fn model_for_tier(self, tier: ModelTier) -> &'static str {
         use ModelTier::*;
         use ProviderKind::*;
@@ -38,10 +36,16 @@ impl ProviderKind {
             (Anthropic, Deep) => "claude-opus-4-8",
             (Anthropic, Flagship) => "claude-fable-5",
 
-            // OpenAI — TODO(slice: openai): pin the real fast/balanced/deep
-            // model IDs from the current OpenAI catalog. Conservative default
-            // until then.
-            (OpenAi, _) => "gpt-4o",
+            // OpenAI — current catalog (2026): GPT-5.4-mini for fast/cheap
+            // turns, GPT-5.5 for the strong agentic coder, GPT-5.5-pro flagship.
+            // Balanced == Deep for now (both GPT-5.5); a deeper split can later
+            // ride `reasoning.effort` rather than a separate model. IDs are from
+            // the OpenAI docs — validate against a live call when a key is
+            // exercised end-to-end.
+            (OpenAi, Fast) => "gpt-5.4-mini",
+            (OpenAi, Balanced) => "gpt-5.5",
+            (OpenAi, Deep) => "gpt-5.5",
+            (OpenAi, Flagship) => "gpt-5.5-pro",
 
             // Not in the v1 provider set — single default keeps the match total.
             (DeepSeek, _) => "deepseek-chat",
@@ -49,11 +53,11 @@ impl ProviderKind {
         }
     }
 
-    /// Whether this provider currently has a real per-tier catalog (Claude
-    /// does; OpenAI is pending pinning). Lets the router avoid pretending to
-    /// tier a provider whose tiers all resolve to the same ID.
+    /// Whether this provider has a real per-tier catalog (Claude + OpenAI in
+    /// v1). Lets the router avoid pretending to tier a provider whose tiers all
+    /// resolve to the same ID (DeepSeek / Gemini).
     pub fn has_tiered_models(self) -> bool {
-        matches!(self, ProviderKind::Anthropic)
+        matches!(self, ProviderKind::Anthropic | ProviderKind::OpenAi)
     }
 }
 
@@ -239,12 +243,43 @@ mod tests {
     }
 
     #[test]
+    fn openai_is_tiered_and_saves_on_simple_turns() {
+        assert!(OpenAi.has_tiered_models());
+        // Simple question → the cheap mini, not GPT-5.5.
+        assert_eq!(
+            auto_model(OpenAi, signals_for("what does this do?")),
+            "gpt-5.4-mini"
+        );
+        // Action request → the strong coder.
+        assert_eq!(
+            auto_model(OpenAi, signals_for("implement the login flow")),
+            "gpt-5.5"
+        );
+        // Auto never picks the pro flagship.
+        for agentic in [false, true] {
+            for user_chars in [0usize, 300, 5000] {
+                assert_ne!(
+                    auto_model(
+                        OpenAi,
+                        RouteSignals {
+                            agentic,
+                            user_chars
+                        }
+                    ),
+                    "gpt-5.5-pro"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn untiered_provider_uses_its_default_not_false_tiers() {
-        // OpenAI isn't tiered yet → Auto returns its default, no pretend tiering.
+        // DeepSeek isn't tiered → Auto returns its default, no pretend tiering.
+        assert!(!DeepSeek.has_tiered_models());
         let agentic = RouteSignals {
             agentic: true,
             user_chars: 10,
         };
-        assert_eq!(auto_model(OpenAi, agentic), OpenAi.default_model());
+        assert_eq!(auto_model(DeepSeek, agentic), DeepSeek.default_model());
     }
 }

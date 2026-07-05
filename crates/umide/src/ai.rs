@@ -27,8 +27,6 @@ use umide_agent::{
     ToolResultContent,
 };
 
-pub mod cli;
-
 use crate::window_tab::WindowTabData;
 
 /// Frozen system prompt (kept byte-stable so the prompt cache stays valid).
@@ -139,10 +137,6 @@ pub enum ApprovalKind {
         old_str: String,
         new_str: String,
     },
-    /// Permission-only gate for an external agent CLI (Claude Code): the CLI
-    /// performs the action itself, UMIDE only decides allow/deny. Nothing is
-    /// applied on the UMIDE side — the outcome is mapped to the CLI's contract.
-    CliPermission { tool_name: String },
     /// One-time per-session consent for the assistant to drive the emulator
     /// (tap/swipe/type/keys). Approve unlocks device input for the session.
     DeviceControl,
@@ -157,7 +151,8 @@ pub enum ApprovalOutcome {
     EditApplied,
     /// The UI tried to apply the edit but failed (e.g. the file changed).
     EditFailed(String),
-    /// The user allowed a CLI permission gate (the CLI will do the action).
+    /// The user allowed a consent gate (e.g. device control); nothing is applied
+    /// on the UMIDE side — the worker proceeds.
     Allowed,
 }
 
@@ -421,72 +416,6 @@ pub fn spawn_turn(
                     project_kind,
                     model_tier,
                 };
-                runner.run(user_text, push, cancel).await;
-            });
-            guard.finish();
-        });
-    if let Err(e) = spawned {
-        report_spawn_failure(&err_queue, trigger, &e);
-    }
-}
-
-/// Like [`spawn_turn`], but backed by an external agent CLI (Claude Code, …).
-/// The CLI runs its own loop in `workspace` and streams events into `queue`;
-/// `trigger`/`cancel` behave exactly as for the LLM path. `session` carries the
-/// CLI's conversation id across turns so the agent keeps multi-turn context.
-#[allow(clippy::too_many_arguments)]
-pub fn spawn_cli_turn(
-    kind: cli::CliKind,
-    workspace: PathBuf,
-    session: Arc<Mutex<Option<String>>>,
-    user_text: String,
-    queue: EventQueue,
-    approvals: ApprovalQueue,
-    trigger: ExtSendTrigger,
-    selected_device: Option<umide_emulator::DeviceInfo>,
-    project_kind: Option<crate::project::ProjectKind>,
-    cancel: Arc<AtomicBool>,
-) {
-    // The device-MCP tools drive Android over adb, so pin the panel-selected
-    // Android serial (`None` ⇒ the device server targets the first running one).
-    let serial = selected_device.and_then(|d| {
-        matches!(d.platform, umide_emulator::DevicePlatform::Android)
-            .then_some(d.serial)
-            .flatten()
-    });
-    let err_queue = queue.clone();
-    let spawned = std::thread::Builder::new()
-        .name("umide-agent-cli".into())
-        .spawn(move || {
-            let push = Push::new(move |ev: AgentEvent| {
-                queue.lock().unwrap().push_back(ev);
-                register_ext_trigger(trigger);
-            });
-            let mut guard = TurnGuard::new(push.clone());
-
-            let rt = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(rt) => rt,
-                Err(e) => {
-                    push.emit(AgentEvent::Error(format!("runtime: {e}")));
-                    guard.finish();
-                    return;
-                }
-            };
-
-            let cancel = CancelHandle::new(cancel);
-            rt.block_on(async move {
-                let mut runner = cli::runner::CliRunner::new(
-                    kind,
-                    workspace,
-                    session,
-                    approvals,
-                    trigger,
-                    serial,
-                    project_kind,
-                );
                 runner.run(user_text, push, cancel).await;
             });
             guard.finish();

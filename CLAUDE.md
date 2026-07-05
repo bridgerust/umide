@@ -41,10 +41,16 @@ Before finishing any change, check whether these need updating and keep them in 
   someone smoke-tests it. Main runtime unknowns: wgpu/Vulkan rendering the `VideoFrame`
   primitive and the emulator `-gpu host` under X11/Wayland. Decision (2026-07-01): don't
   invest in Linux runtime work now; revisit when there's demand.
-- **AI assistant** (all OSes): BYO-key API providers (Claude/OpenAI/DeepSeek/Gemini,
-  approval-gated) **and** external agent CLIs — **Claude Code** (reads auto; edits/commands
-  with per-action approval), **Codex** (sandboxed workspace-write + session consent; macOS/
-  Linux), **Gemini** (read-only). CLI backends are opt-in and never auto-selected.
+- **AI assistant** (all OSes): **one built-in agent, bring-your-own API key**, on UMIDE's
+  own multi-provider LLM loop — v1 providers **Claude + OpenAI**, switchable any time from the
+  panel header (not a per-chat menu, no forced provider). Approval-gated (reads auto; edits/
+  commands ask first) and it can see & drive the emulator to verify its own work. **Cost-aware
+  model routing**: each turn Auto-routes to the cheapest tier that fits (simple → Fast, agentic
+  → Deep); the Flagship tier is opt-in only, never chosen by Auto. A manual Model switch
+  (Auto/Fast/Balanced/Deep/Flagship) overrides. The external **agent CLIs (Claude Code / Codex
+  / Gemini) were removed** (2026-07 cleanup) — powering a distributed third-party app with a
+  provider *subscription* login isn't a sanctioned path; API-key BYO across the board.
+  DeepSeek + Gemini are planned as fast-follow *API* providers.
 
 ## Repo conventions
 - **Sole commit author**: `dev-josias <kologojosias@gmail.com>`. Do not introduce other

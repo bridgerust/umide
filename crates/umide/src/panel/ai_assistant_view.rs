@@ -11,13 +11,14 @@ use floem::{
     peniko::Color,
     prelude::{Key, NamedKey, SignalGet, SignalUpdate},
     reactive::{Effect, ReadSignal, RwSignal},
-    style::FlexWrap,
+    style::{CursorStyle, FlexWrap},
     views::{
         Container, Decorators, Empty, Label, Scroll, Stack, dyn_stack, rich_text,
         text_input,
     },
 };
 use tokio::sync::oneshot;
+use umide_agent::models::ModelTier;
 use umide_agent::{AgentEvent, Message, ProviderConfig, ProviderKind};
 
 use super::ai_sessions;
@@ -117,6 +118,8 @@ pub fn ai_assistant_panel(
         .find(|&k| ProviderConfig::resolve(k, ai::load_api_key(k)).is_ok())
         .unwrap_or(ProviderKind::Anthropic);
     let provider_kind = RwSignal::new(initial_kind);
+    // Manual model tier for the agent: None = Auto (cost-aware router).
+    let model_sel: RwSignal<Option<ModelTier>> = RwSignal::new(None);
     let has_key = RwSignal::new(
         ProviderConfig::resolve(initial_kind, ai::load_api_key(initial_kind))
             .is_ok(),
@@ -432,6 +435,7 @@ pub fn ai_assistant_panel(
         device_consent.clone(),
         window_tab_data.panel.active_device,
         window_tab_data.common.project_kind,
+        model_sel,
         input,
         messages,
         active,
@@ -687,6 +691,52 @@ pub fn ai_assistant_panel(
             .border_color(config.get().color(UmideColor::LAPCE_BORDER))
     });
 
+    // Model switch: Auto (cost-aware router) or pin a tier. Keeps simple turns
+    // on cheap models unless the user overrides. `None` = Auto.
+    let model_chip = move |label: &'static str, value: Option<ModelTier>| {
+        Label::new(label.to_string())
+            .on_click_stop(move |_| model_sel.set(value))
+            .style(move |s| {
+                let active = model_sel.get() == value;
+                let c = config.get();
+                s.padding_horiz(8.0)
+                    .padding_vert(2.0)
+                    .border_radius(6.0)
+                    .font_size(11.0)
+                    .cursor(CursorStyle::Pointer)
+                    .selectable(false)
+                    .color(if active {
+                        c.color(UmideColor::LAPCE_BUTTON_PRIMARY_FOREGROUND)
+                    } else {
+                        c.color(UmideColor::PANEL_FOREGROUND_DIM)
+                    })
+                    .apply_if(active, |s| {
+                        s.background(
+                            c.color(UmideColor::LAPCE_BUTTON_PRIMARY_BACKGROUND),
+                        )
+                    })
+                    .hover(|s| s.color(c.color(UmideColor::PANEL_FOREGROUND)))
+            })
+    };
+    let model_row = Stack::new((
+        group_label("Model"),
+        model_chip("Auto", None),
+        model_chip("Fast", Some(ModelTier::Fast)),
+        model_chip("Balanced", Some(ModelTier::Balanced)),
+        model_chip("Deep", Some(ModelTier::Deep)),
+        model_chip("Flagship", Some(ModelTier::Flagship)),
+    ))
+    .style(move |s| {
+        s.width_full()
+            .items_center()
+            .gap(2.0)
+            .flex_wrap(FlexWrap::Wrap)
+            .padding_horiz(8.0)
+            .padding_vert(6.0)
+            .border_bottom(1.0)
+            .border_color(config.get().color(UmideColor::LAPCE_BORDER))
+    });
+
     // Session header: "＋ New Chat" + the active chat's title, which toggles the
     // switcher below it.
     let header = {
@@ -784,6 +834,7 @@ pub fn ai_assistant_panel(
         header,
         switcher,
         provider_row,
+        model_row,
         transcript,
         approvals_view,
         consent_banner,
@@ -1265,6 +1316,7 @@ fn send_handler(
     device_consent: Arc<Mutex<Option<bool>>>,
     active_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
     project_kind: RwSignal<Option<crate::project::ProjectKind>>,
+    model_sel: RwSignal<Option<ModelTier>>,
     input: RwSignal<String>,
     messages: RwSignal<Vec<ChatMsg>>,
     active: RwSignal<Option<ChatMsg>>,
@@ -1362,6 +1414,8 @@ fn send_handler(
                 // agent's emulator tools drive that device for this turn.
                 active_device.get_untracked(),
                 project_kind.get_untracked(),
+                // None = Auto (cost router chooses); Some(tier) = manual pin.
+                model_sel.get_untracked(),
                 cancel.clone(),
             ),
             Launch::Cli(cli_kind, ws) => ai::spawn_cli_turn(

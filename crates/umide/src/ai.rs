@@ -10,7 +10,8 @@
 //!     tokio runtime) and streams [`AgentEvent`]s back to the UI. The editor
 //!     thread is never blocked, so you keep coding while the agent works.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -18,13 +19,17 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use floem::ext_event::{ExtSendTrigger, register_ext_trigger};
-use floem::prelude::SignalWith;
-use lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
+use floem::prelude::{SignalGet, SignalWith};
 use tokio::sync::oneshot;
 use umide_agent::tools::{ToolExecutor, ToolInvocation, ToolOutput};
 use umide_agent::{
     Agent, AgentEvent, ContentBlock, Message, ProviderConfig, ProviderKind, ToolDef,
     ToolResultContent,
+};
+
+use umide_core::{
+    buffer::rope_text::RopeText, cursor::CursorAffinity, editor::EditType,
+    selection::Selection,
 };
 
 use crate::window_tab::WindowTabData;
@@ -147,8 +152,10 @@ pub enum ApprovalOutcome {
     Rejected,
     /// The user approved a command; the worker should run it.
     CommandApproved,
-    /// The UI already applied (and saved) the edit.
-    EditApplied,
+    /// The UI applied the edit. Dirty buffers remain unsaved.
+    EditApplied {
+        needs_save: bool,
+    },
     /// The UI tried to apply the edit but failed (e.g. the file changed).
     EditFailed(String),
     /// The user allowed a consent gate (e.g. device control); nothing is applied
@@ -749,18 +756,11 @@ impl EditorTools {
             Ok(c) => c,
             Err(e) => return ToolOutput::error(format!("{rel}: {e}")),
         };
-        match content.matches(old).count() {
-            0 => return ToolOutput::error(format!("`old_str` not found in {rel}")),
-            1 => {}
-            n => {
-                return ToolOutput::error(format!(
-                    "`old_str` matches {n}× in {rel}; include more surrounding \
-                     context so it is unique"
-                ));
-            }
-        }
-        let offset = content.find(old).unwrap();
-        let line = content[..offset].matches('\n').count() + 1;
+        let range = match unique_edit_range(&content, old) {
+            Ok(range) => range,
+            Err(error) => return ToolOutput::error(format!("{rel}: {error}")),
+        };
+        let line = content[..range.start].matches('\n').count() + 1;
 
         // The edit is applied by the UI (buffer-aware) on approval, not here.
         let outcome = self
@@ -775,8 +775,14 @@ impl EditorTools {
             )
             .await;
         match outcome {
-            ApprovalOutcome::EditApplied => {
+            ApprovalOutcome::EditApplied { needs_save: false } => {
                 ToolOutput::ok(format!("Applied edit to {rel}."))
+            }
+            ApprovalOutcome::EditApplied { needs_save: true } => {
+                ToolOutput::ok(format!(
+                    "Applied edit to the open buffer for {rel}. Save the buffer before running \
+                     commands that read the file."
+                ))
             }
             ApprovalOutcome::EditFailed(e) => ToolOutput::error(e),
             ApprovalOutcome::Rejected => ToolOutput::ok(
@@ -1715,87 +1721,136 @@ fn ios_logs(udid: &str, lines: i64, filter: &str) -> ToolOutput {
 // Buffer-aware edit application (UI thread)
 // ---------------------------------------------------------------------------
 
-/// Apply an approved edit. If the file is open in the editor, the edit goes
-/// through the document so **undo history and cursor are preserved** and the
-/// open buffer updates in place, then it's saved. If the file isn't open, it's
-/// written to disk directly (there's no editor state to keep).
-///
-/// Reading the file again here is also a staleness check: if it changed since
-/// the agent read it, `old_str` won't match uniquely and we refuse safely.
-/// Must be called on the UI thread.
+/// Apply the approved replacement to the current document or, if there is no
+/// document for the path, to the file on disk. On success, reports whether
+/// the user still needs to save the buffer, after any automatic save finishes.
 pub fn apply_edit_in_editor(
     window_tab_data: &WindowTabData,
     path: &Path,
     old: &str,
     new: &str,
-) -> Result<(), String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    match content.matches(old).count() {
-        1 => {}
-        0 => {
-            return Err(
-                "the file changed since it was read (the snippet is no longer \
-                 present) — re-read it and try again"
-                    .into(),
-            );
+    applied: impl FnOnce(Result<bool, String>) + 'static,
+) {
+    match apply_edit(window_tab_data, path, old, new) {
+        Ok(EditDestination::CleanBuffer(doc)) => {
+            doc.save_with_status(move |saved| applied(Ok(!saved)));
         }
-        n => {
-            return Err(format!(
-                "the snippet now matches {n}× (the file changed since it was \
-                 read) — re-read it and make the match unique"
-            ));
-        }
-    }
-    let offset = content.find(old).unwrap();
-    let start = lsp_position(&content, offset);
-    let end = lsp_position(&content, offset + old.len());
-    let url =
-        Url::from_file_path(path).map_err(|_| "invalid file path".to_string())?;
-    let mut changes = HashMap::new();
-    changes.insert(
-        url,
-        vec![TextEdit {
-            range: Range { start, end },
-            new_text: new.to_string(),
-        }],
-    );
-    let edit = WorkspaceEdit {
-        changes: Some(changes),
-        document_changes: None,
-        change_annotations: None,
-    };
-
-    let was_open = window_tab_data
-        .main_split
-        .docs
-        .with_untracked(|docs| docs.contains_key(path));
-    if was_open {
-        // Undo-preserving edit through the open document, then persist.
-        window_tab_data.main_split.apply_workspace_edit(&edit);
-        if let Some(doc) = window_tab_data
-            .main_split
-            .docs
-            .with_untracked(|docs| docs.get(path).cloned())
-        {
-            doc.save(|| {});
-        }
-        Ok(())
-    } else {
-        let new_content = content.replacen(old, new, 1);
-        std::fs::write(path, new_content)
-            .map_err(|e| format!("write {}: {e}", path.display()))?;
-        Ok(())
+        Ok(EditDestination::DirtyBuffer) => applied(Ok(true)),
+        Ok(EditDestination::Disk) => applied(Ok(false)),
+        Err(error) => applied(Err(error)),
     }
 }
 
-/// Byte offset → LSP `Position` (character is a UTF-16 code-unit count, per LSP).
-fn lsp_position(content: &str, byte_offset: usize) -> Position {
-    let prefix = &content[..byte_offset];
-    let line = prefix.matches('\n').count() as u32;
-    let line_start = prefix.rfind('\n').map(|i| i + 1).unwrap_or(0);
-    let character = content[line_start..byte_offset].encode_utf16().count() as u32;
-    Position { line, character }
+enum EditDestination {
+    CleanBuffer(std::rc::Rc<crate::doc::Doc>),
+    DirtyBuffer,
+    Disk,
+}
+
+fn apply_edit(
+    window_tab_data: &WindowTabData,
+    path: &Path,
+    old: &str,
+    new: &str,
+) -> Result<EditDestination, String> {
+    let root = window_tab_data
+        .workspace
+        .path
+        .as_ref()
+        .filter(|_| window_tab_data.workspace.kind.is_local())
+        .ok_or_else(|| "no local workspace is open".to_string())?;
+    let root = root.canonicalize().map_err(|e| format!("workspace: {e}"))?;
+    let current_path = path
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    if current_path != path || !current_path.starts_with(root) {
+        return Err("the file path changed after the edit was proposed".into());
+    }
+    let split = &window_tab_data.main_split;
+    let document = split.docs.with_untracked(|docs| {
+        let mut documents = docs.iter().filter(|(open_path, _)| {
+            open_path.as_path() == path || open_path.canonicalize().ok().as_deref() == Some(path)
+        });
+        let document = documents.next();
+        if documents.next().is_some() {
+            return Err("the file has multiple editor buffers. Close the duplicate path and try again.".to_string());
+        }
+        Ok(document.map(|(path, doc)| (path.clone(), doc.clone())))
+    })?;
+
+    if let Some((open_path, doc)) = document {
+        if !doc.loaded.get_untracked() {
+            return Err(
+                "the editor is still loading the file. Try again once it is open."
+                    .into(),
+            );
+        }
+        if doc.content.with_untracked(|content| content.read_only()) {
+            return Err("the file is read-only".into());
+        }
+        let (content, pristine) = doc.buffer.with_untracked(|buffer| {
+            (buffer.text().to_string(), buffer.is_pristine())
+        });
+        let range = unique_edit_range(&content, old)?;
+        if pristine && read_edit_file(path)? != content {
+            return Err(
+                "the file on disk changed before the editor refreshed. Try again."
+                    .into(),
+            );
+        }
+
+        let editor = split
+            .active_editor
+            .get_untracked()
+            .filter(|editor| std::rc::Rc::ptr_eq(&editor.doc(), &doc))
+            .or_else(|| {
+                let id = split.editors.get_editor_id_by_path(&open_path)?;
+                split
+                    .editors
+                    .editor_untracked(id)
+                    .filter(|editor| std::rc::Rc::ptr_eq(&editor.doc(), &doc))
+            });
+        if let Some(editor) = editor {
+            editor.replace_range(range, new);
+        } else {
+            let edit =
+                Selection::region(range.start, range.end, CursorAffinity::Forward);
+            doc.do_raw_edit(&[(edit, new)], EditType::Other)
+                .ok_or_else(|| "the editor could not apply the edit".to_string())?;
+        }
+        return Ok(if pristine {
+            EditDestination::CleanBuffer(doc)
+        } else {
+            EditDestination::DirtyBuffer
+        });
+    }
+
+    let mut content = read_edit_file(path)?;
+    let range = unique_edit_range(&content, old)?;
+    content.replace_range(range, new);
+    std::fs::write(path, content)
+        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(EditDestination::Disk)
+}
+
+fn read_edit_file(path: &Path) -> Result<String, String> {
+    std::fs::read_to_string(path)
+        .map_err(|e| format!("read {}: {e}", path.display()))
+}
+
+fn unique_edit_range(content: &str, old: &str) -> Result<Range<usize>, String> {
+    if old.is_empty() {
+        return Err("the original snippet must not be empty".into());
+    }
+    let start = content.find(old).ok_or_else(|| {
+        "the original snippet is no longer present. Re-read the file and try again.".to_string()
+    })?;
+    // Start on the next character so overlapping matches are also ambiguous.
+    let next = start + old.chars().next().unwrap().len_utf8();
+    if content[next..].contains(old) {
+        return Err("the original snippet has more than one match. Use more surrounding context.".into());
+    }
+    Ok(start..start + old.len())
 }
 
 #[cfg(test)]
@@ -2051,7 +2106,9 @@ mod tests {
         // input; only Rejected or a failed edit keeps it locked.
         assert!(consent_granted(&ApprovalOutcome::Allowed));
         assert!(consent_granted(&ApprovalOutcome::CommandApproved));
-        assert!(consent_granted(&ApprovalOutcome::EditApplied));
+        assert!(consent_granted(&ApprovalOutcome::EditApplied {
+            needs_save: false
+        }));
         assert!(!consent_granted(&ApprovalOutcome::Rejected));
         assert!(!consent_granted(&ApprovalOutcome::EditFailed("io".into())));
     }
@@ -2124,14 +2181,33 @@ mod tests {
     }
 
     #[test]
-    fn lsp_position_counts_utf16_units() {
-        let content = "héllo\nworld"; // é is 2 bytes / 1 UTF-16 unit
-        let p = lsp_position(content, 3); // byte 3 = first 'l'
-        assert_eq!(p.line, 0);
-        assert_eq!(p.character, 2); // h, é → 2 units
-        let p2 = lsp_position(content, 7); // byte 7 = 'w' on line 1
-        assert_eq!(p2.line, 1);
-        assert_eq!(p2.character, 0);
+    fn approved_edit_follows_current_buffer_offsets() {
+        let mut buffer = umide_core::buffer::Buffer::new("keep\nreplace me\nend");
+        let insertion = Selection::region(0, 0, CursorAffinity::Forward);
+        buffer.edit(
+            &[(insertion, "unsaved 🦀 insertion\n")],
+            EditType::InsertChars,
+        );
+        let before = buffer.text().to_string();
+        let range = unique_edit_range(&before, "replace me").unwrap();
+        let edit =
+            Selection::region(range.start, range.end, CursorAffinity::Forward);
+        buffer.edit(&[(edit, "replacement")], EditType::Other);
+        assert_eq!(
+            buffer.text().to_string(),
+            "unsaved 🦀 insertion\nkeep\nreplacement\nend"
+        );
+        assert!(!buffer.is_pristine());
+        buffer.do_undo().unwrap();
+        assert_eq!(buffer.text().to_string(), before);
+    }
+
+    #[test]
+    fn approved_edit_rejects_changed_or_ambiguous_snippets() {
+        assert!(unique_edit_range("user changed this block", "old block").is_err());
+        assert!(unique_edit_range("same\nsame", "same").is_err());
+        assert!(unique_edit_range("🦀🦀🦀", "🦀🦀").is_err());
+        assert!(unique_edit_range("file", "").is_err());
     }
 }
 

@@ -1649,7 +1649,7 @@ pub fn emulator_panel(
     {
         let config = window_tab_data.common.config;
         let devices = RwSignal::new(Vec::<DeviceInfo>::new());
-        let running_device = RwSignal::new(None::<DeviceInfo>);
+        let running_device = window_tab_data.panel.running_android;
         let is_visible = RwSignal::new(false);
         let current_device_id = RwSignal::new(String::new());
         let frame_signal = window_tab_data.panel.android_frame;
@@ -1699,8 +1699,8 @@ pub fn emulator_panel(
         let config = window_tab_data.common.config;
         let devices = RwSignal::new(Vec::<DeviceInfo>::new());
 
-        let running_android = RwSignal::new(None::<DeviceInfo>);
-        let running_ios = RwSignal::new(None::<DeviceInfo>);
+        let running_android = window_tab_data.panel.running_android;
+        let running_ios = window_tab_data.panel.running_ios;
 
         let android_visible = RwSignal::new(false);
         let ios_visible = RwSignal::new(false);

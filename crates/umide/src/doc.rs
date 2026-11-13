@@ -1400,6 +1400,17 @@ impl Doc {
     }
 
     pub fn save(&self, after_action: impl FnOnce() + 'static) {
+        self.save_with_status(move |saved| {
+            if saved {
+                after_action();
+            }
+        });
+    }
+
+    pub(crate) fn save_with_status(
+        &self,
+        after_action: impl FnOnce(bool) + 'static,
+    ) {
         let content = self.content.get_untracked();
         if let DocContent::File { path, .. } = content {
             let rev = self.rev();
@@ -1411,14 +1422,18 @@ impl Doc {
                         buffer.update(|buffer| {
                             buffer.set_pristine();
                         });
-                        after_action();
+                        after_action(true);
+                        return;
                     }
                 }
+                after_action(false);
             });
 
             self.common.proxy.save(rev, path, true, move |result| {
                 send(result);
             })
+        } else {
+            after_action(false);
         }
     }
 

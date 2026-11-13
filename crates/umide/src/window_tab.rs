@@ -36,8 +36,8 @@ use lsp_types::{
 use serde_json::Value;
 use tracing::{Level, debug, error, event};
 use umide_core::{
-    command::FocusCommand, cursor::CursorAffinity, directory::Directory, meta,
-    mode::Mode, register::Register,
+    command::FocusCommand, cursor::CursorAffinity, directory::Directory, mode::Mode,
+    register::Register,
 };
 use umide_rpc::{
     RpcError,
@@ -154,11 +154,9 @@ pub struct CommonData {
     // the current focused view which will receive keyboard events
     pub keyboard_focus: RwSignal<Option<ViewId>>,
     pub window_common: Rc<WindowCommonData>,
-    /// The detected mobile project kind of this workspace (React Native /
-    /// Flutter), probed once at workspace open. `None` for non-mobile
-    /// workspaces and remote (SSH/WSL) workspaces. Drives the status-bar badge
-    /// and, later, AI project context + run-on-device.
+    /// The detected framework in the selected app directory.
     pub project_kind: RwSignal<Option<crate::project::ProjectKind>>,
+    pub mobile_run_profile: RwSignal<crate::project::MobileRunProfile>,
 }
 
 impl std::fmt::Debug for CommonData {
@@ -194,6 +192,7 @@ pub struct WindowTabData {
     pub proxy: ProxyData,
     pub set_config: WriteSignal<Arc<UmideConfig>>,
     pub update_in_progress: RwSignal<bool>,
+    mobile_run_request: RwSignal<u64>,
     pub progresses: RwSignal<IndexMap<ProgressToken, WorkProgress>>,
     pub messages: RwSignal<Vec<(String, ShowMessageParams)>>,
     pub common: Rc<CommonData>,
@@ -366,14 +365,22 @@ impl WindowTabData {
             text_layout.size().height
         });
 
-        // Mobile project detection: two cheap file probes, local workspaces
-        // only (remote paths can't be read from here). Feeds the status-bar
-        // badge; later the AI agent's project context and run-on-device.
+        let run_profile = workspace_info
+            .as_ref()
+            .map(|info| info.mobile_run_profile.clone())
+            .unwrap_or_default();
         let project_kind = cx.create_rw_signal(
             workspace
                 .path
                 .as_deref()
                 .filter(|_| workspace.kind.is_local())
+                .and_then(|path| {
+                    crate::project::mobile_app_directory(
+                        path,
+                        run_profile.app_dir.as_deref(),
+                    )
+                })
+                .as_deref()
                 .and_then(crate::project::detect_project_kind),
         );
 
@@ -405,6 +412,7 @@ impl WindowTabData {
             keyboard_focus: cx.create_rw_signal(None),
             window_common: window_common.clone(),
             project_kind,
+            mobile_run_profile: cx.create_rw_signal(run_profile),
         });
 
         let main_split = MainSplitData::new(cx, common.clone());
@@ -715,6 +723,7 @@ impl WindowTabData {
             proxy,
             set_config,
             update_in_progress: cx.create_rw_signal(false),
+            mobile_run_request: cx.create_rw_signal(0),
             progresses: cx.create_rw_signal(IndexMap::new()),
             messages: cx.create_rw_signal(Vec::new()),
             common,
@@ -1505,7 +1514,7 @@ impl WindowTabData {
                 {
                     let release = release.clone();
                     let update_in_progress = self.update_in_progress;
-                    if release.version != *meta::VERSION {
+                    if release.is_update() {
                         if let Ok(process_path) = env::current_exe() {
                             update_in_progress.set(true);
                             let send = create_ext_action(
@@ -1657,13 +1666,21 @@ impl WindowTabData {
             }
             // The mobile core loop's RUN step. macOS can target either iOS or
             // Android, so the top-bar buttons pick the platform explicitly;
-            // the palette `RunOnDevice` follows the viewed device.
+            // the palette `RunOnDevice` uses the preferred device when configured.
             RunOnDevice => self.run_on_device(None),
             RunOnDeviceAndroid => {
                 self.run_on_device(Some(umide_emulator::DevicePlatform::Android))
             }
             RunOnDeviceIos => {
                 self.run_on_device(Some(umide_emulator::DevicePlatform::Ios))
+            }
+            ChooseMobileAppFolder => self.choose_mobile_app_folder(),
+            ChooseMobileRunDevice => {
+                if self.workspace.kind.is_local() && self.workspace.path.is_some() {
+                    self.palette.run(PaletteKind::MobileRunDevice);
+                } else {
+                    self.mobile_run_message(MessageType::INFO, "Open a local workspace to choose a device.");
+                }
             }
             RunInTerminal => {
                 if let Some(editor_data) =
@@ -2036,6 +2053,15 @@ impl WindowTabData {
             }
             InternalCommand::RunAndDebug { mode, config } => {
                 self.run_and_debug(cx, &mode, &config);
+            }
+            InternalCommand::SetMobileRunDevice(device) => {
+                self.mobile_run_request
+                    .update(|request| *request = request.wrapping_add(1));
+                self.common
+                    .mobile_run_profile
+                    .update(|profile| profile.device = device);
+                self.panel.run_log_device.set(None);
+                self.save_mobile_run_profile();
             }
             InternalCommand::StartRename {
                 path,
@@ -2539,6 +2565,7 @@ impl WindowTabData {
         WorkspaceInfo {
             split: main_split_data.get_untracked().split_info(self),
             panel: self.panel.panel_info(),
+            mobile_run_profile: self.common.mobile_run_profile.get_untracked(),
             breakpoints: self
                 .terminal
                 .debug
@@ -3051,35 +3078,193 @@ impl WindowTabData {
         });
     }
 
-    /// Build + launch the detected RN/Flutter app in a live terminal.
-    /// `platform` = the explicit target (a top-bar platform button), or `None`
-    /// to follow the device the user is viewing (defaulting to Android).
-    fn run_on_device(&self, platform: Option<umide_emulator::DevicePlatform>) {
-        let Some(kind) = self.common.project_kind.get_untracked() else {
-            self.show_message(
-                "Run on Device",
-                &ShowMessageParams {
-                    typ: MessageType::INFO,
-                    message: "No React Native / Flutter project detected in \
-                              this workspace."
-                        .to_string(),
-                },
+    fn mobile_run_message(&self, typ: MessageType, message: impl Into<String>) {
+        self.show_message(
+            "Run on Device",
+            &ShowMessageParams {
+                typ,
+                message: message.into(),
+            },
+        );
+    }
+
+    fn save_mobile_run_profile(&self) {
+        if let Err(error) =
+            crate::app::get_db().save_window_tab(Rc::new(self.clone()))
+        {
+            self.mobile_run_message(
+                MessageType::WARNING,
+                format!("Could not save the run profile. {error}"),
+            );
+        }
+    }
+
+    fn choose_mobile_app_folder(&self) {
+        let Some(workspace) = self
+            .workspace
+            .path
+            .as_ref()
+            .filter(|_| self.workspace.kind.is_local())
+        else {
+            self.mobile_run_message(
+                MessageType::INFO,
+                "Open a local workspace to choose a mobile app folder.",
             );
             return;
         };
-        let workspace = self.common.workspace.path.clone();
-        let expo = workspace.as_deref().is_some_and(crate::project::is_expo);
-        let device = self.panel.active_device.get_untracked();
-        // Explicit platform wins; otherwise the viewed device's; else Android.
+        let tab = self.clone();
+        let workspace = workspace.clone();
+        crate::file_dialog::pick_folder(Some(workspace.clone()), move |file| {
+            let Some(chosen) = file.and_then(|file| file.path.into_iter().next())
+            else {
+                return;
+            };
+            if tab.common.mobile_run_profile.try_get_untracked().is_none() {
+                return;
+            }
+            let Ok(root) = workspace.canonicalize() else {
+                tab.mobile_run_message(
+                    MessageType::ERROR,
+                    "Could not open the workspace folder.",
+                );
+                return;
+            };
+            let Some(app) =
+                crate::project::mobile_app_directory(&root, Some(&chosen))
+            else {
+                tab.mobile_run_message(
+                    MessageType::ERROR,
+                    "Choose an app folder inside this workspace.",
+                );
+                return;
+            };
+            let Some(kind) = crate::project::detect_project_kind(&app) else {
+                tab.mobile_run_message(MessageType::ERROR, "Choose the folder containing your React Native, Expo, or Flutter app.");
+                return;
+            };
+            let relative = app
+                .strip_prefix(&root)
+                .expect("validated workspace app folder");
+            tab.mobile_run_request
+                .update(|request| *request = request.wrapping_add(1));
+            tab.common.mobile_run_profile.update(|profile| {
+                profile.app_dir = (!relative.as_os_str().is_empty())
+                    .then(|| relative.to_path_buf());
+            });
+            tab.common.project_kind.set(Some(kind));
+            tab.save_mobile_run_profile();
+        });
+    }
+
+    /// Resolve a saved target against current devices, since adb serials can
+    /// change when the preferred emulator restarts.
+    fn run_on_device(&self, platform: Option<umide_emulator::DevicePlatform>) {
+        use umide_emulator::DevicePlatform::{Android, Ios};
+
+        let request = self.mobile_run_request.get_untracked().wrapping_add(1);
+        self.mobile_run_request.set(request);
+        let profile = self.common.mobile_run_profile.get_untracked();
+        let Some(app) = self
+            .workspace
+            .path
+            .as_deref()
+            .filter(|_| self.workspace.kind.is_local())
+            .and_then(|root| {
+                crate::project::mobile_app_directory(
+                    root,
+                    profile.app_dir.as_deref(),
+                )
+            })
+        else {
+            self.mobile_run_message(
+                MessageType::INFO,
+                "Open a local workspace or choose its mobile app folder.",
+            );
+            return;
+        };
+        let Some(kind) = crate::project::detect_project_kind(&app) else {
+            self.mobile_run_message(MessageType::INFO, "Choose a React Native, Expo, or Flutter app with Run on Device: Choose App Folder.");
+            return;
+        };
+        let expo = kind == crate::project::ProjectKind::ReactNative
+            && crate::project::is_expo(&app);
+        let active_device = self.panel.active_device.get_untracked();
         let platform = platform
-            .or(device.as_ref().map(|d| d.platform))
-            .unwrap_or(umide_emulator::DevicePlatform::Android);
-        let run = crate::project::run_on_device_command(
+            .or_else(|| profile.device.as_ref().map(|device| device.platform))
+            .or_else(|| active_device.as_ref().map(|device| device.platform))
+            .unwrap_or(Android);
+        if platform == Ios && !cfg!(target_os = "macos") {
+            self.mobile_run_message(
+                MessageType::INFO,
+                "Running an iOS Simulator requires macOS.",
+            );
+            return;
+        }
+        let preferred = profile.device.filter(|device| device.platform == platform);
+        let running = match platform {
+            Android => self.panel.running_android.get_untracked(),
+            Ios => self.panel.running_ios.get_untracked(),
+        };
+        if let Some(device) = running.as_ref().filter(|device| {
+            preferred
+                .as_ref()
+                .is_none_or(|preferred| preferred.matches(device))
+                && crate::project::run_device_identifier(device).is_some()
+        }) {
+            self.launch_mobile_app(&app, kind, expo, platform, Some(device.clone()));
+            return;
+        }
+        let viewed = running.as_ref().map(crate::project::MobileRunDevice::from);
+        let target = preferred.or(viewed);
+        let tab = self.clone();
+        let send = create_ext_action(
+            self.scope,
+            move |devices: Vec<umide_emulator::DeviceInfo>| {
+                if tab.mobile_run_request.try_get_untracked() != Some(request) {
+                    return;
+                }
+                let device = crate::project::select_run_device(
+                    &devices,
+                    platform,
+                    target.as_ref(),
+                )
+                .cloned();
+                if let Some(target) = target.as_ref().filter(|_| device.is_none()) {
+                    tab.mobile_run_message(
+                        MessageType::INFO,
+                        format!(
+                            "Start {} in the Emulator panel, or choose another run device.",
+                            target.id
+                        ),
+                    );
+                    return;
+                }
+                tab.launch_mobile_app(&app, kind, expo, platform, device);
+            },
+        );
+        std::thread::spawn(move || send(umide_emulator::list_all_devices()));
+    }
+
+    fn launch_mobile_app(
+        &self,
+        app: &Path,
+        kind: crate::project::ProjectKind,
+        expo: bool,
+        platform: umide_emulator::DevicePlatform,
+        device: Option<umide_emulator::DeviceInfo>,
+    ) {
+        let run = match crate::project::run_on_device_command(
             kind,
             expo,
             platform,
             device.as_ref(),
-        );
+        ) {
+            Ok(run) => run,
+            Err(message) => {
+                self.mobile_run_message(MessageType::ERROR, message);
+                return;
+            }
+        };
         let config = RunDebugConfig {
             ty: None,
             name: run.name,
@@ -3087,7 +3272,7 @@ impl WindowTabData {
             args: (!run.args.is_empty()).then_some(run.args),
             // Strip the `\\?\` verbatim prefix — Gradle's gradlew.bat won't
             // run with a `\\?\`-prefixed CWD on Windows.
-            cwd: workspace.as_deref().map(crate::project::plain_cwd),
+            cwd: Some(crate::project::plain_cwd(app)),
             env: None,
             prelaunch: None,
             debug_command: None,
@@ -3095,6 +3280,9 @@ impl WindowTabData {
             tracing_output: false,
             config_source: ConfigSource::RunInTerminal,
         };
+        if self.panel.run_log_device.get_untracked() != device {
+            self.panel.run_log_device.set(device);
+        }
         self.common
             .internal_command
             .send(InternalCommand::RunAndDebug {

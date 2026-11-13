@@ -6,11 +6,9 @@
 //! `start_logcat_stream` (adb logcat), iOS via `start_ios_log_stream` (simctl
 //! log stream). Both deliver batches of [`LogLine`] into a signal on the same
 //! contract, so this view treats the two platforms identically. The panel
-//! follows the device the user is viewing in the Emulator panel
-//! (`panel.active_device`, the G2 producer), starting/stopping the stream as
-//! that device changes.
+//! follows the most recent Run target or the device shown in the Emulator panel.
 
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use floem::{
     View,
@@ -23,7 +21,7 @@ use umide_emulator::{DevicePlatform, DeviceState};
 
 use super::{
     device_logs_stream::{
-        LogLine, LogSeverity, LogcatHandle, start_ios_log_stream,
+        LogBatch, LogLine, LogSeverity, LogcatHandle, start_ios_log_stream,
         start_logcat_stream,
     },
     position::PanelPosition,
@@ -54,25 +52,29 @@ pub fn device_logs_panel(
 ) -> impl View {
     let config = window_tab_data.common.config;
     let active_device = window_tab_data.panel.active_device;
+    let run_device = window_tab_data.panel.run_log_device;
 
     // Retained lines as `(id, line)` so `dyn_stack` has a stable key even as the
     // buffer drains from the front; `next_id` is the monotonic id source.
     let lines: RwSignal<Vec<(u64, LogLine)>> = RwSignal::new(Vec::new());
     let next_id = RwSignal::new(0u64);
     // The backend delivers one batch per flush here.
-    let batch: RwSignal<Option<Vec<LogLine>>> = RwSignal::new(None);
+    let batch: RwSignal<Option<LogBatch>> = RwSignal::new(None);
+    let generation = Rc::new(Cell::new(0_u64));
     // The live stream child; dropping the handle kills it (adb/simctl exits).
     let handle: RwSignal<Option<LogcatHandle>> = RwSignal::new(None);
     // What the header shows: the streamed device, or why there's nothing.
     let header =
         RwSignal::new(String::from("No running device — start one in Emulator"));
 
-    // (Re)start the stream whenever the viewed device changes. Dropping the old
-    // handle first stops the previous stream; then Android → logcat by serial,
-    // iOS → simctl log stream by udid. Only `active_device` is tracked here, so
-    // setting the other signals below can't re-fire this effect.
+    // Switch streams when Run selects a target or the viewed device changes.
+    let stream_generation = generation.clone();
     Effect::new(move |_| {
-        let device = active_device.get();
+        let pinned = run_device.get();
+        let is_pinned = pinned.is_some();
+        let device = pinned.or_else(|| active_device.get());
+        let current_generation = stream_generation.get().wrapping_add(1);
+        stream_generation.set(current_generation);
         handle.set(None);
         batch.set(None);
         lines.set(Vec::new());
@@ -81,18 +83,19 @@ pub fn device_logs_panel(
         match device {
             Some(device) if device.state == DeviceState::Running => {
                 let started = match device.platform {
-                    DevicePlatform::Android => device
-                        .serial
-                        .as_deref()
-                        .and_then(|serial| start_logcat_stream(serial, batch)),
-                    DevicePlatform::Ios => start_ios_log_stream(&device.id, batch),
+                    DevicePlatform::Android => {
+                        device.serial.as_deref().and_then(|serial| {
+                            start_logcat_stream(serial, batch, current_generation)
+                        })
+                    }
+                    DevicePlatform::Ios => {
+                        start_ios_log_stream(&device.id, batch, current_generation)
+                    }
                 };
-                let platform = match device.platform {
-                    DevicePlatform::Android => "Android",
-                    DevicePlatform::Ios => "iOS",
-                };
+                let platform = crate::project::platform_label(device.platform);
+                let source = if is_pinned { " · Run target" } else { "" };
                 header.set(if started.is_some() {
-                    format!("{} · {platform}", device.name)
+                    format!("{} · {platform}{source}", device.name)
                 } else {
                     format!(
                         "{} · {platform} — couldn't start log stream",
@@ -110,8 +113,8 @@ pub fn device_logs_panel(
 
     // Append each delivered batch, keeping the buffer capped at `MAX_LINES`.
     Effect::new(move |_| {
-        if let Some(new_lines) = batch.get() {
-            if new_lines.is_empty() {
+        if let Some((source, new_lines)) = batch.get() {
+            if source != generation.get() || new_lines.is_empty() {
                 return;
             }
             lines.update(|buf| {
@@ -139,6 +142,15 @@ pub fn device_logs_panel(
                 .text_ellipsis()
                 .color(config.get().color(UmideColor::PANEL_FOREGROUND_DIM))
         }),
+        Label::new("Follow Emulator")
+            .on_click_stop(move |_| run_device.set(None))
+            .style(move |s| {
+                s.apply_if(run_device.get().is_none(), |s| s.hide())
+                    .padding_horiz(8.0)
+                    .font_size(11.0)
+                    .cursor(CursorStyle::Pointer)
+                    .color(config.get().color(UmideColor::PANEL_FOREGROUND))
+            }),
         Label::new("Clear")
             .on_click_stop(move |_| lines.set(Vec::new()))
             .style(move |s| {

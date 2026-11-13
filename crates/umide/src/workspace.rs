@@ -156,4 +156,6 @@ pub struct WorkspaceInfo {
     pub split: SplitInfo,
     pub panel: PanelInfo,
     pub breakpoints: HashMap<PathBuf, Vec<UmideBreakpoint>>,
+    #[serde(default)]
+    pub mobile_run_profile: crate::project::MobileRunProfile,
 }

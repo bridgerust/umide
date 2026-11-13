@@ -232,6 +232,10 @@ pub struct PanelData {
     /// turn drives the device the user is viewing instead of "first adb device"
     /// (cross-machine ask G2). `DeviceInfo` carries `.id` (AVD/UDID) + `.platform`.
     pub active_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
+    pub running_android: RwSignal<Option<umide_emulator::DeviceInfo>>,
+    pub running_ios: RwSignal<Option<umide_emulator::DeviceInfo>>,
+    /// Device selected by the most recent Run on Device command.
+    pub run_log_device: RwSignal<Option<umide_emulator::DeviceInfo>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -272,6 +276,9 @@ impl PanelData {
             android_frame,
             ios_frame,
             active_device,
+            running_android: cx.create_rw_signal(None),
+            running_ios: cx.create_rw_signal(None),
+            run_log_device: cx.create_rw_signal(None),
         }
     }
 

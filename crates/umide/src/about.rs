@@ -8,7 +8,7 @@ use floem::{
     style::{CursorStyle, Display, Position},
     views::{Container, Decorators, Label, Stack, svg},
 };
-use umide_core::{command::FocusCommand, meta::VERSION, mode::Mode};
+use umide_core::{command::FocusCommand, meta, mode::Mode};
 
 use crate::{
     command::{CommandExecuted, CommandKind},
@@ -98,6 +98,9 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
     let config = window_tab_data.common.config;
     let internal_command = window_tab_data.common.internal_command;
     let logo_size = 100.0;
+    let version = meta::RELEASE_TAG
+        .unwrap_or(meta::VERSION)
+        .trim_start_matches('v');
 
     exclusive_popup(window_tab_data, about_data.visible, move || {
         Stack::new((
@@ -110,7 +113,7 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
                     .margin_top(10.0)
                     .color(config.get().color(UmideColor::EDITOR_FOREGROUND))
             }),
-            Label::new(format!("Version: {}", VERSION)).style(move |s| {
+            Label::new(format!("Version: {version}")).style(move |s| {
                 s.margin_top(10.0)
                     .color(config.get().color(UmideColor::EDITOR_DIM))
             }),

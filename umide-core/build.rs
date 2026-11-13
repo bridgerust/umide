@@ -6,6 +6,7 @@ use anyhow::Result;
 struct ReleaseInfo {
     version: String,
     branch: String,
+    release_tag: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -22,13 +23,18 @@ fn main() -> Result<()> {
 
     let meta_file = Path::new(&env::var("OUT_DIR")?).join("meta.rs");
 
-    let ReleaseInfo { version, branch } = release_info;
+    let ReleaseInfo {
+        version,
+        branch,
+        release_tag,
+    } = release_info;
 
     #[rustfmt::skip]
     let meta = format!(r#"
         pub const NAME: &str = "Umide-{branch}";
         pub const VERSION: &str = "{version}";
         pub const RELEASE: ReleaseType = ReleaseType::{branch};
+        pub const RELEASE_TAG: Option<&str> = {release_tag:?};
     "#);
 
     fs::write(meta_file, meta)?;
@@ -45,6 +51,7 @@ fn get_info() -> Result<ReleaseInfo> {
         return Ok(ReleaseInfo {
             version: cargo_tag.to_string(),
             branch: String::from("Stable"),
+            release_tag: None,
         });
     }
 
@@ -55,6 +62,7 @@ fn get_info() -> Result<ReleaseInfo> {
             ReleaseInfo {
                 version: cargo_tag.to_string(),
                 branch: "Stable".to_string(),
+                release_tag: Some(release_tag),
             }
         } else {
             #[cfg(not(debug_assertions))]
@@ -69,6 +77,7 @@ fn get_info() -> Result<ReleaseInfo> {
             ReleaseInfo {
                 version: tag,
                 branch: release.to_string(),
+                release_tag: None,
             }
         }
     };

@@ -12,7 +12,6 @@ use floem::{
     style::{AlignItems, CursorStyle, JustifyContent},
     views::{Container, Decorators, Empty, Label, Stack, drag_window_area, svg},
 };
-use umide_core::meta;
 use umide_rpc::proxy::ProxyStatus;
 
 use crate::{
@@ -468,6 +467,22 @@ fn middle(
                 .hover(|s| s.opacity(0.85))
         })
     };
+    let choose_run_device = tooltip_label(
+        config,
+        Label::new("▾")
+            .on_click_stop(move |_| {
+                workbench_command.send(UmideWorkbenchCommand::ChooseMobileRunDevice);
+            })
+            .style(move |s| {
+                s.apply_if(project_kind.get().is_none(), |s| s.hide())
+                    .padding_horiz(7.0)
+                    .height(26.0)
+                    .items_center()
+                    .cursor(CursorStyle::Pointer)
+                    .color(config.get().color(UmideColor::EDITOR_FOREGROUND))
+            }),
+        || "Choose run device",
+    );
     // macOS can run either platform → one button each; other OSes only have
     // Android (iOS Simulator is macOS-only) → a single "Run" button.
     #[cfg(target_os = "macos")]
@@ -544,6 +559,7 @@ fn middle(
             // Android; elsewhere a single Run (Android). The generic Run-and-
             // Debug palette icon is gone — for mobile these ARE the run entry.
             run_buttons,
+            choose_run_device,
             drag_window_area(Empty::new())
                 .style(|s| s.height_pct(100.0).flex_basis(0.0).flex_grow(1.0)),
         ))
@@ -572,16 +588,12 @@ fn right(
     config: ReadSignal<Arc<UmideConfig>>,
 ) -> impl View {
     let latest_version = Memo::new(move |_| {
-        let latest_release = latest_release.get();
-        let latest_version =
-            latest_release.as_ref().as_ref().map(|r| r.version.clone());
-        if latest_version.is_some()
-            && latest_version.as_deref() != Some(meta::VERSION)
-        {
-            latest_version
-        } else {
-            None
-        }
+        latest_release
+            .get()
+            .as_ref()
+            .as_ref()
+            .filter(|release| release.is_update())
+            .map(|release| release.version.clone())
     });
 
     let has_update = move || latest_version.with(|v| v.is_some());

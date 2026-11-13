@@ -228,6 +228,14 @@ pub enum UmideWorkbenchCommand {
     #[strum(message = "Run on iOS")]
     RunOnDeviceIos,
 
+    #[strum(serialize = "choose_mobile_app_folder")]
+    #[strum(message = "Run on Device: Choose App Folder")]
+    ChooseMobileAppFolder,
+
+    #[strum(serialize = "choose_mobile_run_device")]
+    #[strum(message = "Run on Device: Choose Emulator or Simulator")]
+    ChooseMobileRunDevice,
+
     #[strum(serialize = "reveal_active_file_in_file_explorer")]
     #[strum(message = "Reveal Active File in File Explorer")]
     RevealActiveFileInFileExplorer,
@@ -715,6 +723,7 @@ pub enum InternalCommand {
         mode: RunDebugMode,
         config: RunDebugConfig,
     },
+    SetMobileRunDevice(Option<crate::project::MobileRunDevice>),
     StartRename {
         path: PathBuf,
         placeholder: String,

@@ -731,6 +731,7 @@ fn approval_card(
 ) -> impl View {
     let id = card.id;
     let kind = card.kind.clone();
+    let approve_senders = senders.clone();
     let resolve = move |outcome: ai::ApprovalOutcome| {
         if let Some(tx) = senders.borrow_mut().remove(&id) {
             let _ = tx.send(outcome);
@@ -748,10 +749,29 @@ fn approval_card(
                     path,
                     old_str,
                     new_str,
-                } => match ai::apply_edit_in_editor(&wtd, path, old_str, new_str) {
-                    Ok(()) => ai::ApprovalOutcome::EditApplied,
-                    Err(e) => ai::ApprovalOutcome::EditFailed(e),
-                },
+                } => {
+                    let Some(sender) = approve_senders.borrow_mut().remove(&id)
+                    else {
+                        return;
+                    };
+                    pending.update(|v| v.retain(|c| c.id != id));
+                    ai::apply_edit_in_editor(
+                        &wtd,
+                        path,
+                        old_str,
+                        new_str,
+                        move |result| {
+                            let outcome = match result {
+                                Ok(needs_save) => {
+                                    ai::ApprovalOutcome::EditApplied { needs_save }
+                                }
+                                Err(error) => ai::ApprovalOutcome::EditFailed(error),
+                            };
+                            let _ = sender.send(outcome);
+                        },
+                    );
+                    return;
+                }
                 // One-time per-session device-control consent: approving
                 // unlocks tap/swipe/type/keys for the rest of the session.
                 ai::ApprovalKind::DeviceControl => ai::ApprovalOutcome::Allowed,

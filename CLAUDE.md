@@ -36,11 +36,8 @@ Before finishing any change, check whether these need updating and keep them in 
   frames, pointer tap/drag, hardware buttons (Home/Back/Recents/Power), keyboard text, and
   a screenshot button. Verified live end-to-end on a real `Pixel_9a`. iOS Simulator stays
   macOS-only permanently.
-- **Linux**: the *same* portable panel as Windows and it builds in CI (Clippy + the Linux
-  `.deb`), but it has **never been run live** — keep it labelled **preview only** until
-  someone smoke-tests it. Main runtime unknowns: wgpu/Vulkan rendering the `VideoFrame`
-  primitive and the emulator `-gpu host` under X11/Wayland. Decision (2026-07-01): don't
-  invest in Linux runtime work now; revisit when there's demand.
+- **Linux**: CI still checks build compatibility and releases ship a Linux
+  proxy for remote workspaces. The desktop product targets macOS and Windows.
 - **AI assistant** (all OSes): **one built-in agent, bring-your-own API key**, on UMIDE's
   own multi-provider LLM loop — v1 providers **Claude + OpenAI**, switchable any time from the
   panel header (not a per-chat menu, no forced provider). Approval-gated (reads auto; edits/
@@ -57,7 +54,7 @@ Before finishing any change, check whether these need updating and keep them in 
   authors and do not add `Co-Authored-By` trailers.
 - `main` is protected (PR required). Branch for changes and open a PR; admin-merge if solo.
 - **Releases**: push a `v*` tag → GitHub Actions builds the notarized macOS DMG, Windows
-  MSI, and Linux `.deb`, and publishes a GitHub Release.
+  MSI, and the Linux remote proxy, and publishes a GitHub Release.
 - **CI cost**: the slow Release build does NOT run on PRs at all. It builds on a `v*`
   tag (real release: build + sign + publish) and on a push to `main` *only when a
   packaging input changed* (`release.yml`/`extra/**`/`umide.spec`/`docker-bake.hcl`/

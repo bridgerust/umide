@@ -139,7 +139,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build remote proxy
-        run: cargo build --profile release-lto --locked --bin umide-proxy
+        run: cargo build --profile release-lto --locked -p umide-proxy --bin umide-proxy
         env:
           RELEASE_TAG_NAME: ${{ needs.meta.outputs.is_release == 'true' && needs.meta.outputs.tag_name || '' }}
 

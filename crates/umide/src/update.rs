@@ -1,14 +1,24 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
+use semver::Version;
 use serde::Deserialize;
-use umide_core::{directory::Directory, meta};
+use umide_core::{
+    directory::Directory,
+    meta::{self, ReleaseType},
+};
+
+const RELEASES_API: &str = "https://api.github.com/repos/bridgerust/umide/releases";
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct ReleaseInfo {
     pub tag_name: String,
     pub target_commitish: String,
     pub assets: Vec<ReleaseAsset>,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
     #[serde(skip)]
     pub version: String,
 }
@@ -19,69 +29,129 @@ pub struct ReleaseAsset {
     pub browser_download_url: String,
 }
 
-pub fn get_latest_release() -> Result<ReleaseInfo> {
-    let url = match meta::RELEASE {
-        meta::ReleaseType::Debug => {
-            return Err(anyhow!("no release for debug"));
-        }
-        meta::ReleaseType::Nightly => {
-            "https://api.github.com/repos/bridgerust/umide/releases/tags/nightly"
-        }
-        _ => "https://api.github.com/repos/bridgerust/umide/releases/latest",
-    };
+fn parse_version(tag: &str) -> Result<Version, semver::Error> {
+    Version::parse(tag.strip_prefix('v').unwrap_or(tag))
+}
 
-    let resp = umide_proxy::get_url(url, Some("Umide"))?;
-    if !resp.status().is_success() {
-        return Err(anyhow!("get release info failed {}", resp.text()?));
+impl ReleaseInfo {
+    fn semver(&self, allow_prereleases: bool) -> Option<Version> {
+        let version = parse_version(&self.tag_name).ok()?;
+        (!self.draft
+            && (allow_prereleases || (!self.prerelease && version.pre.is_empty())))
+        .then_some(version)
     }
-    let mut release: ReleaseInfo = serde_json::from_str(&resp.text()?)?;
 
-    release.version = match release.tag_name.as_str() {
-        "nightly" => format!(
-            "{}+Nightly.{}",
-            env!("CARGO_PKG_VERSION"),
-            &release.target_commitish[..7]
-        ),
-        _ => release
-            .tag_name
-            .strip_prefix('v')
-            .unwrap_or(&release.tag_name)
-            .to_owned(),
-    };
+    fn nightly_version(&self) -> Option<String> {
+        if self.draft || self.tag_name != "nightly" {
+            return None;
+        }
+        let commit = self.target_commitish.get(..7)?;
+        if !self.target_commitish.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        Some(format!("{}+Nightly.{commit}", env!("CARGO_PKG_VERSION")))
+    }
 
+    pub fn is_update(&self) -> bool {
+        self.installable_asset().is_some()
+            && self.is_update_for(
+                meta::RELEASE,
+                meta::RELEASE_TAG.unwrap_or(meta::VERSION),
+            )
+    }
+
+    fn installable_asset(&self) -> Option<&ReleaseAsset> {
+        let name = match std::env::consts::OS {
+            "macos" => "UMIDE-macos.dmg",
+            #[cfg(feature = "portable")]
+            "windows" => "UMIDE-windows-portable.zip",
+            #[cfg(not(feature = "portable"))]
+            "windows" => "UMIDE-windows.msi",
+            _ => return None,
+        };
+        self.assets.iter().find(|asset| asset.name == name)
+    }
+
+    fn is_update_for(&self, channel: ReleaseType, installed: &str) -> bool {
+        match channel {
+            ReleaseType::Debug => false,
+            ReleaseType::Nightly => self
+                .nightly_version()
+                .is_some_and(|version| version != installed),
+            ReleaseType::Stable => {
+                let Ok(installed) = parse_version(installed) else {
+                    return false;
+                };
+                self.semver(!installed.pre.is_empty())
+                    .is_some_and(|version| {
+                        version.cmp_precedence(&installed).is_gt()
+                    })
+            }
+        }
+    }
+}
+
+fn latest_versioned_release(
+    releases: impl IntoIterator<Item = ReleaseInfo>,
+    allow_prereleases: bool,
+) -> Result<ReleaseInfo> {
+    let (version, mut release) = releases
+        .into_iter()
+        .filter_map(|release| Some((release.semver(allow_prereleases)?, release)))
+        .max_by(|(a, _), (b, _)| a.cmp_precedence(b))
+        .ok_or_else(|| anyhow!("no versioned release for this update channel"))?;
+    release.version = version.to_string();
     Ok(release)
 }
 
-pub fn download_release(release: &ReleaseInfo) -> Result<PathBuf> {
-    let dir =
-        Directory::updates_directory().ok_or_else(|| anyhow!("no directory"))?;
-    let name = match std::env::consts::OS {
-        "macos" => "UMIDE-macos.dmg",
-        "linux" => match std::env::consts::ARCH {
-            "x86_64" => "umide-linux-x86_64.tar.gz",
-            _ => return Err(anyhow!("arch not supported")),
-        },
-        #[cfg(feature = "portable")]
-        "windows" => "UMIDE-windows-portable.zip",
-        #[cfg(not(feature = "portable"))]
-        "windows" => "UMIDE-windows.msi",
-        _ => return Err(anyhow!("os not supported")),
-    };
-    let file_path = dir.join(name);
+fn fetch_release_json(path: &str) -> Result<String> {
+    let resp = umide_proxy::get_url(format!("{RELEASES_API}{path}"), Some("Umide"))?;
+    if !resp.status().is_success() {
+        return Err(anyhow!("get release info failed {}", resp.text()?));
+    }
+    Ok(resp.text()?)
+}
 
-    for asset in &release.assets {
-        if asset.name == name {
-            let mut resp = umide_proxy::get_url(&asset.browser_download_url, None)?;
-            if !resp.status().is_success() {
-                return Err(anyhow!("download file error {}", resp.text()?));
+pub fn get_latest_release() -> Result<ReleaseInfo> {
+    match meta::RELEASE {
+        ReleaseType::Debug => Err(anyhow!("no release for debug")),
+        ReleaseType::Nightly => {
+            let mut release: ReleaseInfo =
+                serde_json::from_str(&fetch_release_json("/tags/nightly")?)?;
+            release.version = release
+                .nightly_version()
+                .ok_or_else(|| anyhow!("nightly release has no commit SHA"))?;
+            Ok(release)
+        }
+        ReleaseType::Stable => {
+            let installed =
+                parse_version(meta::RELEASE_TAG.unwrap_or(meta::VERSION))?;
+            if installed.pre.is_empty() {
+                let release = serde_json::from_str(&fetch_release_json("/latest")?)?;
+                latest_versioned_release([release], false)
+            } else {
+                let releases: Vec<ReleaseInfo> =
+                    serde_json::from_str(&fetch_release_json("?per_page=100")?)?;
+                latest_versioned_release(releases, true)
             }
-            let mut out = std::fs::File::create(&file_path)?;
-            resp.copy_to(&mut out)?;
-            return Ok(file_path);
         }
     }
+}
 
-    Err(anyhow!("can't download release"))
+pub fn download_release(release: &ReleaseInfo) -> Result<PathBuf> {
+    let asset = release
+        .installable_asset()
+        .ok_or_else(|| anyhow!("no installer for this platform"))?;
+    let dir =
+        Directory::updates_directory().ok_or_else(|| anyhow!("no directory"))?;
+    let file_path = dir.join(&asset.name);
+    let mut resp = umide_proxy::get_url(&asset.browser_download_url, None)?;
+    if !resp.status().is_success() {
+        return Err(anyhow!("download file error {}", resp.text()?));
+    }
+    let mut out = std::fs::File::create(&file_path)?;
+    resp.copy_to(&mut out)?;
+    Ok(file_path)
 }
 
 #[cfg(target_os = "macos")]
@@ -229,4 +299,104 @@ pub fn cleanup() {
 ))]
 pub fn cleanup() {
     // Nothing to do yet
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn release(tag_name: &str, prerelease: bool) -> ReleaseInfo {
+        ReleaseInfo {
+            tag_name: tag_name.into(),
+            target_commitish: "abcdef0123456789".into(),
+            assets: Vec::new(),
+            draft: false,
+            prerelease,
+            version: String::new(),
+        }
+    }
+
+    #[test]
+    fn beta_never_offers_an_older_or_equal_version() {
+        let installed = "v0.4.0-beta.1";
+        for (tag, prerelease) in [
+            ("v0.3.3", false),
+            ("v0.4.0-beta.1", true),
+            ("v0.4.0-beta.1+rebuilt", true),
+        ] {
+            assert!(
+                !release(tag, prerelease)
+                    .is_update_for(ReleaseType::Stable, installed)
+            );
+        }
+        assert!(
+            release("v0.4.0-beta.2", true)
+                .is_update_for(ReleaseType::Stable, installed)
+        );
+        assert!(
+            release("v0.4.0", false).is_update_for(ReleaseType::Stable, installed)
+        );
+    }
+
+    #[test]
+    fn stable_ignores_prereleases_and_debug_never_updates() {
+        let installed = "0.3.3";
+        assert!(
+            !release("v0.4.0-beta.1", true)
+                .is_update_for(ReleaseType::Stable, installed)
+        );
+        assert!(
+            !release("v0.4.0-beta.1", false)
+                .is_update_for(ReleaseType::Stable, installed)
+        );
+        assert!(
+            !release("v0.4.0", true).is_update_for(ReleaseType::Stable, installed)
+        );
+        assert!(
+            release("v0.4.0", false).is_update_for(ReleaseType::Stable, installed)
+        );
+        assert!(
+            !release("v0.4.0", false).is_update_for(ReleaseType::Debug, installed)
+        );
+    }
+
+    #[test]
+    fn selects_by_semver_and_ignores_drafts_and_non_versioned_tags() {
+        let mut draft = release("v1.0.0", false);
+        draft.draft = true;
+        let releases = [
+            draft,
+            release("v0.4.0-beta.10", true),
+            release("v0.4.0-beta.9", true),
+            release("v0.3.3", false),
+            release("nightly", false),
+        ];
+        assert_eq!(
+            latest_versioned_release(releases.clone(), true)
+                .unwrap()
+                .version,
+            "0.4.0-beta.10"
+        );
+        assert_eq!(
+            latest_versioned_release(releases, false).unwrap().version,
+            "0.3.3"
+        );
+    }
+
+    #[test]
+    fn nightly_requires_a_different_commit_and_ignores_other_releases() {
+        let installed = format!("{}+Nightly.abcdef0", env!("CARGO_PKG_VERSION"));
+        let mut nightly = release("nightly", false);
+        assert!(!nightly.is_update_for(ReleaseType::Nightly, &installed));
+
+        nightly.target_commitish = "0123456789abcdef".into();
+        assert!(nightly.is_update_for(ReleaseType::Nightly, &installed));
+
+        nightly.target_commitish = "main".into();
+        assert!(!nightly.is_update_for(ReleaseType::Nightly, &installed));
+        assert!(
+            !release("v1.0.0", false)
+                .is_update_for(ReleaseType::Nightly, &installed)
+        );
+    }
 }

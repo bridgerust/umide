@@ -16,6 +16,7 @@ pub enum PaletteKind {
     #[cfg(windows)]
     WslHost,
     RunAndDebug,
+    MobileRunDevice,
     ColorTheme,
     IconTheme,
     Language,
@@ -42,6 +43,7 @@ impl PaletteKind {
             | PaletteKind::Reference
             | PaletteKind::SshHost
             | PaletteKind::RunAndDebug
+            | PaletteKind::MobileRunDevice
             | PaletteKind::ColorTheme
             | PaletteKind::IconTheme
             | PaletteKind::Language
@@ -92,6 +94,9 @@ impl PaletteKind {
             PaletteKind::RunAndDebug => {
                 Some(UmideWorkbenchCommand::PaletteRunAndDebug)
             }
+            PaletteKind::MobileRunDevice => {
+                Some(UmideWorkbenchCommand::ChooseMobileRunDevice)
+            }
             PaletteKind::ColorTheme => Some(UmideWorkbenchCommand::ChangeColorTheme),
             PaletteKind::IconTheme => Some(UmideWorkbenchCommand::ChangeIconTheme),
             PaletteKind::Language => Some(UmideWorkbenchCommand::ChangeFileLanguage),
@@ -125,6 +130,7 @@ impl PaletteKind {
             | PaletteKind::Reference
             | PaletteKind::SshHost
             | PaletteKind::RunAndDebug
+            | PaletteKind::MobileRunDevice
             | PaletteKind::ColorTheme
             | PaletteKind::IconTheme
             | PaletteKind::Language

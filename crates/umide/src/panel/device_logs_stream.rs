@@ -161,10 +161,13 @@ pub fn parse_ios_log_line(line: &str) -> LogLine {
 /// reader thread on `rx` and applies each batch on the UI thread — same bridge
 /// as the emulator frame stream). Returns `None` if the tool couldn't be
 /// spawned; the panel shows its empty state.
+pub type LogBatch = (u64, Vec<LogLine>);
+
 fn start_line_stream(
     mut cmd: std::process::Command,
     parse: fn(&str) -> LogLine,
-    batch_signal: RwSignal<Option<Vec<LogLine>>>,
+    batch_signal: RwSignal<Option<LogBatch>>,
+    generation: u64,
     thread_name: &str,
 ) -> Option<LogcatHandle> {
     let mut child = cmd
@@ -176,7 +179,7 @@ fn start_line_stream(
         .ok()?;
     let stdout = child.stdout.take()?;
 
-    let (tx, rx) = mpsc::channel::<Vec<LogLine>>();
+    let (tx, rx) = mpsc::channel::<LogBatch>();
     update_signal_from_channel(batch_signal.write_only(), rx);
 
     std::thread::Builder::new()
@@ -206,7 +209,10 @@ fn start_line_stream(
                         if batch.len() >= BATCH_MAX
                             || last_flush.elapsed() >= BATCH_WINDOW
                         {
-                            if tx.send(std::mem::take(&mut batch)).is_err() {
+                            if tx
+                                .send((generation, std::mem::take(&mut batch)))
+                                .is_err()
+                            {
                                 return; // UI receiver dropped — stop reading
                             }
                             last_flush = std::time::Instant::now();
@@ -216,7 +222,7 @@ fn start_line_stream(
                 }
             }
             if !batch.is_empty() {
-                let _ = tx.send(batch);
+                let _ = tx.send((generation, batch));
             }
         })
         .ok()?;
@@ -231,12 +237,14 @@ fn start_line_stream(
 /// `None` if adb couldn't be spawned (no SDK); the panel shows its empty state.
 pub fn start_logcat_stream(
     serial: &str,
-    batch_signal: RwSignal<Option<Vec<LogLine>>>,
+    batch_signal: RwSignal<Option<LogBatch>>,
+    generation: u64,
 ) -> Option<LogcatHandle> {
     start_line_stream(
         umide_emulator::AndroidEmulator::logcat_command(serial),
         parse_log_line,
         batch_signal,
+        generation,
         "umide-logcat-reader",
     )
 }
@@ -247,12 +255,14 @@ pub fn start_logcat_stream(
 /// shutdown semantics, so the Device Logs panel treats both platforms alike.
 pub fn start_ios_log_stream(
     udid: &str,
-    batch_signal: RwSignal<Option<Vec<LogLine>>>,
+    batch_signal: RwSignal<Option<LogBatch>>,
+    generation: u64,
 ) -> Option<LogcatHandle> {
     start_line_stream(
         umide_emulator::IosSimulator::log_stream_command(udid),
         parse_ios_log_line,
         batch_signal,
+        generation,
         "umide-ioslog-reader",
     )
 }

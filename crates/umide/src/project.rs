@@ -2,12 +2,83 @@
 //!
 //! UMIDE is a mobile-first IDE, so it should *know* when the open workspace is
 //! a React Native or Flutter app instead of treating every folder the same.
-//! Detection is intentionally cheap and offline (two file probes, no shelling
-//! out): it runs once per workspace open, on local workspaces only. The result
-//! feeds the status-bar badge and,
-//! later, the AI agent's project context and run-on-device commands.
+//! Local project detection feeds the status bar, AI context, and Run on Device.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use umide_emulator::{DeviceInfo, DevicePlatform, DeviceState};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MobileRunProfile {
+    /// App directory relative to the workspace. None uses the workspace root.
+    pub app_dir: Option<PathBuf>,
+    pub device: Option<MobileRunDevice>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MobileRunDevice {
+    pub platform: DevicePlatform,
+    /// AVD name or simulator UDID. An Android serial can change after reboot.
+    pub id: String,
+}
+
+impl MobileRunDevice {
+    pub fn matches(&self, device: &DeviceInfo) -> bool {
+        self.platform == device.platform && self.id == device.id
+    }
+}
+
+impl From<&DeviceInfo> for MobileRunDevice {
+    fn from(device: &DeviceInfo) -> Self {
+        Self {
+            platform: device.platform,
+            id: device.id.clone(),
+        }
+    }
+}
+
+pub fn mobile_app_directory(
+    workspace: &Path,
+    app_dir: Option<&Path>,
+) -> Option<PathBuf> {
+    let root = workspace.canonicalize().ok()?;
+    let app = root
+        .join(app_dir.unwrap_or_else(|| Path::new("")))
+        .canonicalize()
+        .ok()?;
+    (app.starts_with(&root) && app.is_dir()).then_some(app)
+}
+
+pub fn platform_label(platform: DevicePlatform) -> &'static str {
+    match platform {
+        DevicePlatform::Android => "Android",
+        DevicePlatform::Ios => "iOS",
+    }
+}
+
+pub fn run_device_identifier(device: &DeviceInfo) -> Option<&str> {
+    if device.state != DeviceState::Running {
+        return None;
+    }
+    let identifier = match device.platform {
+        DevicePlatform::Android => device.serial.as_deref()?,
+        DevicePlatform::Ios => &device.id,
+    };
+    (!identifier.is_empty()).then_some(identifier)
+}
+
+pub fn select_run_device<'a>(
+    devices: &'a [DeviceInfo],
+    platform: DevicePlatform,
+    preferred: Option<&MobileRunDevice>,
+) -> Option<&'a DeviceInfo> {
+    devices.iter().find(|device| {
+        device.platform == platform
+            && preferred.is_none_or(|preferred| preferred.matches(device))
+            && run_device_identifier(device).is_some()
+    })
+}
 
 /// The kind of mobile project the workspace holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,8 +98,7 @@ impl ProjectKind {
 }
 
 /// Detect the project kind from workspace marker files:
-/// - Flutter: a `pubspec.yaml` whose content mentions `flutter` (dependency or
-///   sdk section) — plain Dart packages without Flutter are not mobile apps.
+/// - Flutter: a `pubspec.yaml` with a Flutter dependency or an SDK constraint.
 /// - React Native: a `package.json` with a `react-native` dependency (also
 ///   matched by Expo apps, which depend on `react-native`).
 ///
@@ -37,32 +107,42 @@ impl ProjectKind {
 pub fn detect_project_kind(workspace: &Path) -> Option<ProjectKind> {
     let pubspec = workspace.join("pubspec.yaml");
     if let Ok(content) = std::fs::read_to_string(&pubspec) {
-        if content.contains("flutter") {
+        if content.lines().any(|line| {
+            let line = line.split('#').next().unwrap_or_default().trim();
+            line.starts_with("flutter:")
+                || line.split_once(':').is_some_and(|(key, value)| {
+                    key.trim() == "sdk"
+                        && value.trim().trim_matches(['\'', '"']) == "flutter"
+                })
+        }) {
             return Some(ProjectKind::Flutter);
         }
     }
 
-    let package_json = workspace.join("package.json");
-    if let Ok(content) = std::fs::read_to_string(&package_json) {
-        // Cheap dependency probe: the exact `"react-native"` package name in
-        // quotes (as a key in dependencies/devDependencies). Avoids a JSON
-        // parse for a hot startup path while not matching e.g.
-        // `react-native-web`'s substring (the quote closes the name).
-        if content.contains("\"react-native\"") {
-            return Some(ProjectKind::ReactNative);
-        }
-    }
-
-    None
+    has_package_dependency(workspace, "react-native")
+        .then_some(ProjectKind::ReactNative)
 }
 
 /// Whether an RN workspace is an Expo app (`"expo"` in package.json): Expo
 /// projects are run through `npx expo run:*` — they may not even have the bare
 /// `android/`/`ios/` folders `react-native run-*` requires.
 pub fn is_expo(workspace: &Path) -> bool {
-    std::fs::read_to_string(workspace.join("package.json"))
-        .map(|c| c.contains("\"expo\""))
-        .unwrap_or(false)
+    has_package_dependency(workspace, "expo")
+}
+
+fn has_package_dependency(workspace: &Path, dependency: &str) -> bool {
+    let Ok(content) = std::fs::read_to_string(workspace.join("package.json")) else {
+        return false;
+    };
+    let Ok(package) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return false;
+    };
+    ["dependencies", "devDependencies"].iter().any(|field| {
+        package
+            .get(field)
+            .and_then(|deps| deps.get(dependency))
+            .is_some()
+    })
 }
 
 /// A workspace path as a plain string for a child process's working directory.
@@ -92,69 +172,67 @@ pub struct RunOnDevice {
     pub args: Vec<String>,
 }
 
-/// Compose the run command for the detected stack on an EXPLICIT target
-/// `platform` (macOS can run either iOS or Android, so the caller decides —
-/// from a platform button, or the viewed device). `device`, when it matches
-/// that platform, pins the target; otherwise the tool's own picker/boot
-/// handles it. Device pinning uses only well-supported flags: `flutter run
-/// -d <id>` everywhere, `react-native run-ios --udid`; bare `run-android` and
-/// Expo target the running emulator themselves.
+/// Compose the run command for the framework and chosen platform.
 pub fn run_on_device_command(
     kind: ProjectKind,
     expo: bool,
-    platform: umide_emulator::DevicePlatform,
-    device: Option<&umide_emulator::DeviceInfo>,
-) -> RunOnDevice {
-    use umide_emulator::DevicePlatform;
-    let (platform_label, ios) = match platform {
-        DevicePlatform::Android => ("Android", false),
-        DevicePlatform::Ios => ("iOS", true),
-    };
-    // Only pin the device if it's on the chosen platform (the viewed device
-    // may be the other kind). Flutter pins by `-d <device id>`: the adb serial
-    // for Android, the simulator UDID for iOS (`DeviceInfo.id`).
+    platform: DevicePlatform,
+    device: Option<&DeviceInfo>,
+) -> Result<RunOnDevice, &'static str> {
     let device = device.filter(|d| d.platform == platform);
-    let flutter_target = device.and_then(|d| match platform {
-        DevicePlatform::Android => d.serial.clone(),
-        DevicePlatform::Ios => Some(d.id.clone()),
-    });
-
-    let (stack_label, program, args) = match (kind, expo, ios) {
-        (ProjectKind::Flutter, _, _) => {
-            let mut a = vec!["run".to_string()];
-            if let Some(t) = flutter_target {
-                a.push("-d".into());
-                a.push(t);
-            }
-            ("Flutter", "flutter", a)
+    let identifier = device.and_then(run_device_identifier);
+    let (stack_label, program, base_args, target_flag) = match (kind, expo, platform)
+    {
+        (ProjectKind::Flutter, _, _) => ("Flutter", "flutter", &["run"][..], "-d"),
+        (ProjectKind::ReactNative, true, DevicePlatform::Android) => {
+            ("Expo", "npx", &["expo", "run:android"][..], "--device")
         }
-        (ProjectKind::ReactNative, true, false) => {
-            ("Expo", "npx", vec!["expo".into(), "run:android".into()])
+        (ProjectKind::ReactNative, true, DevicePlatform::Ios) => {
+            ("Expo", "npx", &["expo", "run:ios"][..], "--device")
         }
-        (ProjectKind::ReactNative, true, true) => {
-            ("Expo", "npx", vec!["expo".into(), "run:ios".into()])
-        }
-        (ProjectKind::ReactNative, false, false) => (
+        (ProjectKind::ReactNative, false, DevicePlatform::Android) => (
             "React Native",
             "npx",
-            vec!["react-native".into(), "run-android".into()],
+            &["react-native", "run-android"][..],
+            "--deviceId",
         ),
-        (ProjectKind::ReactNative, false, true) => {
-            let mut a = vec!["react-native".to_string(), "run-ios".into()];
-            if let Some(d) = device {
-                a.push("--udid".into());
-                a.push(d.id.clone());
-            }
-            ("React Native", "npx", a)
-        }
+        (ProjectKind::ReactNative, false, DevicePlatform::Ios) => (
+            "React Native",
+            "npx",
+            &["react-native", "run-ios"][..],
+            "--udid",
+        ),
     };
+    let mut args: Vec<String> =
+        base_args.iter().map(|arg| (*arg).to_owned()).collect();
+    if let Some(identifier) = identifier {
+        // Older Expo SDKs match an Android emulator by its AVD name only.
+        let target = match (kind, expo, device) {
+            (ProjectKind::ReactNative, true, Some(device))
+                if platform == DevicePlatform::Android =>
+            {
+                device.id.as_str()
+            }
+            _ => identifier,
+        };
+        if cfg!(target_os = "windows")
+            && (target.is_empty()
+                || !target
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"_.-:".contains(&b)))
+        {
+            return Err(
+                "The device name contains characters that Windows cannot pass to the run command.",
+            );
+        }
+        args.push(target_flag.to_owned());
+        args.push(target.to_owned());
+    }
     // On Windows, `npx` and `flutter` are batch shims (npx.cmd / flutter.bat):
     // the run terminal spawns the program directly via CreateProcess, which
     // only executes real executables — the spawn dies instantly and silently
     // (found live: ▶ produced a ConPTY and nothing else; no node, no gradle).
-    // Route through `cmd /C`. The args are fixed tool words plus adb serials /
-    // simulator UDIDs — no user-controlled strings — so cmd's re-parsing
-    // (the #41 footgun) has nothing to bite on.
+    // Route through `cmd /C` with fixed tool words and validated target IDs.
     let (program, args) = if cfg!(target_os = "windows") {
         let mut wrapped = vec!["/C".to_string(), program.to_string()];
         wrapped.extend(args);
@@ -162,11 +240,11 @@ pub fn run_on_device_command(
     } else {
         (program.to_string(), args)
     };
-    RunOnDevice {
-        name: format!("Run · {stack_label} · {platform_label}"),
+    Ok(RunOnDevice {
+        name: format!("Run · {stack_label} · {}", platform_label(platform)),
         program,
         args,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -217,7 +295,12 @@ mod tests {
         }
     }
 
-    fn assert_cmd(run: &RunOnDevice, program: &str, args: &[&str]) {
+    fn assert_cmd(
+        run: &Result<RunOnDevice, &'static str>,
+        program: &str,
+        args: &[&str],
+    ) {
+        let run = run.as_ref().unwrap();
         let (p, a) = spawned(program, args);
         assert_eq!(run.program, p);
         assert_eq!(run.args, a);
@@ -246,15 +329,18 @@ mod tests {
             run_on_device_command(ProjectKind::Flutter, false, Android, None);
         assert_cmd(&fnone, "flutter", &["run"]);
 
-        // Bare RN: run-android targets the running emulator itself; run-ios
-        // pins the simulator by UDID.
+        // Bare RN pins Android by adb serial and iOS by simulator UDID.
         let rn = run_on_device_command(
             ProjectKind::ReactNative,
             false,
             Android,
             Some(&android_dev()),
         );
-        assert_cmd(&rn, "npx", &["react-native", "run-android"]);
+        assert_cmd(
+            &rn,
+            "npx",
+            &["react-native", "run-android", "--deviceId", "emulator-5554"],
+        );
         let rni = run_on_device_command(
             ProjectKind::ReactNative,
             false,
@@ -274,8 +360,20 @@ mod tests {
             Android,
             Some(&android_dev()),
         );
-        assert_cmd(&ex, "npx", &["expo", "run:android"]);
+        assert_cmd(&ex, "npx", &["expo", "run:android", "--device", "Pixel_9a"]);
+        let ex = ex.unwrap();
         assert!(ex.name.contains("Expo") && ex.name.contains("Android"));
+        let expo_ios = run_on_device_command(
+            ProjectKind::ReactNative,
+            true,
+            Ios,
+            Some(&ios_dev()),
+        );
+        assert_cmd(
+            &expo_ios,
+            "npx",
+            &["expo", "run:ios", "--device", "UDID-42"],
+        );
 
         // Explicit iOS while viewing an ANDROID device: the mismatched device
         // is ignored, so no `--udid` — the tool boots/selects a simulator.
@@ -286,7 +384,7 @@ mod tests {
             Some(&android_dev()),
         );
         assert_cmd(&ios_no_pin, "npx", &["react-native", "run-ios"]);
-        assert!(ios_no_pin.name.contains("iOS"));
+        assert!(ios_no_pin.unwrap().name.contains("iOS"));
 
         // No device, explicit Android.
         let none =
@@ -305,7 +403,8 @@ mod tests {
             false,
             Android,
             Some(&android_dev()),
-        );
+        )
+        .unwrap();
         assert_eq!(rn.program, "cmd");
         assert_eq!(rn.args[..2], ["/C".to_string(), "npx".to_string()]);
     }
@@ -322,6 +421,40 @@ mod tests {
             plain_cwd(Path::new(r"\\?\UNC\srv\share\app")),
             r"\\srv\share\app"
         );
+    }
+
+    #[test]
+    fn run_profile_supports_a_nested_app_and_stable_device_id() {
+        let root = tmp_workspace("monorepo");
+        let relative = Path::new("apps/mobile");
+        let app = root.join(relative);
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(
+            app.join("package.json"),
+            r#"{"dependencies":{"react-native":"0.76","expo":"52"}}"#,
+        )
+        .unwrap();
+        let first = android_dev();
+        let profile = MobileRunProfile {
+            app_dir: Some(relative.to_path_buf()),
+            device: Some((&first).into()),
+        };
+        let json = serde_json::to_string(&profile).unwrap();
+        let restored: MobileRunProfile = serde_json::from_str(&json).unwrap();
+        let directory =
+            mobile_app_directory(&root, restored.app_dir.as_deref()).unwrap();
+        assert_eq!(directory, app.canonicalize().unwrap());
+        assert_eq!(
+            detect_project_kind(&directory),
+            Some(ProjectKind::ReactNative)
+        );
+        assert!(is_expo(&directory));
+        assert!(mobile_app_directory(&root, Some(Path::new(".."))).is_none());
+
+        let mut rebooted = first;
+        rebooted.serial = Some("emulator-5560".into());
+        assert!(restored.device.unwrap().matches(&rebooted));
+        assert_eq!(run_device_identifier(&rebooted), Some("emulator-5560"));
     }
 
     #[test]
@@ -377,8 +510,31 @@ mod tests {
         assert_eq!(detect_project_kind(&ws), None);
 
         let ws2 = tmp_workspace("dart");
-        std::fs::write(ws2.join("pubspec.yaml"), "name: pure_dart_pkg\n").unwrap();
+        std::fs::write(
+            ws2.join("pubspec.yaml"),
+            "name: flutter_tools\ndescription: tooling for flutter\n# flutter: this is a comment\n",
+        )
+        .unwrap();
         assert_eq!(detect_project_kind(&ws2), None);
+    }
+
+    #[test]
+    fn run_device_matches_platform_and_never_substitutes_a_saved_target() {
+        let mut disconnected = android_dev();
+        disconnected.state = DeviceState::Disconnected;
+        disconnected.serial = None;
+        let mut other = android_dev();
+        other.id = "Pixel_7".into();
+        other.serial = Some("emulator-5560".into());
+        let preferred = MobileRunDevice::from(&disconnected);
+        let devices = [ios_dev(), disconnected, other];
+        assert!(
+            select_run_device(&devices, DevicePlatform::Android, Some(&preferred))
+                .is_none()
+        );
+        let target =
+            select_run_device(&devices, DevicePlatform::Android, None).unwrap();
+        assert_eq!(run_device_identifier(target), Some("emulator-5560"));
     }
 
     #[test]

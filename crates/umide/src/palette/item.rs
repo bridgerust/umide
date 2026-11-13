@@ -65,6 +65,9 @@ pub enum PaletteItemContent {
         mode: RunDebugMode,
         config: RunDebugConfig,
     },
+    MobileRunDevice {
+        device: Option<crate::project::MobileRunDevice>,
+    },
     ColorTheme {
         name: String,
     },

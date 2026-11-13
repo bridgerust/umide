@@ -2139,6 +2139,19 @@ impl EditorData {
         self.do_edit(&selection, &edits);
     }
 
+    pub(crate) fn replace_range(
+        &self,
+        range: std::ops::Range<usize>,
+        new_text: &str,
+    ) {
+        let selection = self.doc().buffer.with_untracked(|buffer| {
+            self.cursor().get_untracked().edit_selection(buffer)
+        });
+        let edit =
+            Selection::region(range.start, range.end, CursorAffinity::Forward);
+        self.do_edit(&selection, &[(edit, new_text)]);
+    }
+
     fn apply_deltas(&self, deltas: &[(Rope, RopeDelta, InvalLines)]) {
         if !deltas.is_empty() && !self.confirmed.get_untracked() {
             self.confirmed.set(true);

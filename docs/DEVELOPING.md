@@ -54,6 +54,6 @@ code targets Windows (DX12) and Linux (Vulkan).
 - `main` is protected — branch + PR (admin-merge if solo). **Sole author: dev-josias** (no
   `Co-Authored-By` trailers).
 - Code/dependency PRs run **CI only**; the full release build runs on **packaging** changes
-  and on `v*` tags (which publish the macOS DMG / Windows MSI / Linux `.deb`).
+  and on `v*` tags, which publish the macOS DMG, Windows MSI, and the Linux proxy for remote workspaces.
 - Next milestones: **M3 input** (pointer/keyboard → emulator gRPC), un-gating the
   `#[cfg(macos)]` emulator panel for Windows/Linux, Windows Authenticode signing.

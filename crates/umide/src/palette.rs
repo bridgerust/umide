@@ -355,6 +355,7 @@ impl PaletteData {
                     "Seleft left file"
                 }
             }
+            PaletteKind::MobileRunDevice => "Choose an emulator or simulator",
             _ => "",
         }
     }
@@ -400,6 +401,9 @@ impl PaletteData {
             }
             PaletteKind::RunAndDebug => {
                 self.get_run_configs();
+            }
+            PaletteKind::MobileRunDevice => {
+                self.get_mobile_run_devices(run_id);
             }
             PaletteKind::ColorTheme => {
                 self.get_color_themes();
@@ -880,6 +884,53 @@ impl PaletteData {
         self.items.set(items);
     }
 
+    fn get_mobile_run_devices(&self, run_id: u64) {
+        let automatic = PaletteItem {
+            content: PaletteItemContent::MobileRunDevice { device: None },
+            filter_text: "Automatic · Follow the emulator panel".into(),
+            score: 0,
+            indices: vec![],
+        };
+        self.items.set(Vector::unit(automatic.clone()));
+        let palette = self.clone();
+        let send = create_ext_action(
+            self.common.scope,
+            move |devices: Vec<umide_emulator::DeviceInfo>| {
+                if palette.run_id.get_untracked() != run_id
+                    || palette.status.get_untracked() == PaletteStatus::Inactive
+                {
+                    return;
+                }
+                let selected = palette
+                    .common
+                    .mobile_run_profile
+                    .with_untracked(|profile| profile.device.clone());
+                let mut items = Vector::unit(automatic);
+                let mut index = 0;
+                for device in devices {
+                    if selected
+                        .as_ref()
+                        .is_some_and(|selected| selected.matches(&device))
+                    {
+                        index = items.len();
+                    }
+                    let platform = crate::project::platform_label(device.platform);
+                    items.push_back(PaletteItem {
+                        filter_text: format!("{} · {platform}", device.name),
+                        content: PaletteItemContent::MobileRunDevice {
+                            device: Some((&device).into()),
+                        },
+                        score: 0,
+                        indices: vec![],
+                    });
+                }
+                palette.preselect_index.set(Some(index));
+                palette.items.set(items);
+            },
+        );
+        std::thread::spawn(move || send(umide_emulator::list_all_devices()));
+    }
+
     fn set_run_configs(&self, content: String) {
         let configs: Option<RunDebugConfigs> = toml::from_str(&content).ok();
         if configs.is_none() {
@@ -1270,6 +1321,10 @@ impl PaletteData {
                         },
                     );
                 }
+                PaletteItemContent::MobileRunDevice { device } => self
+                    .common
+                    .internal_command
+                    .send(InternalCommand::SetMobileRunDevice(device.clone())),
                 PaletteItemContent::ColorTheme { name } => self
                     .common
                     .internal_command
@@ -1390,6 +1445,7 @@ impl PaletteData {
                 PaletteItemContent::Command { .. } => {}
                 PaletteItemContent::Workspace { .. } => {}
                 PaletteItemContent::RunAndDebug { .. } => {}
+                PaletteItemContent::MobileRunDevice { .. } => {}
                 PaletteItemContent::SshHost { .. } => {}
                 #[cfg(windows)]
                 PaletteItemContent::WslHost { .. } => {}

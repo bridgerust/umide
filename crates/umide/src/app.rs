@@ -2646,6 +2646,7 @@ fn palette_item(
         | PaletteItemContent::LineEnding { .. }
         | PaletteItemContent::ColorTheme { .. }
         | PaletteItemContent::SCMReference { .. }
+        | PaletteItemContent::MobileRunDevice { .. }
         | PaletteItemContent::TerminalProfile { .. }
         | PaletteItemContent::IconTheme { .. } => {
             let text = item.filter_text;

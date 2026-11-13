@@ -23,10 +23,10 @@ on:
   # publishes a real Release (a `-`-suffixed tag_name becomes a prerelease).
 
 concurrency:
-  group: ${{ github.ref }}-${{ github.workflow }}
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-{0}', inputs.tag_name) || github.ref }}-${{ github.workflow }}
   # Cancel a superseded main-branch validation build when a newer push lands;
-  # never cancel a tag release (each tag is its own concurrency group anyway).
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+  # keep manual release builds and tag releases running to completion.
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -44,7 +44,6 @@ jobs:
       # A push to main only needs the slow release build when a packaging input
       # changed — diff the push to decide. Tags / manual dispatch always build.
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           fetch-depth: 0
       - id: decide
@@ -67,50 +66,71 @@ jobs:
             exit 0
           fi
           changed="$(git diff --name-only "$before" "${{ github.sha }}")"
-          if grep -qE '^(\.github/workflows/release\.yml|extra/|umide\.spec|docker-bake\.hcl|Makefile)' <<<"$changed"; then
+          if grep -qE '^(\.github/workflows/release\.yml|extra/|umide\.spec|docker-bake\.hcl|Makefile|Cargo\.toml)' <<<"$changed"; then
             echo "should_build=true" | tee -a "$GITHUB_OUTPUT"
           else
             echo "should_build=false" | tee -a "$GITHUB_OUTPUT"
           fi
       - id: meta
         shell: bash
+        env:
+          IS_RELEASE: ${{ steps.decide.outputs.is_release }}
+          REQUESTED_TAG: ${{ inputs.tag_name }}
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            TAG_NAME="${GITHUB_REF_NAME}"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG_NAME="${{ github.event.inputs.tag_name }}"
-          else
-            TAG_NAME="dry-run-${GITHUB_SHA::7}"
+          if [[ "${IS_RELEASE}" != true ]]; then
+            echo "tag_name=" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          if [[ -z "${TAG_NAME}" ]]; then
-            echo "tag_name input is required for workflow_dispatch"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            TAG_NAME="${REQUESTED_TAG}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+
+          tag_pattern='^v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "${TAG_NAME}" =~ $tag_pattern ]]; then
+            echo "Use a version tag such as v0.4.0 or v0.4.0-beta.2" >&2
+            exit 1
+          fi
+          release_version="${BASH_REMATCH[1]}"
+          prerelease_suffix="${BASH_REMATCH[5]}"
+          workspace_version="$(awk '
+            /^\[workspace.package\]/ { in_workspace = 1; next }
+            /^\[/ && in_workspace { exit }
+            in_workspace && /^version[[:space:]]*=/ {
+              split($0, fields, "\"")
+              print fields[2]
+              exit
+            }
+          ' Cargo.toml)"
+          if [[ "${release_version}" != "${workspace_version}" ]]; then
+            echo "Tag version ${release_version} differs from workspace version ${workspace_version}" >&2
+            exit 1
+          fi
+
+          if git show-ref --verify --quiet "refs/tags/${TAG_NAME}" &&
+             [[ "$(git rev-parse "refs/tags/${TAG_NAME}^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+            echo "Tag ${TAG_NAME} already points to another commit" >&2
             exit 1
           fi
 
           PRERELEASE=false
-          if [[ "${TAG_NAME}" == *-* ]]; then
+          if [[ -n "${prerelease_suffix}" ]]; then
             PRERELEASE=true
           fi
 
           echo "tag_name=${TAG_NAME}" | tee -a "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}" | tee -a "$GITHUB_OUTPUT"
 
-  linux:
-    name: Build Linux
+  linux-proxy:
+    name: Build Linux remote proxy
     runs-on: ubuntu-latest
     needs: meta
     if: needs.meta.outputs.should_build == 'true'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Linux build dependencies
-        run: sudo make ubuntu-deps
 
       - name: Update toolchain
         run: rustup update --no-self-update
@@ -118,31 +138,18 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build binaries
-        run: cargo build --profile release-lto --locked --bin umide --bin umide-proxy
+      - name: Build remote proxy
+        run: cargo build --profile release-lto --locked --bin umide-proxy
+        env:
+          RELEASE_TAG_NAME: ${{ needs.meta.outputs.is_release == 'true' && needs.meta.outputs.tag_name || '' }}
 
-      - name: Package artifacts
-        shell: bash
-        run: |
-          cp ./target/release-lto/umide ./umide-linux-x86_64
-          cp ./target/release-lto/umide-proxy ./umide-proxy-linux-x86_64
-          tar -czf ./umide-linux-x86_64.tar.gz ./umide-linux-x86_64
-          gzip -c ./umide-proxy-linux-x86_64 > ./umide-proxy-linux-x86_64.gz
-
-      - name: Build .deb package
-        shell: bash
-        run: |
-          cargo install cargo-deb --locked
-          cargo deb --no-build --profile release-lto -p umide --output ./umide-linux-x86_64.deb
-          ls -lh ./umide-linux-x86_64.deb
+      - name: Package remote proxy
+        run: gzip -c ./target/release-lto/umide-proxy > ./umide-proxy-linux-x86_64.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: release-linux
-          path: |
-            ./umide-linux-x86_64.tar.gz
-            ./umide-proxy-linux-x86_64.gz
-            ./umide-linux-x86_64.deb
+          name: release-linux-proxy
+          path: ./umide-proxy-linux-x86_64.gz
           retention-days: 7
 
   windows:
@@ -169,6 +176,8 @@ jobs:
 
       - name: Build binaries
         run: cargo build --profile release-lto --locked --bin umide --bin umide-proxy
+        env:
+          RELEASE_TAG_NAME: ${{ needs.meta.outputs.is_release == 'true' && needs.meta.outputs.tag_name || '' }}
 
       - name: Package artifacts
         run: |
@@ -211,7 +220,7 @@ jobs:
 
   macos:
     name: Build macOS
-    runs-on: macos-14
+    runs-on: macos-15
     needs: meta
     if: needs.meta.outputs.should_build == 'true'
     env:
@@ -292,6 +301,8 @@ jobs:
         run: |
           cargo build --profile release-lto --locked --target x86_64-apple-darwin --bin umide --bin umide-proxy
           cargo build --profile release-lto --locked --target aarch64-apple-darwin --bin umide --bin umide-proxy
+        env:
+          RELEASE_TAG_NAME: ${{ needs.meta.outputs.is_release == 'true' && needs.meta.outputs.tag_name || '' }}
 
       - name: Package app bundle and DMG
         shell: bash
@@ -336,11 +347,11 @@ jobs:
     # Only publish a real release on a v* tag (or a manual dispatch with a tag
     # name). A push to main may build (to validate packaging) but must NOT create
     # a release named "main".
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: needs.meta.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     needs:
       - meta
-      - linux
+      - linux-proxy
       - windows
       - macos
     permissions:
@@ -358,7 +369,7 @@ jobs:
           if gh release view "${TAG_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release upload "${TAG_NAME}" \
               --repo "${GITHUB_REPOSITORY}" \
-              ./release-linux/* \
+              ./release-linux-proxy/* \
               ./release-windows/* \
               ./release-macos/* \
               --clobber
@@ -376,6 +387,6 @@ jobs:
             --title "${TAG_NAME}" \
             --generate-notes \
             "${RELEASE_ARGS[@]}" \
-            ./release-linux/* \
+            ./release-linux-proxy/* \
             ./release-windows/* \
             ./release-macos/*

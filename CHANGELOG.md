@@ -5,6 +5,19 @@ UMIDE's releases; the inherited upstream Lapce changelog is preserved below unde
 **Upstream (Lapce)**. Full per-release notes are on the
 [Releases page](https://github.com/bridgerust/umide/releases).
 
+## v0.4.0-beta.2 — BETA
+
+- **Workspace run profiles** remember the app folder and preferred device for
+  React Native, Expo, and Flutter projects. Device Logs follows the run target.
+- **Built-in assistant** connects to Claude or OpenAI with your API key and
+  lets you select a model tier or use automatic routing.
+- **Approved AI edits** are checked against the current editor buffer. You can
+  undo the edit, and changes that were already unsaved stay unsaved.
+- **Updates** retain the release channel and offer only newer versions with an
+  installer for the current platform.
+- **Desktop installers** are available for macOS and Windows. The Linux proxy
+  remains available for remote workspaces.
+
 ## v0.4.0-beta.1 — BETA
 
 **The iOS Simulator, embedded — plus a mobile-first run experience.** First

@@ -3,7 +3,7 @@ use std::{
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
 };
 
 use directories::ProjectDirs;
@@ -26,6 +26,8 @@ pub struct Conversation {
     pub title: String,
     pub provider: String,
     pub session_id: Option<String>,
+    pub isolated: bool,
+    pub worktree_id: Option<String>,
     pub messages: Vec<Message>,
 }
 
@@ -35,7 +37,7 @@ pub struct Message {
     pub text: String,
 }
 
-fn data_dir() -> Result<PathBuf, String> {
+pub(crate) fn data_dir() -> Result<PathBuf, String> {
     if let Some(path) = std::env::var_os("UMIDE_WORKBENCH_DATA_DIR") {
         let dir = PathBuf::from(path);
         return dir.is_absolute().then_some(dir).ok_or_else(|| {
@@ -102,14 +104,8 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     // Read only enough diff data to display. Drop the pipe on overflow so a
     // large generated or minified file cannot exhaust desktop memory.
     const LIMIT: u64 = 160 * 1024;
-    let mut child = Command::new("git")
-        .args([
-            "--no-pager",
-            "--no-optional-locks",
-            "-c",
-            "core.fsmonitor=false",
-        ])
-        .env("GIT_TERMINAL_PROMPT", "0")
+    let mut child = crate::worktree::git(root)
+        .arg("--no-optional-locks")
         .env("GIT_NO_LAZY_FETCH", "1")
         .args(args)
         .current_dir(root)
@@ -154,22 +150,33 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 pub fn git_diff(root: &Path) -> Result<String, String> {
+    git_diff_since(root, None)
+}
+
+pub fn git_diff_since(root: &Path, base: Option<&str>) -> Result<String, String> {
     git(root, &["rev-parse", "--is-inside-work-tree"])?;
-    let has_head = git(root, &["rev-parse", "--verify", "HEAD"]).is_ok();
+    if base.is_some_and(|sha| {
+        !matches!(sha.len(), 40 | 64) || !sha.bytes().all(|c| c.is_ascii_hexdigit())
+    }) {
+        return Err("Invalid worktree base commit".into());
+    }
+    let scope = if base.is_some() { ":/" } else { "." };
     let diff = |extra: &[&str]| {
         let mut args = vec!["diff", "--no-color", "--no-ext-diff", "--no-textconv"];
         args.extend(extra);
-        args.extend(["--", "."]);
+        args.extend(["--", scope]);
         git(root, &args)
     };
-    let mut sections = if has_head {
+    let mut sections = if let Some(sha) = base {
+        vec![diff(&[sha])?]
+    } else if git(root, &["rev-parse", "--verify", "HEAD"]).is_ok() {
         vec![diff(&["HEAD"])?]
     } else {
         vec![diff(&["--cached"])?, diff(&[])?]
     };
     let untracked = git(
         root,
-        &["ls-files", "--others", "--exclude-standard", "--", "."],
+        &["ls-files", "--others", "--exclude-standard", "--", scope],
     )?;
     if !untracked.is_empty() {
         sections.push(format!("Untracked files\n{untracked}"));
@@ -192,6 +199,8 @@ mod tests {
             title: "Test project".into(),
             provider: "codex".into(),
             session_id: None,
+            isolated: false,
+            worktree_id: None,
             messages: vec![Message {
                 role: "user".into(),
                 text: "Hello".into(),
@@ -207,6 +216,52 @@ mod tests {
             Some("resumed-session")
         );
         assert_eq!(restored.conversations[0].messages[0].text, "Hello");
+    }
+
+    #[test]
+    fn reads_project_folder_conversations_saved_before_isolation() {
+        let history: History = serde_json::from_str(r#"{"conversations":[{"title":"Fix screen","provider":"codex","session_id":"session-1","messages":[]}]}"#).unwrap();
+        let conversation = &history.conversations[0];
+        assert!(!conversation.isolated);
+        assert!(conversation.worktree_id.is_none());
+        assert_eq!(conversation.session_id.as_deref(), Some("session-1"));
+    }
+
+    #[test]
+    fn isolated_diff_includes_agent_commits_and_changes_outside_app_subdirectory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git(root, &["init", "--quiet"]).unwrap();
+        fs::create_dir(root.join("mobile")).unwrap();
+        fs::write(root.join("mobile/main"), "base").unwrap();
+        let commit = || {
+            git(root, &["add", "-A"]).unwrap();
+            git(
+                root,
+                &[
+                    "-c",
+                    "user.name=Umide",
+                    "-c",
+                    "user.email=umide@example.invalid",
+                    "-c",
+                    "commit.gpgSign=false",
+                    "commit",
+                    "-qm",
+                    "fixture",
+                ],
+            )
+            .unwrap();
+        };
+        commit();
+        let base = git(root, &["rev-parse", "HEAD"]).unwrap();
+        fs::write(root.join("mobile/main"), "after").unwrap();
+        fs::write(root.join("shared"), "sibling").unwrap();
+        commit();
+        fs::write(root.join("new-file"), "new").unwrap();
+        let diff = git_diff_since(&root.join("mobile"), Some(&base)).unwrap();
+        for text in ["+after", "+sibling", "new-file"] {
+            assert!(diff.contains(text), "{diff}");
+        }
     }
 
     #[test]

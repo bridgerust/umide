@@ -147,6 +147,15 @@ pub fn start_with_image(
     let (binary, path) = cli_environment(provider)?;
     let mut command = Command::new(binary);
     command.current_dir(&cwd).env("PATH", path);
+    // Git commands issued by the agent must discover this task’s checkout from cwd.
+    for key in [
+        "GIT_DIR",
+        "GIT_COMMON_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+    ] {
+        command.env_remove(key);
+    }
     match provider {
         Provider::Codex => {
             command.args(["app-server", "--stdio"]);

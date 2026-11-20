@@ -185,6 +185,10 @@ impl Runner {
         ));
         let mut cmd = Command::new(program);
         cmd.args(args)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_COMMON_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .env_remove("GIT_INDEX_FILE")
             .current_dir(&self.project)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -411,7 +415,13 @@ impl Plan {
 
     fn run(&self, worker: &Runner, platform: &str, device: &str) -> RunResult<()> {
         let ios = platform == "ios";
-        let device = OsStr::new(device);
+        let expo_name;
+        let device = if matches!(self, Self::Expo) && !ios {
+            expo_name = expo_android_target(worker, device)?;
+            OsStr::new(&expo_name)
+        } else {
+            OsStr::new(device)
+        };
         match self {
             Self::Flutter => {
                 worker.command(
@@ -449,6 +459,52 @@ impl Plan {
         }
         Ok(())
     }
+}
+
+// Older Expo CLIs choose the first device with a matching display name. Use
+// a name only when it identifies the requested serial unambiguously. Recent
+// CLIs also accept the serial, which stays exact for duplicate AVD instances.
+fn expo_android_target(worker: &Runner, selected: &str) -> RunResult<String> {
+    let output = worker.command("adb", &["devices".as_ref(), "-l".as_ref()])?;
+    let mut devices = Vec::new();
+    for line in output.lines() {
+        let mut fields = line.split_whitespace();
+        let (Some(serial), Some("device")) = (fields.next(), fields.next()) else {
+            continue;
+        };
+        let name = if serial.starts_with("emulator-") {
+            let args = ["-s", serial, "emu", "avd", "name"].map(OsStr::new);
+            let output = worker.command("adb", &args)?;
+            output.lines().next().unwrap_or_default().trim().to_owned()
+        } else {
+            fields
+                .find_map(|f| f.strip_prefix("model:"))
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("Device {serial}"))
+        };
+        devices.push((serial, name));
+    }
+    expo_target_name(&devices, selected)
+}
+
+fn expo_target_name(
+    devices: &[(&str, String)],
+    selected: &str,
+) -> RunResult<String> {
+    let (_, name) = devices
+        .iter()
+        .find(|(serial, _)| *serial == selected)
+        .ok_or("The selected Android device is no longer connected.")?;
+    let unique = !name.is_empty()
+        && !name.starts_with('-')
+        && devices.iter().all(|(serial, other)| {
+            *serial == selected || (other != name && *serial != name)
+        });
+    Ok(if unique {
+        name.clone()
+    } else {
+        selected.into()
+    })
 }
 
 fn matching_files(root: &Path, ext: &str) -> RunResult<Vec<PathBuf>> {
@@ -617,6 +673,21 @@ fn run_xcode(worker: &Runner, device: &OsStr, project: &Path) -> RunResult<()> {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn expo_targets_the_selected_serial_when_avd_names_collide() {
+        let mut devices = vec![("emulator-5554", "Pixel".into())];
+        assert_eq!(
+            expo_target_name(&devices, "emulator-5554").unwrap(),
+            "Pixel"
+        );
+        devices.push(("emulator-5556", "Pixel".into()));
+        assert_eq!(
+            expo_target_name(&devices, "emulator-5556").unwrap(),
+            "emulator-5556"
+        );
+        assert!(expo_target_name(&devices, "emulator-5558").is_err());
+    }
 
     #[test]
     fn stop_interrupts_the_running_gradle_process_and_its_children() {

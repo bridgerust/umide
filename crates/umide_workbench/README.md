@@ -26,9 +26,11 @@ You can also pass an app folder after `--`. To build a local macOS development b
 
 ### Beta installers
 
-The **Workbench installers** GitHub workflow tests the Workbench and builds a universal macOS DMG and a Windows x64 MSI. A push to `feat/native-workbench` or a manual run produces test artifacts. The Windows job installs, launches and uninstalls its MSI. The macOS job mounts the DMG and checks the installed executable and both architectures.
+The **Workbench installers** GitHub workflow builds a universal macOS DMG, a Windows x64 MSI and an Ubuntu 24.04 x86-64 DEB. A push to `feat/native-workbench` or a manual run produces downloadable test artifacts. Each job opens the installed application and tests a form in a real browser. The macOS job also verifies both architectures, and the Windows and Linux jobs check uninstallation.
 
-A push of a Workbench beta tag matching the workspace version, such as `workbench-v0.4.0-beta.1`, starts public distribution. The release build signs and notarizes the macOS package and publishes one GitHub prerelease with both installers after both jobs succeed. The download page recognizes the two Workbench filenames together. The `v*` tags belong to Umide Classic.
+On Ubuntu 24.04 x86-64, extract the `workbench-linux` artifact and run `sudo apt install ./Umide-Workbench-Linux-x86_64.deb`. Open **Umide Workbench** from the applications menu or run `umide-workbench`. To remove it, run `sudo apt remove umide-workbench`.
+
+A push of a Workbench beta tag matching the workspace version, such as `workbench-v0.4.0-beta.1`, starts public distribution. The release build signs and notarizes the macOS package and publishes the DMG, MSI and DEB together once all three jobs succeed. The `v*` tags belong to Umide Classic.
 
 ## Agents
 

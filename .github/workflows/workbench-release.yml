@@ -145,10 +145,42 @@ jobs:
           path: dist/workbench/Umide-Workbench-Windows-x64.msi
           if-no-files-found: error
 
+  linux:
+    name: Ubuntu 24.04 x64 DEB
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build and test dependencies
+        run: |
+          sudo make ubuntu-deps
+          sudo apt-get install -y binutils dpkg-dev desktop-file-utils libglib2.0-bin dbus-daemon \
+            xvfb xauth xdotool libgl1-mesa-dri mesa-vulkan-drivers
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ github.token }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p umide-workbench -p umide_workbench_agents -p umide_emulator
+      - name: Test a form in the installed browser
+        run: cargo test --locked -p umide-workbench verify::web::tests::local_form_in_a_real_browser -- --exact --ignored
+      - name: Build and package Workbench
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          cargo build --locked --release -p umide-workbench
+          crates/umide_workbench/package-linux.sh "$RELEASE_TAG"
+      - name: Install, launch and uninstall the DEB
+        run: crates/umide_workbench/smoke-linux.sh dist/workbench/Umide-Workbench-Linux-x86_64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workbench-linux
+          path: dist/workbench/Umide-Workbench-Linux-x86_64.deb
+          if-no-files-found: error
+
   publish:
-    name: Publish the two verified installers together
+    name: Publish the three verified installers together
     if: needs.version.outputs.publish == 'true'
-    needs: [version, macos, windows]
+    needs: [version, macos, windows, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -167,17 +199,18 @@ jobs:
           set -euo pipefail
           mac="installers/Umide-Workbench-macOS.dmg"
           win="installers/Umide-Workbench-Windows-x64.msi"
-          test -s "$mac" && test -s "$win"
+          linux="installers/Umide-Workbench-Linux-x86_64.deb"
+          for installer in "$mac" "$win" "$linux"; do test -s "$installer"; done
           if ! draft="$(gh release view "$TAG" --json isDraft --jq .isDraft)"; then
             gh release create "$TAG" --verify-tag --draft --prerelease --latest=false \
               --title "Umide Workbench ${TAG#workbench-v}" \
-              --notes "The native Workbench for mobile and web development with Codex and Claude Code. Download the universal macOS DMG or the Windows x64 MSI below."
+              --notes "Develop mobile and web apps with Codex and Claude Code in Umide Workbench. Choose the universal DMG for macOS, the MSI for Windows x64 or the DEB for Ubuntu 24.04 x86-64."
           elif [[ "$draft" == false ]]; then
             echo "The release is already public; no published files were replaced."
             exit 1
           fi
-          gh release upload "$TAG" "$mac" "$win" --clobber
+          gh release upload "$TAG" "$mac" "$win" "$linux" --clobber
           gh release view "$TAG" --json assets | jq -e '
             [.assets[] | select(.size > 0) | .name] as $names |
-            (["Umide-Workbench-macOS.dmg","Umide-Workbench-Windows-x64.msi"] - $names) == []'
+            (["Umide-Workbench-macOS.dmg","Umide-Workbench-Windows-x64.msi","Umide-Workbench-Linux-x86_64.deb"] - $names) == []'
           gh release edit "$TAG" --prerelease --latest=false --draft=false

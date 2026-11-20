@@ -6,8 +6,8 @@
              Description="Umide Workbench $(var.ReleaseVersion) for Windows x64"/>
     <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of Umide Workbench is already installed."/>
     <MediaTemplate EmbedCab="yes"/>
-    <Icon Id="WorkbenchIcon" SourceFile="$(var.Root)\extra\windows\umide.ico"/>
-    <Property Id="ARPPRODUCTICON" Value="WorkbenchIcon"/>
+    <Icon Id="UmideWorkbench.exe" SourceFile="$(var.Root)\extra\windows\umide.ico"/>
+    <Property Id="ARPPRODUCTICON" Value="UmideWorkbench.exe"/>
     <Property Id="ARPCOMMENTS" Value="Umide Workbench $(var.ReleaseVersion)"/>
     <Property Id="ARPURLINFOABOUT" Value="https://www.umide.dev/"/>
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -16,7 +16,7 @@
           <Component Id="WorkbenchApp" Guid="*" Win64="yes">
             <File Id="WorkbenchExecutable" Source="$(var.Binary)" Name="umide-workbench.exe" KeyPath="yes">
               <Shortcut Id="WorkbenchShortcut" Directory="ProgramMenuFolder" Name="Umide Workbench"
-                        Advertise="yes" Icon="WorkbenchIcon" WorkingDirectory="WorkbenchInstall"/>
+                        Advertise="yes" Icon="UmideWorkbench.exe" WorkingDirectory="WorkbenchInstall"/>
             </File>
           </Component>
           <Directory Id="Licenses" Name="Licenses">

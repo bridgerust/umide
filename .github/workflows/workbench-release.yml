@@ -117,9 +117,8 @@ jobs:
         with:
           repo-token: ${{ github.token }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --locked -p umide-workbench -p umide_workbench_agents -p umide_emulator
-      - name: Test a form in the installed browser
-        run: cargo test --locked -p umide-workbench verify::web::tests::local_form_in_a_real_browser -- --exact --ignored
+      - id: tests
+        run: cargo test --locked -p umide-workbench -p umide_workbench_agents -p umide_emulator
       - name: Find WiX 3
         shell: pwsh
         run: |
@@ -137,6 +136,9 @@ jobs:
         run: ./crates/umide_workbench/package-windows.ps1 -Tag $env:RELEASE_TAG
       - name: Install, launch and uninstall the MSI
         run: ./crates/umide_workbench/smoke-windows.ps1 -Msi dist/workbench/Umide-Workbench-Windows-x64.msi -RequireWindow
+      - name: Test a form in the installed browser
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        run: cargo test --locked -p umide-workbench verify::web::tests::local_form_in_a_real_browser -- --exact --ignored
       - uses: actions/upload-artifact@v4
         with:
           name: workbench-windows

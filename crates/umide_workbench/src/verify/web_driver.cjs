@@ -12,6 +12,15 @@ const profile = process.argv[3];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const pending = new Map();
 let chrome, proxy, session, nextId = 0, stopping = false;
+let browserError = '', startupHint = '', phase = 'starting Node';
+// Read and write Rust's inherited file descriptors as ordinary byte streams.
+// In particular, the anonymous Win32 handles do not require overlapped I/O.
+const output = fs.createWriteStream(null, { fd: 1, autoClose: false });
+
+function setPhase(value) {
+    phase = value;
+    output.write(JSON.stringify({ phase }) + '\n');
+}
 
 function browserExecutable() {
     const names = process.platform === 'win32'
@@ -21,9 +30,6 @@ function browserExecutable() {
     if (process.env.UMIDE_CHROMIUM_PATH) {
         candidates.push(process.env.UMIDE_CHROMIUM_PATH);
     } else {
-        for (const dir of (process.env.PATH || '').split(path.delimiter).filter(p => path.isAbsolute(p))) {
-            for (const name of names) candidates.push(path.join(dir, name));
-        }
         if (process.platform === 'darwin') {
             for (const dir of ['/Applications', path.join(require('node:os').homedir(), 'Applications')]) {
                 for (const name of ['Google Chrome', 'Chromium', 'Microsoft Edge', 'Brave Browser']) {
@@ -38,6 +44,11 @@ function browserExecutable() {
                 }
             }
         }
+        // A PATH launcher can start a second process without the inherited CDP
+        // descriptors. Prefer the installed browser executable on Windows.
+        for (const dir of (process.env.PATH || '').split(path.delimiter).filter(p => path.isAbsolute(p))) {
+            for (const name of names) candidates.push(path.join(dir, name));
+        }
     }
     for (const file of candidates.filter(p => path.isAbsolute(p))) {
         try { fs.accessSync(file, fs.constants.X_OK); if (fs.statSync(file).isFile()) return file; } catch {}
@@ -47,15 +58,15 @@ function browserExecutable() {
 
 function command(method, params = {}, sessionId = session) {
     return new Promise((resolve, reject) => {
-        if (!chrome || chrome.exitCode !== null || chrome.stdio[3].destroyed) {
-            reject(Error('The test browser has closed. Run web_start again.'));
+        if (!chrome || browserError || chrome.exitCode !== null || chrome.signalCode !== null || chrome.stdio[3].destroyed) {
+            reject(Error(browserError || 'The test browser has closed. Run web_start again.'));
             return;
         }
         const id = ++nextId;
         const timer = setTimeout(() => {
             pending.delete(id);
-            reject(Error('The test browser timed out while running ' + method + '.'));
-        }, 8000);
+            reject(Error(['Chromium timed out during ' + method + '.', startupHint].filter(Boolean).join(' ')));
+        }, method === 'Target.getTargets' ? 20000 : 8000);
         pending.set(id, { resolve, reject, timer });
         const payload = JSON.stringify({ id, method, params, sessionId }) + '\0';
         chrome.stdio[3].write(payload);
@@ -77,6 +88,7 @@ function receive(message) {
 }
 
 async function launch() {
+    setPhase('finding Chromium');
     const executable = browserExecutable();
     // All non-preview origins, including other loopback ports and WebSockets,
     // reach an empty local proxy. It never forwards or resolves a request.
@@ -86,6 +98,7 @@ async function launch() {
         proxy.listen(0, '127.0.0.1', resolve);
     });
     if (stopping) throw Error('Test session closed.');
+    setPhase('starting ' + path.basename(executable));
     chrome = spawn(executable, [
         '--headless=new', '--remote-debugging-pipe', '--user-data-dir=' + profile,
         '--no-first-run', '--no-default-browser-check', '--disable-extensions',
@@ -95,26 +108,38 @@ async function launch() {
         '--proxy-bypass-list=<-loopback>;' + base.host,
         '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
         'about:blank',
-    ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], windowsHide: true });
-    const closed = () => {
+    ], { stdio: ['ignore', 'pipe', 'pipe', 'pipe', 'pipe'], windowsHide: true });
+    chrome.stdout.resume();
+    chrome.stderr.setEncoding('utf8').on('data', chunk => {
+        // Show useful startup diagnostics, never paths, URLs or page output.
+        if (/remote debugging.*disallowed|remote debugging.*policy/i.test(chunk)) startupHint = 'Remote debugging is disabled by browser policy.';
+        else if (/pipe file descriptors|pipe handles/i.test(chunk)) startupHint = 'Chromium did not inherit its debugging pipes.';
+        else if (/user data directory|ProcessSingleton|SingletonLock/i.test(chunk)) startupHint = 'Chromium could not open its temporary profile.';
+    });
+    const closed = reason => {
+        if (!browserError) browserError = [reason, startupHint].filter(Boolean).join(' ');
         for (const { reject, timer } of pending.values()) {
             clearTimeout(timer);
-            reject(Error('Chromium could not run in headless mode. Check UMIDE_CHROMIUM_PATH and browser permissions.'));
+            reject(Error(browserError));
         }
         pending.clear();
     };
-    chrome.on('error', closed);
-    chrome.on('exit', closed);
-    chrome.stdio[3].on('error', closed);
+    chrome.on('error', error => closed('Chromium launch failed (' + (error.code || error.name) + ').'));
+    chrome.on('exit', (code, signal) => closed('Chromium exited (' + (signal || code) + ').'));
+    chrome.stdio[3].on('error', e => closed('DevTools write pipe failed (' + (e.code || e.name) + ').'));
+    chrome.stdio[4].on('error', e => closed('DevTools read pipe failed (' + (e.code || e.name) + ').'));
+    chrome.stdio[4].once('end', () => closed('Chromium closed its DevTools pipe.'));
     let tail = '';
     chrome.stdio[4].setEncoding('utf8').on('data', data => {
         const frames = (tail + data).split('\0');
         tail = frames.pop();
         for (const frame of frames) if (frame) receive(JSON.parse(frame));
     });
+    setPhase('connecting to Chromium over its debugging pipes');
     const { targetInfos } = await command('Target.getTargets');
     const target = targetInfos.find(t => t.type === 'page');
     if (!target) throw Error('Chromium did not create a test tab.');
+    setPhase('configuring the browser tab');
     ({ sessionId: session } = await command('Target.attachToTarget', { targetId: target.targetId, flatten: true }));
     await command('Page.enable');
     await command('Browser.setDownloadBehavior', { behavior: 'deny' });
@@ -283,22 +308,26 @@ async function stop() {
     }
     process.exit();
 }
-const lines = readline.createInterface({ input: process.stdin });
+const input = fs.createReadStream(null, { fd: 0, autoClose: false });
+const lines = readline.createInterface({ input, crlfDelay: Infinity, terminal: false });
 lines.once('close', stop);
+output.on('error', stop);
 process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
 let started;
+setPhase('waiting for the first request on stdin');
 (async () => {
     for await (const line of lines) {
         try {
             const { name, args } = JSON.parse(line);
             started ||= launch();
             await started;
+            setPhase('performing ' + name);
             const content = await perform(name, args);
-            process.stdout.write(JSON.stringify({ content }) + '\n');
+            output.write(JSON.stringify({ content }) + '\n');
         } catch (e) {
-            const closed = !chrome || chrome.exitCode !== null || chrome.signalCode !== null;
-            process.stdout.write(JSON.stringify({ error: e.message, closed }) + '\n');
+            const closed = Boolean(browserError) || !chrome || chrome.exitCode !== null || chrome.signalCode !== null;
+            output.write(JSON.stringify({ error: phase + ': ' + e.message, closed }) + '\n');
         }
     }
 })();

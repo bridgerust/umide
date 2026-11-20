@@ -171,6 +171,11 @@ impl Driver {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
         let mut child = command.spawn().map_err(|e| format!("Cannot start the browser driver. Install Node.js and make node available to Umide: {e}"))?;
         let input = child.stdin.take();
         let output = child.stdout.take().unwrap();
@@ -193,39 +198,63 @@ impl Driver {
 
     fn request(&mut self, name: &str, args: &Value) -> Result<Value, String> {
         let input = self.input.as_mut().unwrap();
-        let fallback =
-            "The test browser stopped responding. Run web_start to reopen it.";
-        let request = json!({"name":name,"args":args});
-        if writeln!(input, "{request}")
+        // Submit one complete frame so an anonymous Windows pipe does not have
+        // to deliver a second write before readline can finish the request.
+        let frame = format!("{}\n", json!({"name":name,"args":args}));
+        if let Err(error) = input
+            .write_all(frame.as_bytes())
             .and_then(|_| input.flush())
-            .is_err()
         {
             self.connected = false;
-            return Err(fallback.into());
+            return Err(format!(
+                "Could not send {name} to the browser driver: {error}"
+            ));
         }
-        let deadline = Instant::now() + Duration::from_secs(18);
-        let line = loop {
+        let deadline = Instant::now() + Duration::from_secs(35);
+        let mut phase = "waiting for the Node driver".to_owned();
+        let reply = loop {
             if super::cancelled() {
                 self.connected = false;
                 return Err("Web verification was cancelled.".into());
             }
             match self.output.recv_timeout(Duration::from_millis(80)) {
-                Ok(line) => break line,
+                Ok(line) => {
+                    let reply: Value = serde_json::from_str(&line).map_err(|e| {
+                        format!(
+                            "Invalid browser response to {name} during {phase}: {e}"
+                        )
+                    })?;
+                    if let Some(activity) = reply["phase"].as_str() {
+                        phase = activity.to_owned();
+                    } else {
+                        break reply;
+                    }
+                }
                 Err(mpsc::RecvTimeoutError::Timeout)
                     if Instant::now() < deadline => {}
-                Err(_) => {
+                Err(reason) => {
                     self.connected = false;
-                    return Err(fallback.into());
+                    let state = match self.child.try_wait() {
+                        Ok(Some(status)) => format!("Node exited with {status}"),
+                        _ if reason == mpsc::RecvTimeoutError::Timeout => {
+                            "Node timed out".into()
+                        }
+                        _ => "Node closed stdout".into(),
+                    };
+                    return Err(format!(
+                        "{name} failed while {phase}: {state}. Run web_start to reopen the browser."
+                    ));
                 }
             }
         };
-        let reply: Value = serde_json::from_str(&line)
-            .map_err(|e| format!("Invalid browser response: {e}"))?;
         self.connected = reply["closed"] != true;
         if let Some(error) = reply["error"].as_str() {
             return Err(error.into());
         }
-        reply.get("content").cloned().ok_or_else(|| fallback.into())
+        reply
+            .get("content")
+            .cloned()
+            .ok_or_else(|| format!("No browser result for {name} during {phase}."))
     }
 }
 
@@ -271,7 +300,9 @@ mod tests {
             <p>{filler}</p>{controls}"#)).unwrap();
         let mut web = Web::default();
         let mut observe = |name, args| {
-            let content = web.call(name, &args, root.path()).unwrap();
+            let content = web
+                .call(name, &args, root.path())
+                .unwrap_or_else(|e| panic!("{name} failed: {e}"));
             serde_json::from_str::<Value>(content[0]["text"].as_str().unwrap())
                 .unwrap()
         };

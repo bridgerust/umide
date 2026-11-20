@@ -69,7 +69,7 @@ enum Input {
     Decision(String, bool),
 }
 
-fn cli_environment(provider: Provider) -> Result<(PathBuf, OsString), String> {
+pub fn cli_environment(provider: Provider) -> Result<(PathBuf, OsString), String> {
     let (name, key) = match provider {
         Provider::Codex => ("codex", "UMIDE_CODEX_PATH"),
         Provider::Claude => ("claude", "UMIDE_CLAUDE_PATH"),
@@ -84,6 +84,15 @@ fn cli_environment(provider: Provider) -> Result<(PathBuf, OsString), String> {
             dirs.push(PathBuf::from(home).join(".local/bin"));
         }
         dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
+    }
+    #[cfg(windows)]
+    {
+        if let Some(home) = env::var_os("USERPROFILE") {
+            dirs.push(PathBuf::from(home).join(".local/bin"));
+        }
+        if let Some(local) = env::var_os("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(local).join("Programs/OpenAI/Codex/bin"));
+        }
     }
     let path = env::join_paths(&dirs).map_err(|e| e.to_string())?;
     let extensions: &[&str] = if cfg!(windows) {

@@ -1,6 +1,14 @@
 # Umide Workbench
 
-Umide Workbench is the Rust and Floem desktop rewrite. Open an app folder, choose Codex or Claude Code, and run the app alongside the conversation. The workbench stores chat history and provider session IDs locally for each project.
+Umide Workbench is the Rust and Floem desktop rewrite. Open a mobile or web project, choose Codex or Claude Code, and run the app alongside the conversation. The workbench stores chat history and provider session IDs locally for each project.
+
+![Umide Workbench with the conversation, integrated terminal and web preview open together](../../screenshots/umide-workbench.png)
+
+## First launch
+
+When both standalone tools are missing, choose **Install both** to get them from OpenAI and Anthropic. Use **Install** on an individual provider to add just that tool. Existing installations appear with their version. **Sign in** opens the provider’s own authentication flow. Once it finishes, Umide checks the connection. Use **Continue to workspace** whenever you are ready. Reopen the assistant from **Agent setup** in the sidebar.
+
+Umide follows the system appearance by default. Choose **Appearance → Light** or **Dark** in the sidebar to keep a fixed theme. Your choice applies to every project on this computer.
 
 ## Run from source
 
@@ -15,12 +23,22 @@ You can also pass an app folder after `--`. To build a local macOS development b
 ## Agents
 
 - **Codex** uses the local Codex CLI and its configured authentication. Use a version that supports `codex app-server --stdio`.
-- **Claude Code** uses the local Claude CLI in bare mode. Set `ANTHROPIC_API_KEY` or configure a supported cloud provider in the environment that starts the app. Launch from a configured terminal if the credentials are set in your shell.
+- **Claude Code** uses the local Claude CLI and its own sign-in. Existing API key and cloud-provider setups can also use the CLI’s bare mode. Launch Umide from a configured environment when using shell-only credentials.
 - Configure `UMIDE_CODEX_PATH` or `UMIDE_CLAUDE_PATH` with an absolute executable path if automatic detection fails.
 - Select a running device and enable **Attach screen** to send its current screenshot with the next message. Command and edit requests requiring approval appear in the conversation. Use **Stop** to interrupt the active turn.
 - Use **Project folder** for a conversation that edits the current checkout. For parallel work, choose **Isolated Git copy** before sending the first message. Each copy starts from the project's latest commit and excludes local uncommitted files. Commits, branches and edits made in a task checkout are accessible from **Changes → Open task folder**.
 - You can move between active conversations. The sidebar indicates which agent is running or waiting for permission. Approving a tool or stopping a turn affects the selected task. Umide limits the project folder to one active agent turn at a time.
 - **Changes** shows the selected task's edits. For an isolated task, it includes changes committed after the task started and lists untracked files. Its checkout stays on disk for review and later conversation turns. Open the task folder to commit or transfer the changes with Git.
+
+## Terminal
+
+The workspace opens on **Conversation**. Choose **Terminal** in the toolbar to open a shell below the conversation, in the current project or isolated Git checkout. Drag the divider to resize it. Hide the terminal to give the conversation more space and reopen it to resume the same session. Umide closes the sessions when you close its window.
+
+## Web preview
+
+Choose **Web → Start server** to run the selected conversation’s checkout. Umide uses the `dev` or `start` script from `package.json` and detects npm, pnpm, Yarn or Bun. Install the project's dependencies before starting it. Custom scripts should accept `PORT` and bind to the supplied `HOST`. For a plain HTML project, open the folder containing `index.html`. Static previews use Python 3.
+
+On macOS the preview is interactive inside the workbench. Use **Reload preview** to refresh a static site after editing a file. **Open browser** opens the same local address in the system browser and is available on other platforms. **Show logs** displays server output and **Stop server** ends the process.
 
 ## Devices and builds
 

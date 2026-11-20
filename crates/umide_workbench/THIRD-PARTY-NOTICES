@@ -1,0 +1,108 @@
+Umide Workbench — component acknowledgments
+
+The accompanying LICENSE and NOTICE contain the Umide and Lapce notices.
+
+Visual Studio Code Codicons
+---------------------------
+Microsoft and the vscode-codicons contributors created the SVG artwork.
+Umide displays selected icons at interface sizes and tints them to match the
+workbench theme. The artwork is licensed under Creative Commons Attribution
+4.0 International. The bundled Codicons-LICENSE contains the full text.
+https://github.com/microsoft/vscode-codicons
+https://creativecommons.org/licenses/by/4.0/
+
+Android Emulator gRPC protocol
+------------------------------
+Copyright (C) 2018 The Android Open Source Project
+Umide uses an adapted subset of the emulator_controller.proto interface.
+The Apache License, Version 2.0 is included in LICENSE.
+https://android.googlesource.com/platform/prebuilts/android-emulator/
+
+Floem
+-----
+Umide uses the BridgeRust fork of the Floem UI toolkit.
+https://github.com/lapce/floem
+https://github.com/bridgerust/floem
+
+MIT License
+
+Copyright (c) 2023 Floem
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+iOS Development Bridge (idb)
+----------------------------
+Umide uses a subset of the protocol definitions from idb v1.1.8.
+https://github.com/facebook/idb/tree/v1.1.8
+https://github.com/facebook/idb/blob/v1.1.8/LICENSE
+
+MIT License
+
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+pulldown-cmark
+--------------
+Umide uses pulldown-cmark to parse agent responses.
+https://github.com/pulldown-cmark/pulldown-cmark
+
+The MIT License
+
+Copyright 2015 Google Inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Alacritty Terminal
+------------------
+The integrated terminal uses alacritty_terminal from the Alacritty project.
+The crate is licensed under the Apache License, Version 2.0, included in LICENSE.
+https://github.com/alacritty/alacritty/tree/cacdb5bb3b72bad2c729227537979d95af75978f/alacritty_terminal

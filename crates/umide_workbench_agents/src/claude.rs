@@ -5,10 +5,24 @@ use serde_json::{Value, json};
 use crate::{Event, ProtocolIo};
 
 pub(super) fn configure(cmd: &mut Command, session: Option<&str>) {
-    // Bare mode uses Anthropic API credentials or the configured cloud provider.
+    // Bare mode skips the CLI's keychain. Keep it for configured API/cloud
+    // clients, and allow the normal CLI sign-in for desktop users.
+    if [
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "CLAUDE_CODE_USE_FOUNDRY",
+    ]
+    .iter()
+    .any(|key| {
+        std::env::var_os(key).is_some_and(|value| !value.is_empty() && value != "0")
+    }) {
+        cmd.arg("--bare");
+    } else {
+        cmd.args(["--setting-sources", ""]);
+    }
     cmd.args([
         "--print",
-        "--bare",
         "--verbose",
         "--input-format",
         "stream-json",
@@ -23,7 +37,7 @@ pub(super) fn configure(cmd: &mut Command, session: Option<&str>) {
         "--tools",
         "Read,Glob,Grep,Edit,Write,Bash,PowerShell",
         "--settings",
-        r#"{"permissions":{"ask":["Edit","Write","Bash","PowerShell"]}}"#,
+        r#"{"disableAllHooks":true,"permissions":{"ask":["Edit","Write","Bash","PowerShell"]}}"#,
     ]);
     if let Some(id) = session {
         cmd.args(["--resume", id]);

@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 
 #[path = "app_run.rs"]
 mod app_run;
+pub(crate) use app_run::terminate;
 pub use app_run::{AppRun, device_logs};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -55,7 +56,7 @@ fn history_file(root: &Path) -> Result<PathBuf, String> {
     Ok(data_dir()?.join("history").join(format!("{digest:x}.json")))
 }
 
-fn load<T: DeserializeOwned>(file: &Path) -> Result<Option<T>, String> {
+pub(crate) fn load<T: DeserializeOwned>(file: &Path) -> Result<Option<T>, String> {
     let bytes = match fs::read(file) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -66,7 +67,7 @@ fn load<T: DeserializeOwned>(file: &Path) -> Result<Option<T>, String> {
         .map_err(|error| format!("Cannot read {}: {error}", file.display()))
 }
 
-fn save(file: &Path, value: &impl Serialize) -> Result<(), String> {
+pub(crate) fn save(file: &Path, value: &impl Serialize) -> Result<(), String> {
     let persist = || -> io::Result<()> {
         let dir = file.parent().expect("app data file has a parent");
         fs::create_dir_all(dir)?;

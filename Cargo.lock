@@ -8200,10 +8200,15 @@ dependencies = [
 name = "umide-workbench"
 version = "0.4.0"
 dependencies = [
+ "alacritty_terminal",
+ "cc",
  "directories",
  "floem",
  "image",
  "libc",
+ "open",
+ "pulldown-cmark",
+ "rustix 0.38.44",
  "serde",
  "serde_json",
  "sha2",

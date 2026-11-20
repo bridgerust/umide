@@ -110,14 +110,14 @@ impl ActiveTurn {
     }
 }
 
-#[derive(Clone)]
-struct Workspace {
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct Workspace {
     project: PathBuf,
     worktree_id: Option<String>,
 }
 
 impl Workspace {
-    fn path(&self) -> Result<PathBuf, String> {
+    pub(crate) fn path(&self) -> Result<PathBuf, String> {
         match &self.worktree_id {
             Some(key) => worktree::open(&self.project, &projects::data_dir()?, key),
             None => Ok(self.project.clone()),
@@ -348,7 +348,7 @@ impl Workbench {
             .map_err(|e| format!("Could not save conversation: {e}"))
     }
 
-    fn selected_workspace(self) -> Result<Workspace, String> {
+    pub(crate) fn selected_workspace(self) -> Result<Workspace, String> {
         let project = self.root.get_untracked().ok_or("Open a project first.")?;
         let Some(index) = self.current.get_untracked() else {
             if self.isolated.get_untracked() {
@@ -548,7 +548,7 @@ impl Workbench {
         // reactive write avoids invalidating sidebar badges on idle polls.
         let events = self
             .active
-            .with_untracked(|tasks| tasks.get(&index).map(ActiveTurn::events));
+            .try_with_untracked(|tasks| tasks?.get(&index).map(ActiveTurn::events));
         let Some(events) = events else {
             return;
         };
@@ -803,7 +803,7 @@ impl Workbench {
     fn poll_build(self) {
         let Some((running, out)) = self
             .app
-            .with_untracked(|a| a.as_ref().map(AppRun::snapshot))
+            .try_with_untracked(|a| a?.as_ref().map(AppRun::snapshot))
         else {
             return;
         };

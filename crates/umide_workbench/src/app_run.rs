@@ -289,7 +289,7 @@ fn pipe(
     });
 }
 
-fn terminate(child: &mut Child) {
+pub(crate) fn terminate(child: &mut Child) {
     #[cfg(unix)]
     {
         // Each build is placed in its own process group before exec. Stop

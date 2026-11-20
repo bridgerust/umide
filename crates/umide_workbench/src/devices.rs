@@ -7,14 +7,20 @@ use std::{cell::Cell, rc::Rc, time::Instant};
 use floem::{
     event::{Event, EventListener},
     ext_event::create_ext_action,
-    peniko::{Color, kurbo::Size},
+    peniko::kurbo::Size,
     prelude::*,
-    reactive::Scope,
+    reactive::{Memo, Scope},
+    style::TextOverflow,
     views::{dyn_container, dyn_stack, video_frame},
 };
 #[cfg(target_os = "macos")]
 use umide_emulator::IosSimulator;
 use umide_emulator::{AndroidEmulator, DeviceInfo, DevicePlatform, DeviceState};
+
+use crate::design::{
+    Glyph, MONO, UiText, accent, button, canvas, faint, icon, ink, line, mint_wash,
+    muted, panel as panel_color, surface,
+};
 
 type DeviceId = (String, String);
 
@@ -60,16 +66,13 @@ fn inventory() -> (Vec<DeviceInfo>, String) {
             d.id.clone(),
         )
     });
-    let message = if devices.is_empty() && errors.is_empty() {
-        "Create a virtual device in Android Studio or Xcode, then refresh.".into()
-    } else {
-        errors.join(" · ")
-    };
+    let message = errors.join(" · ");
     (devices, message)
 }
 
 #[derive(Clone, Copy)]
 struct Panel {
+    scope: Scope,
     selected: RwSignal<Option<DeviceId>>,
     devices: RwSignal<Vec<DeviceInfo>>,
     message: RwSignal<String>,
@@ -87,7 +90,7 @@ impl Panel {
             None => "Finding devices…".into(),
         });
         let after = create_ext_action(
-            Scope::current(),
+            self.scope,
             move |(devices, message, target_to_open): (
                 Vec<DeviceInfo>,
                 String,
@@ -135,8 +138,234 @@ impl Panel {
     }
 }
 
+fn platform_label(kind: DevicePlatform) -> &'static str {
+    match kind {
+        DevicePlatform::Android => "Android emulator",
+        DevicePlatform::Ios => "iOS simulator",
+    }
+}
+
+fn device_icon(kind: DevicePlatform, live: bool) -> impl IntoView {
+    let glyph = match kind {
+        DevicePlatform::Android => Glyph::Android,
+        DevicePlatform::Ios => Glyph::Apple,
+    };
+    icon(glyph, 16., move || if live { accent() } else { muted() })
+        .container()
+        .style(move |s| {
+            s.size(30., 30.)
+                .items_center()
+                .justify_center()
+                .border_radius(8.)
+                .background(if live { mint_wash() } else { surface() })
+                .flex_shrink(0_f32)
+        })
+}
+
+fn device_row(panel: Panel, device: DeviceInfo) -> impl IntoView {
+    let running = target(&device).is_some();
+    let starting = device.state == DeviceState::Starting;
+    let name = Label::new(device.name.clone())
+        .style(|s| s.width_full().font_size(13.).color(ink()).text_ellipsis());
+    let detail = Label::new(platform_label(device.platform))
+        .style(|s| s.color(muted()).font_size(11.));
+    let action = if running {
+        "Open"
+    } else if starting {
+        "Starting"
+    } else {
+        "Start"
+    };
+    let action_color: fn() -> Color = if running { accent } else { muted };
+    let trailing = Stack::horizontal((
+        Label::new(action).style(move |s| s.font_size(11.).color(action_color())),
+        icon(
+            if running { Glyph::Chevron } else { Glyph::Play },
+            11.,
+            action_color,
+        ),
+    ))
+    .style(|s| s.items_center().gap(3.).flex_shrink(0_f32));
+
+    Button::new(
+        Stack::horizontal((
+            device_icon(device.platform, running),
+            Stack::vertical((name, detail)).style(|s| {
+                s.min_width(0.)
+                    .flex_grow(1_f32)
+                    .flex_basis(0.)
+                    .items_start()
+                    .row_gap(2.)
+            }),
+            trailing,
+        ))
+        .style(|s| s.width_full().items_center().gap(9.)),
+    )
+    .action(move || {
+        if panel.busy.get_untracked() || starting {
+            return;
+        }
+        if let Some(id) = target(&device) {
+            panel.selected.set(Some(id));
+        } else {
+            panel.refresh(Some(device.clone()));
+        }
+    })
+    .style(move |s| {
+        s.width_full()
+            .padding_vert(8.)
+            .padding_horiz(7.)
+            .border(0.)
+            .border_radius(7.)
+            .background(panel_color())
+            .hover(|s| s.background(surface()))
+            .focus_visible(|s| s.outline(2.).outline_color(accent()))
+            .set_disabled(panel.busy.get() || starting)
+    })
+}
+
+fn device_list(panel: Panel) -> impl IntoView {
+    let query = RwSignal::new(String::new());
+    let filtered = move || {
+        let query = query.get().trim().to_lowercase();
+        panel.devices.with(|list| {
+            list.iter()
+                .filter(|d| {
+                    d.name.to_lowercase().contains(&query)
+                        || platform_label(d.platform).to_lowercase().contains(&query)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+    };
+    let search = Stack::horizontal((
+        icon(Glyph::Search, 14., muted),
+        text_input(query)
+            .placeholder("Filter devices…")
+            .on_key_down(
+                Key::Named(NamedKey::Escape),
+                |m| m.is_empty(),
+                move |_| query.set(String::new()),
+            )
+            .style(|s| {
+                s.background(canvas())
+                    .color(ink())
+                    .class(floem::views::PlaceholderTextClass, |s| s.color(faint()))
+                    .border(0.)
+                    .height(29.)
+                    .min_width(0.)
+                    .flex_grow(1_f32)
+                    .padding_horiz(2.)
+                    .font_size(12.)
+            }),
+    ))
+    .style(move |s| {
+        s.width_full()
+            .items_center()
+            .gap(6.)
+            .padding_horiz(9.)
+            .border(1.)
+            .border_color(line())
+            .background(canvas())
+            .border_radius(7.)
+            .apply_if(
+                panel.devices.with(|v| v.len() < 7) && query.with(String::is_empty),
+                |s| s.hide(),
+            )
+    });
+
+    let group = move |running: bool| {
+        let devices = move || {
+            filtered()
+                .into_iter()
+                .filter(|d| target(d).is_some() == running)
+                .collect::<Vec<_>>()
+        };
+        let header = Stack::horizontal((
+            if running { "Running" } else { "Available" }
+                .style(|s| s.ui_bold().font_size(11.).color(muted())),
+            Label::derived(move || devices().len().to_string())
+                .style(|s| s.font_size(11.).color(faint())),
+        ))
+        .style(|s| {
+            s.width_full()
+                .items_center()
+                .gap(6.)
+                .padding_left(6.)
+                .padding_top(9.)
+                .padding_bottom(4.)
+        });
+        let items = dyn_stack(
+            devices,
+            |d| {
+                (
+                    d.id.clone(),
+                    d.platform as u8,
+                    d.name.clone(),
+                    d.state as u8,
+                    d.serial.clone(),
+                )
+            },
+            move |device| device_row(panel, device),
+        );
+        Stack::vertical((header, items.style(|s| s.width_full().flex_col()))).style(
+            move |s| s.width_full().apply_if(devices().is_empty(), |s| s.hide()),
+        )
+    };
+
+    let empty = Stack::vertical((
+        icon(Glyph::Device, 23., muted).container().style(|s| {
+            s.size(46., 46.)
+                .items_center()
+                .justify_center()
+                .border(1.)
+                .border_color(line())
+                .border_radius(12.)
+                .background(surface())
+        }),
+        Label::derived(move || {
+            if query.with(String::is_empty) {
+                "No devices found"
+            } else {
+                "No matching devices"
+            }
+        })
+        .style(|s| s.font_size(14.).ui_bold().color(ink())),
+        Label::derived(move || {
+            if !query.with(String::is_empty) {
+                "Try a different device name or platform."
+            } else if cfg!(target_os = "macos") {
+                "Create a device in Android Studio or Xcode and refresh."
+            } else {
+                "Create a device in Android Studio and refresh."
+            }
+        })
+        .style(|s| {
+            s.font_size(12.)
+                .color(muted())
+                .width_full()
+                .text_overflow(TextOverflow::Wrap)
+        }),
+    ))
+    .style(move |s| {
+        s.width_full()
+            .gap(9.)
+            .padding(12.)
+            .apply_if(!filtered().is_empty() || panel.busy.get(), |s| s.hide())
+    });
+
+    let rows = Stack::vertical((group(true), group(false), empty))
+        .style(|s| s.width_full());
+    Stack::vertical((
+        search,
+        Scroll::new(rows).style(|s| s.flex_grow(1_f32).min_height(0.).width_full()),
+    ))
+    .style(|s| s.width_full().min_height(0.).flex_grow(1_f32).gap(5.))
+}
+
 pub fn device_panel(selected: RwSignal<Option<DeviceId>>) -> impl IntoView {
     let panel = Panel {
+        scope: Scope::current(),
         selected,
         devices: RwSignal::new(Vec::new()),
         message: RwSignal::new(String::new()),
@@ -144,124 +373,112 @@ pub fn device_panel(selected: RwSignal<Option<DeviceId>>) -> impl IntoView {
     };
     panel.refresh(None);
     let header = Stack::horizontal((
+        icon(Glyph::Device, 17., muted),
         Label::new("Devices")
-            .style(|s| s.font_bold().font_size(16.).flex_grow(1_f32)),
-        crate::button("Refresh", move || panel.refresh(None)),
-    ))
-    .style(|s| s.width_full().items_center());
-    let list = Scroll::new(
-        dyn_stack(
-            move || panel.devices.get(),
-            |d| (platform(d), d.id.clone(), d.state as u32, d.serial.clone()),
-            move |device| {
-                let view_id = target(&device);
-                let badge = if device.platform == DevicePlatform::Android {
-                    "Android"
-                } else {
-                    "iOS"
-                };
-                let action = if view_id.is_some() { "View" } else { "Start" };
-                Button::new(
-                    Stack::vertical((
-                        Label::new(device.name.clone()).style(|s| {
-                            s.font_size(13.)
-                                .color(crate::INK)
-                                .width_full()
-                                .text_ellipsis()
-                        }),
-                        Label::new(format!("{badge} · {action}")).style(|s| {
-                            s.font_size(11.).color(crate::MUTED).width_full()
-                        }),
-                    ))
-                    .style(|s| s.width_full().items_start().row_gap(3.)),
-                )
-                .action(move || {
-                    if panel.busy.get_untracked() {
-                        return;
-                    }
-                    if let Some(id) = target(&device) {
-                        if selected.get_untracked().as_ref() != Some(&id) {
-                            selected.set(Some(id));
-                        }
-                    } else {
-                        panel.refresh(Some(device.clone()));
-                    }
-                })
-                .style(move |s| {
-                    s.width_full()
-                        .items_start()
-                        .justify_start()
-                        .background(crate::CANVAS)
-                        .border(1.)
-                        .border_color(crate::LINE)
-                        .border_radius(7.)
-                        .padding_vert(8.)
-                        .padding_horiz(11.)
-                        .hover(|s| s.background(crate::PANEL))
-                        .apply_if(
-                            view_id.is_some() && selected.get() == view_id,
-                            |s| {
-                                s.border_color(crate::ACCENT)
-                                    .background(crate::PANEL)
-                            },
-                        )
-                })
-            },
+            .style(|s| s.ui_bold().font_size(16.).color(ink()).flex_grow(1_f32)),
+        Button::new(
+            Stack::horizontal((
+                icon(Glyph::Refresh, 12., muted),
+                Label::new("Refresh").style(|s| s.color(muted()).font_size(11.)),
+            ))
+            .style(|s| s.items_center().gap(5.)),
         )
-        .style(|s| s.width_full().flex_col().row_gap(5.)),
-    )
-    .style(move |s| {
-        s.width_full()
-            .min_height(0.)
-            .apply_if(selected.get().is_some(), |s| s.height(135.))
-            .apply_if(selected.get().is_none(), |s| {
-                s.flex_grow(1_f32).flex_basis(0.)
-            })
+        .action(move || panel.refresh(None))
+        .style(move |s| {
+            s.border(0.)
+                .border_radius(5.)
+                .background(panel_color())
+                .padding_horiz(6.)
+                .padding_vert(5.)
+                .hover(|s| s.background(surface()))
+                .focus_visible(|s| s.outline(2.).outline_color(accent()))
+                .set_disabled(panel.busy.get())
+        }),
+    ))
+    .style(|s| s.width_full().items_center().gap(8.));
+    let message = Label::derived(move || panel.message.get()).style(move |s| {
+        s.font_size(12.)
+            .color(muted())
+            .width_full()
+            .text_overflow(TextOverflow::Wrap)
+            .apply_if(panel.message.with(String::is_empty), |s| s.hide())
     });
-    let preview = dyn_container(
+    let content = dyn_container(
         move || selected.get(),
-        move |id| match id {
-            Some((platform, id)) => preview_view(platform, id, selected).into_any(),
-            None => Empty::new().into_any(),
+        move |open| match open {
+            Some((platform, id)) => preview_view(panel, platform, id).into_any(),
+            None => device_list(panel).into_any(),
         },
     )
-    .style(move |s| {
+    .style(|s| {
         s.width_full()
             .min_height(0.)
-            .apply_if(selected.get().is_some(), |s| {
-                s.flex_grow(1_f32).flex_basis(0.)
-            })
+            .flex_grow(1_f32)
+            .flex_basis(0.)
     });
-    Stack::vertical((
-        header,
-        Label::derived(move || panel.message.get()).style(move |s| {
-            s.font_size(12.)
-                .width_full()
-                .apply_if(panel.message.get().is_empty(), |s| s.hide())
-        }),
-        list,
-        preview,
-    ))
-    .style(|s| {
-        s.size_full()
+    Stack::vertical((header, message, content)).style(|s| {
+        s.width_full()
             .min_height(0.)
-            .min_width(0.)
-            .row_gap(9.)
-            .padding(12.)
+            .flex_grow(1_f32)
+            .flex_basis(0.)
+            .padding(16.)
+            .gap(12.)
     })
 }
 
-fn preview_view(
-    platform: String,
-    id: String,
-    selected: RwSignal<Option<DeviceId>>,
-) -> impl IntoView {
+fn preview_view(panel: Panel, platform: String, id: String) -> impl IntoView {
+    let selection = (platform.clone(), id.clone());
+    let kind = if platform == "android" {
+        DevicePlatform::Android
+    } else {
+        DevicePlatform::Ios
+    };
+    let name = Label::derived(move || {
+        panel.devices.with(|devices| {
+            devices
+                .iter()
+                .find(|d| target(d).as_ref() == Some(&selection))
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| selection.1.clone())
+        })
+    })
+    .style(|s| {
+        s.ui_bold()
+            .font_size(13.)
+            .color(ink())
+            .width_full()
+            .text_ellipsis()
+    });
+    let selected = Stack::horizontal((
+        device_icon(kind, true),
+        Stack::vertical((
+            name,
+            Label::new(platform_label(kind))
+                .style(|s| s.color(muted()).font_size(11.)),
+        ))
+        .style(|s| s.flex_grow(1_f32).min_width(0.).flex_basis(0.).row_gap(2.)),
+        button("Change", move || panel.selected.set(None))
+            .style(|s| s.font_size(11.).padding_horiz(8.).padding_vert(4.)),
+    ))
+    .style(|s| {
+        s.width_full()
+            .items_center()
+            .gap(9.)
+            .padding(9.)
+            .background(surface())
+            .border_radius(8.)
+    });
+
     let session::Preview {
         frame,
         status,
         control_status,
         gestures,
     } = session::start(platform, id);
+    let stage_size = RwSignal::new(Size::ZERO);
+    let screen = frame.clone();
+    let dimensions =
+        Memo::new(move |_| screen.get().map(|f| (f.image.width, f.image.height)));
     let size = Rc::new(Cell::new(Size::ZERO));
     let resize = size.clone();
     let press = RwSignal::new(None);
@@ -290,27 +507,108 @@ fn preview_view(
                 });
             }
         })
+        .style(move |s| {
+            let available = stage_size.get();
+            let (w, h) = dimensions.get().unwrap_or((1, 1));
+            let scale = ((available.width - 14.).max(0.) / w.max(1) as f64)
+                .min((available.height - 14.).max(0.) / h.max(1) as f64);
+            s.size((scale * w as f64).floor(), (scale * h as f64).floor())
+                .background(canvas())
+        });
+    let screen = image.container().style(move |s| {
+        s.border(1.)
+            .border_color(line())
+            .padding(2.)
+            .border_radius(5.)
+            .background(canvas())
+            .apply_if(dimensions.get().is_none(), |s| s.hide())
+    });
+    let placeholder = Stack::vertical((
+        icon(Glyph::Device, 30., faint),
+        Label::new("Waiting for screen…").style(|s| s.color(muted()).font_size(12.)),
+    ))
+    .style(move |s| {
+        s.items_center()
+            .gap(8.)
+            .apply_if(dimensions.get().is_some(), |s| s.hide())
+    });
+    let stage = Stack::vertical((screen, placeholder))
+        .on_resize(move |r| {
+            if stage_size.get_untracked() != r.size() {
+                stage_size.set(r.size())
+            }
+        })
         .style(|s| {
-            s.background(Color::from_rgb8(17, 20, 25))
-                .width_full()
+            s.width_full()
                 .flex_grow(1_f32)
                 .flex_basis(0.)
                 .min_height(0.)
+                .items_center()
+                .justify_center()
+                .border(1.)
+                .border_color(line())
+                .border_radius(11.)
+                .background(canvas())
         });
-    Stack::vertical((
-        image,
-        Label::derived(move || {
-            let state = status.get();
-            if state.is_empty() {
-                control_status.get()
+
+    let stream_status = status.clone();
+    let live = Memo::new(move |_| {
+        dimensions.get().is_some() && stream_status.get().is_empty()
+    });
+    let stream = Stack::horizontal((
+        Empty::new().style(move |s| {
+            s.size(6., 6.).border_radius(3.).background(if live.get() {
+                accent()
             } else {
-                state
+                faint()
+            })
+        }),
+        Label::derived(move || {
+            if live.get() {
+                "Live preview"
+            } else {
+                "Screen preview"
             }
         })
-        .style(|s| s.font_size(11.).width_full()),
-        crate::button("Close preview", move || selected.set(None)),
+        .style(|s| s.font_size(12.).ui_bold().color(muted()).flex_grow(1_f32)),
+        Label::derived(move || {
+            dimensions
+                .get()
+                .map(|(w, h)| format!("{w} × {h}"))
+                .unwrap_or_default()
+        })
+        .style(|s| {
+            s.color(faint())
+                .font_size(11.)
+                .font_family(MONO.to_string())
+        }),
     ))
-    .style(|s| s.size_full().min_height(0.))
+    .style(|s| s.width_full().gap(6.).items_center());
+    let notice = Memo::new(move |_| {
+        let state = status.get();
+        if !state.is_empty() {
+            return if state == "Connecting…" {
+                String::new()
+            } else {
+                state
+            };
+        }
+        let controls = control_status.get();
+        if controls.is_empty() && live.get() {
+            "Click to tap · Drag to swipe".to_owned()
+        } else {
+            controls
+        }
+    });
+    let notice = Label::derived(move || notice.get()).style(move |s| {
+        s.width_full()
+            .font_size(11.)
+            .color(muted())
+            .text_overflow(TextOverflow::Wrap)
+            .apply_if(notice.with(String::is_empty), |s| s.hide())
+    });
+    Stack::vertical((selected, stream, stage, notice))
+        .style(|s| s.size_full().min_height(0.).gap(10.))
 }
 
 fn map_point(

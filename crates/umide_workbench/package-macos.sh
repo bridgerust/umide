@@ -8,6 +8,10 @@ contents="$workbench_app/Contents"
 mkdir -p "$contents/MacOS" "$contents/Resources"
 install -m 755 target/debug/umide-workbench "$contents/MacOS/umide-workbench"
 install -m 644 extra/macos/UMIDE.app/Contents/Resources/umide.icns "$contents/Resources/umide.icns"
+licenses="$contents/Resources/Licenses"
+mkdir -p "$licenses"
+install -m 644 LICENSE NOTICE crates/umide_workbench/THIRD-PARTY-NOTICES "$licenses/"
+install -m 644 icons/codicons/LICENSE "$licenses/Codicons-LICENSE"
 cat > "$contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>

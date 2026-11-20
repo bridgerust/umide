@@ -1,38 +1,35 @@
+mod appearance;
+#[cfg(target_os = "macos")]
+mod browser;
+mod conversation;
+mod design;
 mod devices;
+mod navigation;
+mod onboarding;
 mod projects;
+mod provider_setup;
+mod review;
 mod state;
+mod terminal_dock;
+mod terminal_session;
+mod typography;
+mod web_preview;
+mod web_server;
+mod workbench_terminal;
 mod worktree;
 
 use std::path::PathBuf;
 
+use conversation::chat;
+use design::{button, canvas};
 use floem::{
     Application, FileDialogOptions, prelude::*, style::TextOverflow,
     window::WindowConfig,
 };
-use state::{Tab, Workbench, provider_name};
-use umide_workbench_agents::Provider;
+use review::changes_view;
+use state::{Tab, Workbench};
 
-const INK: Color = Color::from_rgb8(231, 235, 237);
-const MUTED: Color = Color::from_rgb8(158, 172, 182);
-const CANVAS: Color = Color::from_rgb8(20, 24, 29);
-const PANEL: Color = Color::from_rgb8(28, 34, 40);
-const LINE: Color = Color::from_rgb8(54, 65, 74);
-const ACCENT: Color = Color::from_rgb8(135, 225, 196);
-
-fn button(title: &'static str, action: impl Fn() + 'static) -> impl IntoView {
-    Button::new(title).action(action).style(|s| {
-        s.background(PANEL)
-            .color(INK)
-            .font_size(13)
-            .border(1)
-            .border_color(LINE)
-            .border_radius(6)
-            .padding_horiz(10)
-            .padding_vert(6)
-            .hover(|s| s.background(LINE))
-            .disabled(|s| s.color(MUTED).background(CANVAS))
-    })
-}
+use design::*;
 
 fn choose_project(wb: Workbench) {
     floem::open_file(FileDialogOptions::new().select_directories(), move |info| {
@@ -40,358 +37,6 @@ fn choose_project(wb: Workbench) {
             wb.open(&path);
         }
     });
-}
-
-fn sidebar(wb: Workbench) -> impl IntoView {
-    let sessions = dyn_stack(
-        move || {
-            wb.history
-                .with(|h| (0..h.conversations.len()).rev().collect::<Vec<_>>())
-        },
-        |index| *index,
-        move |index| {
-            let title = Label::derived(move || {
-                wb.history.with(|h| {
-                    h.conversations
-                        .get(index)
-                        .map(|c| c.title.clone())
-                        .unwrap_or_default()
-                })
-            })
-            .style(|s| s.width_full().text_ellipsis());
-            let detail = Label::derived(move || {
-                let source = wb.history.with(|h| {
-                    h.conversations
-                        .get(index)
-                        .map(|c| {
-                            if c.provider == "claude" {
-                                "Claude Code"
-                            } else {
-                                "Codex"
-                            }
-                        })
-                        .unwrap_or("")
-                });
-                let badge = wb.task_badge(index);
-                if badge.is_empty() {
-                    source.to_owned()
-                } else {
-                    format!("{source} · {badge}")
-                }
-            })
-            .style(move |s| {
-                s.font_size(11).width_full().text_ellipsis().color(
-                    if wb.task_badge(index).is_empty() {
-                        MUTED
-                    } else {
-                        ACCENT
-                    },
-                )
-            });
-            Button::new(
-                Stack::vertical((title, detail)).style(|s| s.width_full().gap(3)),
-            )
-            .action(move || wb.select(index))
-            .style(move |s| {
-                let active = wb.current.get() == Some(index);
-                s.width_full()
-                    .justify_start()
-                    .min_width(0)
-                    .padding(8)
-                    .border(0)
-                    .background(if active { LINE } else { PANEL })
-                    .border_radius(5)
-                    .color(if active { INK } else { MUTED })
-                    .hover(|s| s.background(LINE))
-            })
-        },
-    )
-    .style(|s| s.flex_col().width_full().gap(4));
-    Stack::vertical((
-        "UMIDE".style(|s| s.font_bold().font_size(19).color(ACCENT)),
-        Label::derived(move || {
-            wb.root.with(|p| {
-                p.as_ref()
-                    .and_then(|p| p.file_name())
-                    .map(|x| x.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "No project open".into())
-            })
-        })
-        .style(|s| {
-            s.margin_top(16)
-                .font_bold()
-                .font_size(15)
-                .max_width_full()
-                .text_ellipsis()
-        }),
-        button("Open project…", move || choose_project(wb))
-            .style(move |s| s.set_disabled(wb.any_busy() || wb.launching.get())),
-        "Conversations".style(|s| s.color(MUTED).font_size(12).margin_top(16)),
-        button("+ New conversation", move || wb.new_chat())
-            .style(move |s| s.set_disabled(wb.root.with(Option::is_none))),
-        Scroll::new(sessions)
-            .style(|s| s.width_full().flex_grow(1_f32).min_height(0)),
-    ))
-    .style(|s| {
-        s.width(205)
-            .height_full()
-            .flex_shrink(0_f32)
-            .padding(16)
-            .gap(9)
-            .background(PANEL)
-            .border_right(1)
-            .border_color(LINE)
-    })
-}
-
-fn chat(wb: Workbench) -> impl IntoView {
-    let conversation = dyn_container(move || (wb.current.get(),wb.root.with(Option::is_some)),
-        move |(index,open)| {
-            let Some(index) = index else {
-                return Stack::vertical((
-                    (if open { "Start a conversation" } else { "Open a project" })
-                        .style(|s|s.font_size(24).font_bold()),
-                    (if open { "Choose an agent and describe a change to your app." }
-                     else { "Choose the folder containing your app to start working with an agent." })
-                        .style(|s|s.font_size(14).color(MUTED).text_overflow(TextOverflow::Wrap)),
-                )).style(|s|s.width_full().padding(24).gap(10)).into_any();
-            };
-            let messages = dyn_stack(move || wb.history.with(|h| {
-                let n = h.conversations.get(index).map_or(0,|c|c.messages.len());
-                0..n
-            }), |n| *n, move |n| {
-                let role = Label::derived(move || wb.history.with(|h| h.conversations.get(index)
-                    .and_then(|c| c.messages.get(n).map(|m| match m.role.as_str() {
-                        "user" => "You", "system" => "Umide", _ if c.provider=="claude" => "Claude Code", _ => "Codex"
-                    })).unwrap_or_default().to_string()))
-                    .style(|s|s.font_bold().font_size(12).color(ACCENT));
-                let body = Label::derived(move || wb.history.with(|h| h.conversations.get(index)
-                    .and_then(|c| c.messages.get(n)).map(|m|m.text.clone()).unwrap_or_default()))
-                    .style(|s|s.width_full().font_size(14).text_overflow(TextOverflow::Wrap));
-                Stack::vertical((role,body)).style(|s|s.width_full().gap(6).padding_vert(8))
-            }).style(|s|s.flex_col().width_full().padding_horiz(18).gap(6));
-            Scroll::new(messages).scroll_to_percent(move || { wb.history.track(); 100. })
-                .style(|s|s.size_full().min_height(0)).into_any()
-        }).style(|s|s.width_full().flex_grow(1_f32).min_height(0));
-
-    let approvals = dyn_container(
-        move || {
-            wb.current.get().and_then(|index| {
-                wb.approvals.with(|items| {
-                    items.first().cloned().map(|(id, desc)| (index, id, desc))
-                })
-            })
-        },
-        move |next| {
-            let Some((index, id, description)) = next else {
-                return floem::views::Empty::new().into_any();
-            };
-            let allow_id = id.clone();
-            Stack::vertical((
-                "Agent requests permission".style(|s| s.font_bold()),
-                Scroll::new(
-                    description
-                        .style(|s| s.width_full().text_overflow(TextOverflow::Wrap)),
-                )
-                .style(|s| s.max_height(120).width_full()),
-                Stack::horizontal((
-                    button("Allow once", move || wb.decide(index, &allow_id, true)),
-                    button("Deny", move || wb.decide(index, &id, false)),
-                ))
-                .style(|s| s.gap(8)),
-            ))
-            .style(|s| {
-                s.width_full()
-                    .gap(8)
-                    .padding(12)
-                    .background(PANEL)
-                    .border(1)
-                    .border_color(ACCENT)
-            })
-            .into_any()
-        },
-    );
-    let provider_button = move |p| {
-        button(provider_name(p), move || wb.set_provider(p)).style(move |s| {
-            s.set_disabled(wb.busy.get())
-                .apply_if(wb.provider.get() == p, |s| {
-                    s.color(ACCENT).border_color(ACCENT)
-                })
-        })
-    };
-    let controls = Stack::horizontal((
-        provider_button(Provider::Codex),
-        provider_button(Provider::Claude),
-        button("Attach screen", move || wb.attach.update(|v| *v = !*v)).style(
-            move |s| {
-                s.set_disabled(wb.busy.get() || wb.target.with(Option::is_none))
-                    .apply_if(wb.attach.get(), |s| {
-                        s.color(ACCENT).border_color(ACCENT)
-                    })
-            },
-        ),
-    ))
-    .style(|s| s.gap(6).items_center());
-    let input = text_input(wb.draft)
-        .placeholder("Describe a change to your app…")
-        .on_key_down(
-            Key::Named(NamedKey::Enter),
-            |m| m.is_empty(),
-            move |_| wb.send(),
-        )
-        .style(move |s| {
-            s.min_width(0)
-                .flex_grow(1_f32)
-                .height(38)
-                .padding_horiz(10)
-                .background(PANEL)
-                .border(1)
-                .border_radius(6)
-                .border_color(LINE)
-                .color(INK)
-                .set_disabled(wb.root.with(Option::is_none) || wb.busy.get())
-        });
-    let send = dyn_container(
-        move || wb.busy.get(),
-        move |busy| {
-            if busy {
-                button("Stop", move || wb.cancel()).into_any()
-            } else {
-                button("Send", move || wb.send())
-                    .style(move |s| {
-                        s.background(ACCENT).color(CANVAS).set_disabled(
-                            wb.root.with(Option::is_none)
-                                || wb.draft.with(|v| v.trim().is_empty()),
-                        )
-                    })
-                    .into_any()
-            }
-        },
-    );
-    let location = dyn_container(
-        move || wb.current.get().is_some(),
-        move |existing| {
-            if existing {
-                return Label::derived(move || {
-                    if wb.isolated.get() {
-                        "Workspace · Isolated Git copy"
-                    } else {
-                        "Workspace · Project folder"
-                    }
-                })
-                .style(|s| s.color(MUTED).font_size(12))
-                .into_any();
-            }
-            let option = move |name, value| {
-                button(name, move || wb.isolated.set(value)).style(move |s| {
-                    s.font_size(12)
-                        .padding_vert(3)
-                        .set_disabled(wb.root.with(Option::is_none))
-                        .apply_if(wb.isolated.get() == value, |s| {
-                            s.color(ACCENT).border_color(ACCENT)
-                        })
-                })
-            };
-            Stack::vertical((
-            Stack::horizontal(("Workspace".style(|s|s.font_size(12).color(MUTED)),
-                option("Project folder",false),option("Isolated Git copy",true)))
-                .style(|s|s.items_center().gap(6)),
-            Label::derived(move || if wb.isolated.get() { "Starts at the latest commit and keeps edits in a separate folder." }
-                else { "Edits the files in the open project." })
-                .style(|s|s.font_size(11).color(MUTED).width_full().text_overflow(TextOverflow::Wrap)),
-        )).style(|s|s.gap(4).width_full()).into_any()
-        },
-    );
-    let composer = Stack::vertical((
-        approvals,
-        location,
-        controls,
-        Stack::horizontal((input, send))
-            .style(|s| s.gap(8).width_full().items_center()),
-    ))
-    .style(|s| {
-        s.gap(9)
-            .width_full()
-            .padding(14)
-            .border_top(1)
-            .border_color(LINE)
-    });
-    Stack::vertical((conversation, composer)).style(|s| s.size_full().min_size(0, 0))
-}
-
-fn changes_view(wb: Workbench) -> impl IntoView {
-    let open = button("Open task folder", move || {
-        let Some(project) = wb.root.get_untracked() else {
-            return;
-        };
-        let Some(index) = wb.current.get_untracked() else {
-            return;
-        };
-        let Some(key) = wb.history.with_untracked(|h| {
-            h.conversations
-                .get(index)
-                .and_then(|c| c.worktree_id.clone())
-        }) else {
-            return;
-        };
-        let expected = project.clone();
-        let report = floem::ext_event::create_ext_action(
-            floem::reactive::Scope::current(),
-            move |result: Result<(), String>| {
-                let Err(error) = result else {
-                    return;
-                };
-                if wb.current.get_untracked() == Some(index)
-                    && wb.root.get_untracked().as_ref() == Some(&expected)
-                {
-                    wb.status.set(error);
-                }
-            },
-        );
-        std::thread::spawn(move || {
-            let result = projects::data_dir()
-                .and_then(|data| worktree::open(&project, &data, &key))
-                .and_then(|path| open_folder(&path));
-            report(result);
-        });
-    })
-    .style(move |s| {
-        s.apply_if(
-            !wb.current.get().is_some_and(|i| {
-                wb.history.with(|h| {
-                    h.conversations
-                        .get(i)
-                        .is_some_and(|c| c.worktree_id.is_some())
-                })
-            }),
-            |s| s.hide(),
-        )
-    });
-    let context = Label::derived(move || {
-        if wb.isolated.get() && wb.current.get().is_some() {
-            "Changes since the task started"
-        } else {
-            "Project changes"
-        }
-    })
-    .style(|s| s.font_bold().font_size(14));
-    let bar = Stack::horizontal((
-        context,
-        open,
-        button("Refresh", move || wb.show_diff()),
-    ))
-    .style(|s| s.items_center().gap(8).width_full());
-    let diff = Label::derived(move || wb.changes.get()).style(|s| {
-        s.font_family("monospace".to_string())
-            .font_size(12)
-            .width_full()
-            .text_overflow(TextOverflow::Wrap)
-    });
-    Stack::vertical((
-        bar,
-        Scroll::new(diff).style(|s| s.width_full().min_height(0).flex_grow(1_f32)),
-    ))
-    .style(|s| s.size_full().padding(12).min_size(0, 0).gap(12))
 }
 
 fn open_folder(path: &std::path::Path) -> Result<(), String> {
@@ -412,140 +57,494 @@ fn open_folder(path: &std::path::Path) -> Result<(), String> {
     }
 }
 
-fn output_text(value: impl Fn() -> String + 'static) -> impl IntoView {
-    let label = Label::derived(value).style(|s| {
-        s.font_family("monospace".to_string())
+fn output_view(wb: Workbench, tab: Tab) -> impl IntoView {
+    let is_logs = tab == Tab::Logs;
+    if is_logs {
+        floem::reactive::Effect::new(move |_| {
+            wb.target.track();
+            wb.refresh_logs();
+        });
+    }
+    let title = if is_logs {
+        "Device logs"
+    } else {
+        "Build output"
+    };
+    let context = Label::derived(move || {
+        if is_logs {
+            wb.target.with(|t| {
+                t.as_ref()
+                    .map(|(platform, id)| format!("{platform}  /  {id}"))
+                    .unwrap_or_else(|| {
+                        "Select a device to inspect its recent activity.".into()
+                    })
+            })
+        } else {
+            let label = wb.build_label.get();
+            if label.is_empty() {
+                "Run your app on a selected device to follow the build.".into()
+            } else {
+                label
+            }
+        }
+    })
+    .style(|s| {
+        s.color(muted())
             .font_size(12)
             .width_full()
             .text_overflow(TextOverflow::Wrap)
     });
-    Scroll::new(label)
-        .style(|s| s.width_full().min_size(0, 0).flex_grow(1_f32).padding(16))
-}
-
-fn workspace(wb: Workbench) -> impl IntoView {
-    let tab = move |name, t| {
-        button(name, move || {
-            if t == Tab::Changes {
-                wb.show_diff()
-            } else if t == Tab::Logs {
-                let refresh = wb.tab.get_untracked() == Tab::Logs;
-                wb.tab.set(t);
-                if refresh {
-                    wb.refresh_logs();
-                }
-            } else {
-                wb.tab.set(t)
-            }
-        })
-        .style(move |s| {
-            s.apply_if(wb.tab.get() == t, |s| s.color(ACCENT).border_color(ACCENT))
-        })
-    };
-    let tabs = Stack::horizontal((
-        tab("Conversation", Tab::Chat),
-        tab("Changes", Tab::Changes),
-        tab("Build", Tab::Output),
-        tab("Device logs", Tab::Logs),
+    let header = Stack::vertical((
+        title.style(|s| s.color(ink()).font_size(25).ui_bold()),
+        context,
+    ))
+    .style(|s| s.width_full().gap(4));
+    let log_action =
+        action_button(Glyph::Refresh, "Refresh", move || wb.refresh_logs()).style(
+            move |s| {
+                s.apply_if(!is_logs, |s| s.hide())
+                    .set_disabled(wb.target.with(Option::is_none))
+            },
+        );
+    let build_action =
+        action_button(Glyph::Stop, "Stop build", move || wb.stop_app()).style(
+            move |s| s.apply_if(is_logs || !wb.launching.get(), |s| s.hide()),
+        );
+    let bar = Stack::horizontal((
+        icon(Glyph::Terminal, 15., faint),
+        "Console".style(|s| s.color(muted()).font_size(12)),
+        Empty::new().style(|s| s.flex_grow(1_f32)),
+        log_action,
+        build_action,
     ))
     .style(|s| {
-        s.gap(6)
-            .padding(12)
-            .width_full()
+        s.width_full()
+            .items_center()
+            .gap(7)
+            .height(41)
+            .padding_horiz(12)
+            .background(surface())
             .border_bottom(1)
-            .border_color(LINE)
+            .border_color(subtle_line())
     });
-    let body = dyn_container(move || wb.tab.get(), move |tab| {
-        match tab {
-            Tab::Chat => chat(wb).into_any(),
-            Tab::Changes => changes_view(wb).into_any(),
-            Tab::Logs => {
-                floem::reactive::Effect::new(move |_|{
-                    wb.target.track();
-                    wb.refresh_logs();
-                });
-                output_text(move ||wb.logs.get()).into_any()
-            }
-            Tab::Output => {
-                let owner = Label::derived(move || wb.build_label.get())
-                    .style(|s|s.width_full().text_ellipsis().font_bold());
-                let stop = button("Stop build", move ||wb.stop_app())
-                    .style(move |s|s.apply_if(!wb.launching.get(),|s|s.hide()));
-                Stack::vertical((
-                    Stack::vertical((owner,stop)).style(move |s|s.gap(4).width_full()
-                        .padding(12).apply_if(wb.build_label.with(String::is_empty),|s|s.hide())),
-                    output_text(move ||{
-                        let out = wb.output.get();
-                        if out.is_empty() { "Select a running device and use Run app to see build output.".into() } else {out}
-                    })
-                )).style(|s|s.size_full().min_size(0,0)).into_any()
+    let console = Label::derived(move || {
+        if is_logs {
+            wb.logs.get()
+        } else {
+            let output = wb.output.get();
+            if output.is_empty() {
+                "Waiting for build…".into()
+            } else {
+                output
             }
         }
-    }).style(|s|s.flex_grow(1_f32).min_height(0).width_full());
-    Stack::vertical((
-        tabs,
-        body,
-        Label::derived(move || wb.status.get()).style(|s| {
-            s.width_full()
-                .text_ellipsis()
-                .font_size(12)
-                .color(MUTED)
-                .padding_horiz(14)
-                .padding_vert(6)
-        }),
+    })
+    .style(|s| {
+        s.font_family(MONO.to_owned())
+            .color(muted())
+            .font_size(12)
+            .width_full()
+            .text_overflow(TextOverflow::Wrap)
+            .padding(12)
+    });
+    let output = Stack::vertical((
+        bar,
+        Scroll::new(console)
+            .style(|s| s.width_full().min_height(0).flex_grow(1_f32)),
     ))
-    .style(|s| s.flex_grow(1_f32).flex_basis(0).min_width(0).height_full())
+    .style(|s| {
+        s.width_full()
+            .min_height(0)
+            .flex_grow(1_f32)
+            .background(rail())
+            .border(1)
+            .border_color(line())
+            .border_radius(7)
+    });
+    Stack::vertical((header, output))
+        .style(|s| s.size_full().min_size(0, 0).padding(20).gap(16))
 }
 
-fn app(initial: Option<PathBuf>) -> impl IntoView {
-    let wb = Workbench::new();
-    if let Some(project) = initial.or_else(projects::last_project) {
-        wb.open(&project);
-    }
+#[derive(Clone, Copy, PartialEq)]
+enum PreviewMode {
+    Devices,
+    Web,
+}
+
+fn preview_toggle_style(
+    s: floem::style::Style,
+    selected: bool,
+) -> floem::style::Style {
+    s.height(27)
+        .padding_horiz(6)
+        .border(1)
+        .border_radius(5)
+        .color(if selected { accent() } else { muted() })
+        .border_color(if selected { line() } else { subtle_line() })
+        .background(if selected { mint_wash() } else { canvas() })
+        .hover(|s| s.background(raised()))
+        .focus_visible(|s| s.outline(2).outline_color(accent()))
+}
+
+fn workspace(
+    wb: Workbench,
+    inspection: RwSignal<Option<PreviewMode>>,
+    terminals: workbench_terminal::Terminals,
+) -> impl IntoView {
+    let tight = RwSignal::new(false);
+    let dock = terminal_dock::Dock::new();
+    let composer_focus: RwSignal<Option<floem::ViewId>> = RwSignal::new(None);
+    let hide_terminal = move || {
+        dock.visible.set(false);
+        if wb.tab.get_untracked() == Tab::Chat
+            && let Some(input) = composer_focus.get_untracked()
+        {
+            input.request_focus();
+        }
+    };
+    let tab = move |name, glyph, t| {
+        let contents = Stack::horizontal((
+            icon(glyph, 14., muted),
+            Label::new(name).style(move |s| {
+                s.apply_if(tight.get() && wb.tab.get() != t, |s| s.hide())
+            }),
+        ))
+        .style(|s| s.items_center().gap(6));
+        Button::new(contents)
+            .action(move || match t {
+                Tab::Changes => wb.show_diff(),
+                Tab::Logs if wb.tab.get_untracked() == Tab::Logs => {
+                    wb.refresh_logs()
+                }
+                _ => wb.tab.set(t),
+            })
+            .style(move |s| {
+                let active = wb.tab.get() == t;
+                s.padding_horiz(8)
+                    .height(45)
+                    .min_width(0)
+                    .font_size(12)
+                    .color(if active { ink() } else { muted() })
+                    .background(canvas())
+                    .border(0)
+                    .border_radius(0)
+                    .border_bottom(2)
+                    .border_color(if active { accent() } else { canvas() })
+                    .apply_if(active, |s| s.ui_bold())
+                    .hover(|s| s.background(panel()))
+                    .focus_visible(|s| s.outline(2).outline_color(accent()))
+            })
+            .tooltip(move || name)
+    };
+    let preview_toggle = move |mode: PreviewMode, glyph, name: &'static str| {
+        let content = Stack::horizontal((
+            icon(glyph, 15., move || {
+                if inspection.get() == Some(mode) {
+                    accent()
+                } else {
+                    muted()
+                }
+            }),
+            name.style(move |s| s.font_size(11).apply_if(tight.get(), |s| s.hide())),
+        ))
+        .style(|s| s.items_center().gap(4));
+        Button::new(content)
+            .action(move || {
+                inspection.update(|v| {
+                    *v = if *v == Some(mode) { None } else { Some(mode) }
+                })
+            })
+            .style(move |s| preview_toggle_style(s, inspection.get() == Some(mode)))
+            .tooltip(move || {
+                format!(
+                    "{} {name} preview",
+                    if inspection.get() == Some(mode) {
+                        "Hide"
+                    } else {
+                        "Show"
+                    }
+                )
+            })
+    };
+    let terminal_toggle = Button::new(
+        Stack::horizontal((
+            icon(Glyph::Terminal, 15., move || {
+                if dock.visible.get() {
+                    accent()
+                } else {
+                    muted()
+                }
+            }),
+            "Terminal"
+                .style(move |s| s.font_size(11).apply_if(tight.get(), |s| s.hide())),
+        ))
+        .style(|s| s.items_center().gap(4)),
+    )
+    .action(move || {
+        if dock.visible.get_untracked() {
+            hide_terminal();
+        } else {
+            dock.visible.set(true);
+        }
+    })
+    .style(move |s| preview_toggle_style(s, dock.visible.get()))
+    .tooltip(move || {
+        if dock.visible.get() {
+            "Hide terminal"
+        } else {
+            "Show terminal"
+        }
+    });
+    let tabs = Stack::horizontal((
+        tab("Conversation", Glyph::Chat, Tab::Chat),
+        tab("Changes", Glyph::Diff, Tab::Changes),
+        tab("Build", Glyph::Build, Tab::Output),
+        tab("Logs", Glyph::Logs, Tab::Logs),
+        Empty::new().style(|s| s.flex_grow(1_f32)),
+        terminal_toggle,
+        preview_toggle(PreviewMode::Devices, Glyph::Device, "Mobile"),
+        preview_toggle(PreviewMode::Web, Glyph::Globe, "Web"),
+    ))
+    .style(|s| {
+        s.width_full()
+            .items_center()
+            .padding_horiz(10)
+            .gap(2)
+            .height(46)
+            .flex_shrink(0_f32)
+            .border_bottom(1)
+            .border_color(subtle_line())
+    });
+    let body = dyn_container(
+        move || wb.tab.get(),
+        move |t| match t {
+            Tab::Chat => chat(wb, composer_focus).into_any(),
+            Tab::Changes => changes_view(wb).into_any(),
+            Tab::Output | Tab::Logs => output_view(wb, t).into_any(),
+        },
+    )
+    .style(|s| s.width_full().flex_grow(1_f32).min_size(0, 0));
+    let status = Stack::horizontal((
+        Empty::new().style(move |s| {
+            s.size(6, 6).border_radius(3).background(
+                if wb.approvals.with(|a| !a.is_empty()) {
+                    peach()
+                } else if wb.busy.get() {
+                    accent()
+                } else {
+                    faint()
+                },
+            )
+        }),
+        Label::derived(move || wb.status.get()).style(|s| {
+            s.min_width(0)
+                .width_full()
+                .text_ellipsis()
+                .color(muted())
+                .font_size(11)
+        }),
+    ))
+    .style(|s| {
+        s.width_full()
+            .height(27)
+            .gap(7)
+            .items_center()
+            .padding_horiz(16)
+            .border_top(1)
+            .border_color(subtle_line())
+    });
+    Stack::vertical((tabs, body, dock.view(wb, terminals, hide_terminal), status))
+        .on_resize(move |rect| {
+            dock.window_resized(rect.height());
+            let cramped = rect.width() < 560.;
+            if tight.get_untracked() != cramped {
+                tight.set(cramped);
+            }
+        })
+        .style(|s| {
+            s.height_full()
+                .min_width(0)
+                .flex_grow(1_f32)
+                .flex_basis(0)
+                .background(canvas())
+        })
+}
+
+fn inspector(wb: Workbench, narrow: RwSignal<bool>) -> impl IntoView {
     let actions = dyn_container(
         move || (wb.launching.get(), wb.current.get() == wb.build_owner.get()),
         move |(running, owned)| {
             if running && !owned {
-                button("View active build", move || wb.tab.set(Tab::Output))
-                    .into_any()
+                action_button(Glyph::Terminal, "View active build", move || {
+                    wb.tab.set(Tab::Output)
+                })
+                .into_any()
             } else if running {
-                button("Stop build", move || wb.stop_app()).into_any()
+                action_button(Glyph::Stop, "Stop build", move || wb.stop_app())
+                    .into_any()
             } else {
-                button("Run app", move || wb.launch())
+                let content =
+                    Stack::horizontal((icon(Glyph::Play, 14., accent), "Run app"))
+                        .style(|s| s.items_center().gap(7));
+                Button::new(content)
+                    .action(move || wb.launch())
                     .style(move |s| {
-                        s.set_disabled(
-                            wb.target.with(Option::is_none)
-                                || wb.root.with(Option::is_none),
-                        )
+                        s.width_full()
+                            .height(34)
+                            .font_size(12)
+                            .ui_bold()
+                            .border_radius(7)
+                            .background(mint_wash())
+                            .color(accent())
+                            .border(1)
+                            .border_color(line())
+                            .hover(|s| s.background(raised()))
+                            .focus_visible(|s| s.outline(2).outline_color(accent()))
+                            .set_disabled(
+                                wb.target.with(Option::is_none)
+                                    || wb.root.with(Option::is_none),
+                            )
+                            .disabled(|s| {
+                                s.background(surface())
+                                    .color(faint())
+                                    .border_color(subtle_line())
+                            })
                     })
                     .into_any()
             }
         },
+    )
+    .style(|s| {
+        s.width_full()
+            .padding_horiz(15)
+            .padding_vert(11)
+            .border_top(1)
+            .border_color(subtle_line())
+    });
+    Stack::vertical((
+        devices::device_panel(wb.target)
+            .style(|s| s.width_full().min_height(0).height(0).flex_grow(1_f32)),
+        actions,
+    ))
+    .style(move |s| {
+        s.width(if narrow.get() { 292 } else { 324 })
+            .height_full()
+            .flex_shrink(0_f32)
+            .background(panel())
+            .border_left(1)
+            .border_color(subtle_line())
+    })
+}
+
+fn app(
+    initial: Option<PathBuf>,
+    preference: appearance::Preference,
+) -> impl IntoView {
+    let appearance = appearance::Appearance::install(preference);
+    let wb = Workbench::new();
+    if let Some(project) = initial.or_else(projects::last_project) {
+        wb.open(&project);
+    }
+    let narrow = RwSignal::new(false);
+    let rail_override = RwSignal::new(None::<bool>);
+    let inspection = RwSignal::new(Some(PreviewMode::Devices));
+    let setup_open = RwSignal::new(provider_setup::first_run());
+    let setup = provider_setup::ProviderSetup::new();
+    let web = web_preview::WebPreview::new();
+    let terminals = workbench_terminal::Terminals::new();
+    let page = dyn_container(
+        move || setup_open.get(),
+        move |first_run| {
+            if first_run {
+                for provider in [
+                    umide_workbench_agents::Provider::Codex,
+                    umide_workbench_agents::Provider::Claude,
+                ] {
+                    setup.refresh(provider);
+                }
+                return onboarding::panel(setup, move || {
+                    if let Err(error) = provider_setup::remember() {
+                        wb.status.set(error);
+                    }
+                    setup_open.set(false);
+                })
+                .into_any();
+            }
+            let rail = dyn_container(
+                move || rail_override.get().unwrap_or_else(|| narrow.get()),
+                move |compact| {
+                    navigation::sidebar(
+                        wb,
+                        compact,
+                        move || rail_override.set(Some(!compact)),
+                        move || setup_open.set(true),
+                    )
+                },
+            )
+            .style(|s| s.height_full().flex_shrink(0_f32));
+            let preview = dyn_container(
+                move || inspection.get(),
+                move |mode| match mode {
+                    Some(PreviewMode::Devices) => inspector(wb, narrow).into_any(),
+                    Some(PreviewMode::Web) => web_preview::panel(wb, web)
+                        .style(move |s| {
+                            s.width(if narrow.get() { 378 } else { 490 })
+                                .height_full()
+                                .min_height(0)
+                                .flex_shrink(0_f32)
+                                .background(panel())
+                                .border_left(1)
+                                .border_color(subtle_line())
+                        })
+                        .into_any(),
+                    None => Empty::new().into_any(),
+                },
+            )
+            .style(|s| s.height_full().flex_shrink(0_f32));
+            Stack::horizontal((rail, workspace(wb, inspection, terminals), preview))
+                .style(|s| s.size_full())
+                .into_any()
+        },
     );
-    let device =
-        Stack::vertical((devices::device_panel(wb.target), actions)).style(|s| {
-            s.width(330)
-                .height_full()
-                .padding(12)
-                .gap(10)
-                .flex_shrink(0_f32)
-                .background(PANEL)
-                .border_left(1)
-                .border_color(LINE)
-        });
-    Stack::horizontal((sidebar(wb), workspace(wb), device))
-        .style(|s| s.size_full().background(CANVAS).color(INK).font_size(14))
-        .on_cleanup(move || wb.close())
+    page.style(|s| {
+        s.size_full()
+            .background(canvas())
+            .color(ink())
+            .font_family(SANS.to_owned())
+            .font_size(14)
+    })
+    .on_resize(move |rect| {
+        let small = rect.width() < 1080.;
+        if narrow.get_untracked() != small {
+            narrow.set(small);
+        }
+    })
+    .on_event_cont(floem::event::EventListener::ThemeChanged, move |event| {
+        if let floem::event::Event::ThemeChanged(theme) = event {
+            appearance.window_changed(*theme);
+        }
+    })
+    .on_event_cont(floem::event::EventListener::WindowClosed, move |_| {
+        setup.close();
+        web.close();
+        terminals.close();
+        wb.close();
+    })
 }
 
 fn main() {
     let project = std::env::args_os().nth(1).map(PathBuf::from);
+    typography::configure();
+    let preference = appearance::Preference::load();
     let config = WindowConfig::default()
         .title("Umide Workbench")
-        .theme_override(floem::window::Theme::Dark)
-        .size((1200., 790.))
+        .size((1280., 800.))
         .min_size((960., 600.));
+    let config = match preference.native() {
+        Some(theme) => config.theme_override(theme),
+        None => config,
+    };
     Application::new()
-        .window(move |_| app(project), Some(config))
+        .window(move |_| app(project, preference), Some(config))
         .run();
 }

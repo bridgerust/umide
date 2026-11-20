@@ -2,27 +2,30 @@
   UMIDE
 </h1>
 
-<h4 align="center">The mobile AI IDE for Windows and macOS — with emulators built in</h4>
+<h4 align="center">Build and test mobile and web apps with Codex and Claude Code</h4>
 
 <p align="center">
-  <b>🧪 v0.4.0-beta.2 public beta</b><br>
-  Try the embedded iOS Simulator and workspace run profiles —
+  <a href="https://www.umide.dev/">Umide website</a> ·
   <a href="https://github.com/bridgerust/umide/issues/new?labels=beta&template=beta_feedback.yml">report a bug</a>
   · <a href="https://github.com/bridgerust/umide/discussions">discuss</a>.
 </p>
 
-UMIDE is a **mobile AI IDE for Windows and macOS**, built in Rust for React Native and Flutter. The **Android emulator** runs inside the editor on both platforms. On macOS, the **iOS Simulator** runs headless in the editor with no Simulator.app window. The built-in **AI assistant can see and drive the embedded devices**.
+The [native Umide Workbench](crates/umide_workbench/README.md) brings chat, project files, terminal and previews into one Rust desktop application. Codex and Claude Code can start a virtual device, run the app and check a mobile or web interaction.
 
-## Download (beta)
+[Download Umide Workbench](https://www.umide.dev/download) for macOS (Apple Silicon and Intel), Windows x64 or Ubuntu 24.04 x86-64. To build and run Workbench from this checkout, use `cargo run --locked -p umide-workbench`.
 
-Choose the **Pre-release** installer for Windows or macOS from the [Releases page](https://github.com/bridgerust/umide/releases).
+![Umide Workbench with a conversation, project files and the integrated terminal](screenshots/umide-workbench-fr.png)
+
+## Umide Classic downloads
+
+The existing mobile IDE is available in the [Classic v0.4.0-beta.1 release](https://github.com/bridgerust/umide/releases/tag/v0.4.0-beta.1).
 
 - **macOS** (Apple Silicon & Intel) — signed & notarized `.dmg`. Full product: editor, **embedded Android emulator + embedded iOS Simulator (no Simulator.app)**, and the AI assistant. Embedded iOS needs `brew install idb-companion` (without it, UMIDE falls back to the Simulator.app view).
 - **Windows** — `.msi` installer. Editor + AI assistant + **embedded, interactive Android emulator (preview)** — live screen with tap/drag, hardware buttons (Home/Back/Recents/Power, volume, rotate), keyboard input, and a screenshot button. iOS Simulator stays macOS-only. _The installer isn't Authenticode-signed yet, so SmartScreen may warn on first run — choose **More info → Run anyway**._
 
 New to the beta? See the [Beta testing guide](BETA.md) for setup, what to try, and known limitations.
 
-## Screenshots
+## Classic screenshots
 
 ![Android and iOS emulators running side by side](screenshots/emulator-android-ios-running.png)
 
@@ -32,7 +35,7 @@ New to the beta? See the [Beta testing guide](BETA.md) for setup, what to try, a
 
 ![Emulator device list](screenshots/emulator-device-list.png)
 
-## Features
+## Classic features
 
 - **Unified Mobile Environment**: the Android emulator and iOS Simulator embedded directly in the IDE. On macOS the iOS Simulator runs **headless — no Simulator.app window** — booting into the panel with tap/swipe/keyboard input (requires `idb_companion`).
 - **Device Logs in the IDE**: the running device's native logs — Android logcat and the iOS simulator's unified log — streamed live in a bottom panel with severity colouring, follow/tail, and Clear. No Android Studio or Xcode needed to read logs.
@@ -49,6 +52,6 @@ New to the beta? See the [Beta testing guide](BETA.md) for setup, what to try, a
 Copyright 2026 UMIDE contributors
 Portions (original editor) Copyright 2023 Lapce contributors
 
-UMIDE is a fork of [Lapce](https://github.com/lapce/lapce). See the [NOTICE](NOTICE) file for attribution.
+Umide Classic is a fork of [Lapce](https://github.com/lapce/lapce). See the [NOTICE](NOTICE) file for attribution.
 
 Released under the Apache License Version 2.

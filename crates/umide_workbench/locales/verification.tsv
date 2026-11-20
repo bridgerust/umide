@@ -1,0 +1,12 @@
+Agent browser	Navigateur de l’agent	Navegador del agente	Navegador do agente
+Manual preview	Aperçu manuel	Vista previa manual	Prévia manual
+Continuing adds a short Umide section to the personal instructions for Codex and Claude Code.	En continuant, tu ajoutes une courte section Umide aux instructions personnelles de Codex et Claude Code.	Al continuar, se añade una breve sección de Umide a las instrucciones personales de Codex y Claude Code.	Ao continuar, uma seção curta sobre o Umide será adicionada às instruções pessoais do Codex e do Claude Code.
+Cannot locate the agent settings directory.	Impossible de trouver le dossier des réglages de l’agent.	No se encuentra la carpeta de configuración del agente.	Não foi possível encontrar a pasta de configurações do agente.
+Could not update agent guidance in {path}: {error}	Impossible d’ajouter les instructions dans {path} : {error}	No se pudieron añadir las instrucciones en {path}: {error}	Não foi possível adicionar as instruções em {path}: {error}
+Could not start Umide verification: {error}	Impossible de démarrer la vérification dans Umide : {error}	No se pudo iniciar la verificación en Umide: {error}	Não foi possível iniciar a verificação no Umide: {error}
+Filled field	Champ rempli	Campo completado	Campo preenchido
+Clicked control	Clic effectué	Clic realizado	Clique realizado
+Observed text	Texte observé	Texto observado	Texto observado
+Captured page	Capture de la page	Captura de la página	Captura da página
+Inspected page	Page examinée	Página examinada	Página inspecionada
+Opened test page	Page de test ouverte	Página de prueba abierta	Página de teste aberta

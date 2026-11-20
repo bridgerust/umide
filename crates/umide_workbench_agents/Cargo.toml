@@ -1,0 +1,12 @@
+[package]
+name = "umide_workbench_agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+base64 = "0.22"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

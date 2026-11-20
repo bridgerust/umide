@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Umide Workbench
+GenericName=Development Environment
+GenericName[fr]=Environnement de développement
+GenericName[es]=Entorno de desarrollo
+GenericName[pt_BR]=Ambiente de desenvolvimento
+Comment=Develop and test mobile and web apps with Codex or Claude Code
+Comment[fr]=Développer et tester des applications mobiles et web avec Codex ou Claude Code
+Comment[es]=Desarrolla y prueba aplicaciones móviles y web con Codex o Claude Code
+Comment[pt_BR]=Desenvolva e teste aplicativos móveis e web com Codex ou Claude Code
+TryExec=umide-workbench
+Exec=umide-workbench %f
+Icon=org.bridgerust.umide.workbench
+Terminal=false
+Categories=Development;IDE;
+MimeType=inode/directory;
+StartupWMClass=umide-workbench

@@ -81,12 +81,19 @@ impl IosSimulator {
             return Err(anyhow!("Failed to list iOS Simulators"));
         }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let v: Value = serde_json::from_str(&stdout)?;
+        Self::parse_devices(&output.stdout)
+    }
 
+    /// Decode available iOS simulator destinations. Other CoreSimulator runtime
+    /// families cannot run applications built for an iOS destination.
+    pub fn parse_devices(bytes: &[u8]) -> Result<Vec<DeviceInfo>> {
+        let v: Value = serde_json::from_slice(bytes)?;
         let mut devices = Vec::new();
         if let Some(runtimes) = v.get("devices").and_then(|d| d.as_object()) {
-            for (_runtime, run_devices) in runtimes {
+            for (runtime, run_devices) in runtimes {
+                if !runtime.starts_with("com.apple.CoreSimulator.SimRuntime.iOS-") {
+                    continue;
+                }
                 if let Some(run_devices) = run_devices.as_array() {
                     for device in run_devices {
                         let name = device

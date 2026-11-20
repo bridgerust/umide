@@ -1,0 +1,78 @@
+Project files	Fichiers du projet	Archivos del proyecto	Arquivos do projeto
+Browse files	Parcourir les fichiers	Explorar archivos	Explorar arquivos
+Back to file	Revenir au fichier	Volver al archivo	Voltar ao arquivo
+Select a file to edit	Choisissez un fichier à modifier	Selecciona un archivo para editar	Selecione um arquivo para editar
+Edited	Modifié	Modificado	Modificado
+Save	Enregistrer	Guardar	Salvar
+Reload	Recharger	Volver a cargar	Recarregar
+Discard and reload	Abandonner et recharger	Descartar y volver a cargar	Descartar e recarregar
+Discard unsaved edits and reload this file?	Abandonner les modifications et recharger ce fichier ?	¿Descartar los cambios sin guardar y volver a cargar este archivo?	Descartar as alterações não salvas e recarregar este arquivo?
+Copy edits	Copier les modifications	Copiar los cambios	Copiar alterações
+Opening file…	Ouverture du fichier…	Abriendo el archivo…	Abrindo o arquivo…
+⌘S to save · Esc to leave the editor	⌘S pour enregistrer · Échap pour quitter l’éditeur	⌘S para guardar · Esc para salir del editor	⌘S para salvar · Esc para sair do editor
+Ctrl+S to save · Esc to leave the editor	Ctrl+S pour enregistrer · Échap pour quitter l’éditeur	Ctrl+S para guardar · Esc para salir del editor	Ctrl+S para salvar · Esc para sair do editor
+Empty folder	Dossier vide	Carpeta vacía	Pasta vazia
+Loading…	Chargement…	Cargando…	Carregando…
+Show more…	Afficher la suite…	Mostrar más…	Mostrar mais…
+Show more entries	Afficher plus d’éléments	Mostrar más elementos	Mostrar mais itens
+{path} · Unsaved changes	{path} · Modifications non enregistrées	{path} · Cambios sin guardar	{path} · Alterações não salvas
+Refresh files	Actualiser les fichiers	Actualizar los archivos	Atualizar arquivos
+Open in…	Ouvrir dans…	Abrir en…	Abrir em…
+Open this file in another editor	Ouvrir ce fichier dans un autre éditeur	Abrir este archivo en otro editor	Abrir este arquivo em outro editor
+Other editor…	Autre éditeur…	Otro editor…	Outro editor…
+Open in {editor} with unsaved edits?	Des modifications sont en cours. Quelle version ouvrir dans {editor} ?	Hay cambios sin guardar. ¿Qué versión quieres abrir en {editor}?	Há alterações não salvas. Qual versão abrir em {editor}?
+Save and open	Enregistrer et ouvrir	Guardar y abrir	Salvar e abrir
+Open disk version	Ouvrir la version sur disque	Abrir la versión del disco	Abrir a versão em disco
+Choose an editor application	Choisir une application d’édition	Elegir una aplicación de edición	Escolher um aplicativo de edição
+Applications	Applications	Aplicaciones	Aplicativos
+The file is busy. Open the editor menu again when the operation finishes.	Une opération est en cours sur ce fichier. Rouvrez le menu des éditeurs une fois l’opération terminée.	Hay una operación en curso en este archivo. Vuelve a abrir el menú de editores cuando termine.	Há uma operação em andamento neste arquivo. Abra o menu de editores novamente quando ela terminar.
+Choose an installed editor using its full path.	Sélectionnez le chemin complet d’un éditeur installé.	Selecciona la ruta completa de un editor instalado.	Selecione o caminho completo de um editor instalado.
+Choose an installed .app application.	Choisissez une application .app installée.	Elige una aplicación .app instalada.	Escolha um aplicativo .app instalado.
+Choose an installed editor executable.	Choisissez l’exécutable d’un éditeur installé.	Elige el ejecutable de un editor instalado.	Escolha o executável de um editor instalado.
+Choose an editor application.	Choisissez une application d’édition.	Elige una aplicación de edición.	Escolha um aplicativo de edição.
+Could not open the application picker: {error}	Impossible d’ouvrir le sélecteur d’applications : {error}	No se pudo abrir el selector de aplicaciones: {error}	Não foi possível abrir o seletor de aplicativos: {error}
+Could not find {name}. Use Other editor… to select its executable.	{name} est introuvable. Choisissez « Autre éditeur… » pour sélectionner son exécutable.	No se encontró {name}. Elige «Otro editor…» para seleccionar su ejecutable.	Não foi possível encontrar {name}. Use “Outro editor…” para selecionar o executável.
+Could not launch {name}: {error}	Impossible de lancer {name} : {error}	No se pudo iniciar {name}: {error}	Não foi possível iniciar {name}: {error}
+{name} could not open this file ({status}).	{name} n’a pas pu ouvrir ce fichier ({status}).	{name} no pudo abrir este archivo ({status}).	{name} não conseguiu abrir este arquivo ({status}).
+{name} could not open this file: {error}	{name} n’a pas pu ouvrir ce fichier : {error}	{name} no pudo abrir este archivo: {error}	{name} não conseguiu abrir este arquivo: {error}
+{name} could not open this file ({status}). Check that the editor is installed.	{name} n’a pas pu ouvrir ce fichier ({status}). Vérifiez que l’éditeur est installé.	{name} no pudo abrir este archivo ({status}). Comprueba que el editor esté instalado.	{name} não conseguiu abrir este arquivo ({status}). Verifique se o editor está instalado.
+Could not check the {name} launcher.	Impossible de vérifier le lancement de {name}.	No se pudo verificar el inicio de {name}.	Não foi possível verificar a inicialização de {name}.
+Edits copied.	Modifications copiées.	Cambios copiados.	Alterações copiadas.
+The clipboard is unavailable.	Le presse-papiers est indisponible.	El portapapeles no está disponible.	A área de transferência está indisponível.
+Could not copy edits: {error}	Impossible de copier les modifications : {error}	No se pudieron copiar los cambios: {error}	Não foi possível copiar as alterações: {error}
+You edited this file while it was loading. Your edits are still here.	Vous avez modifié ce fichier pendant son chargement. Vos modifications sont conservées.	Has modificado este archivo mientras se cargaba. Tus cambios se han conservado.	Você alterou este arquivo durante o carregamento. Suas alterações foram mantidas.
+Recovered your unsaved edits.	Vos modifications non enregistrées ont été récupérées.	Se han recuperado tus cambios sin guardar.	Suas alterações não salvas foram recuperadas.
+Recovered your edits. The file also changed on disk. Copy the edits you want to keep before reloading.	Vos modifications ont été récupérées. Le fichier a également changé sur le disque. Copiez les modifications à conserver avant de recharger.	Se han recuperado tus cambios. El archivo también ha cambiado en el disco. Copia los cambios que quieras conservar antes de volver a cargarlo.	Suas alterações foram recuperadas. O arquivo também mudou no disco. Copie as alterações que deseja manter antes de recarregar.
+Could not read the local draft: {error}	Impossible de lire le brouillon local : {error}	No se pudo leer el borrador local: {error}	Não foi possível ler o rascunho local: {error}
+Could not remove the local draft: {error}	Impossible de supprimer le brouillon local : {error}	No se pudo eliminar el borrador local: {error}	Não foi possível remover o rascunho local: {error}
+Unknown draft location	Emplacement du brouillon inconnu	Ubicación del borrador desconocida	Local do rascunho desconhecido
+Drafts with unavailable files	Brouillons dont le fichier est indisponible	Borradores con archivos no disponibles	Rascunhos com arquivos indisponíveis
+{path} · Version {version}	{path} · Version {version}	{path} · Versión {version}	{path} · Versão {version}
+Copied edits for {name}.	Modifications de {name} copiées.	Se copiaron los cambios de {name}.	As alterações de {name} foram copiadas.
+Could not copy the draft to the clipboard.	Impossible de copier le brouillon dans le presse-papiers.	No se pudo copiar el borrador al portapapeles.	Não foi possível copiar o rascunho para a área de transferência.
+Could not recover the draft: {error}	Impossible de récupérer le brouillon : {error}	No se pudo recuperar el borrador: {error}	Não foi possível recuperar o rascunho: {error}
+Could not check saved drafts: {error}	Impossible de vérifier les brouillons enregistrés : {error}	No se pudieron comprobar los borradores guardados: {error}	Não foi possível verificar os rascunhos salvos: {error}
+The draft is no longer a regular file.	Le brouillon n’est plus un fichier ordinaire.	El borrador ya no es un archivo normal.	O rascunho não é mais um arquivo comum.
+Invalid draft folder.	Le dossier de brouillons est invalide.	La carpeta de borradores no es válida.	A pasta de rascunhos é inválida.
+Some saved drafts could not be read.	Certains brouillons enregistrés sont illisibles.	No se pudieron leer algunos borradores guardados.	Não foi possível ler alguns rascunhos salvos.
+Invalid draft path.	Le chemin du brouillon est invalide.	La ruta del borrador no es válida.	O caminho do rascunho é inválido.
+The saved draft has changed.	Le brouillon enregistré a changé.	El borrador guardado ha cambiado.	O rascunho salvo foi alterado.
+Could not open workspace: {error}	Impossible d’ouvrir l’espace de travail : {error}	No se pudo abrir el espacio de trabajo: {error}	Não foi possível abrir o espaço de trabalho: {error}
+The workspace must be a folder.	L’espace de travail doit être un dossier.	El espacio de trabajo debe ser una carpeta.	O espaço de trabalho deve ser uma pasta.
+Choose a file inside this workspace, outside Git’s internal directory.	Choisissez un fichier de cet espace de travail en dehors du dossier interne de Git.	Elige un archivo de este espacio de trabajo que esté fuera del directorio interno de Git.	Escolha um arquivo neste espaço de trabalho, fora do diretório interno do Git.
+Could not open {path}: {error}	Impossible d’ouvrir {path} : {error}	No se pudo abrir {path}: {error}	Não foi possível abrir {path}: {error}
+This path points outside the editable workspace.	Ce chemin mène en dehors de l’espace de travail modifiable.	Esta ruta apunta fuera del espacio de trabajo editable.	Este caminho aponta para fora do espaço de trabalho editável.
+Choose a regular file in this workspace.	Choisissez un fichier ordinaire dans cet espace de travail.	Elige un archivo normal en este espacio de trabajo.	Escolha um arquivo comum neste espaço de trabalho.
+Could not list {path}: {error}	Impossible d’afficher le contenu de {path} : {error}	No se pudo mostrar el contenido de {path}: {error}	Não foi possível listar o conteúdo de {path}: {error}
+Could not inspect {path}: {error}	Impossible d’examiner {path} : {error}	No se pudo examinar {path}: {error}	Não foi possível examinar {path}: {error}
+Could not read {path}: {error}	Impossible de lire {path} : {error}	No se pudo leer {path}: {error}	Não foi possível ler {path}: {error}
+Choose a regular text file.	Choisissez un fichier texte ordinaire.	Elige un archivo de texto normal.	Escolha um arquivo de texto comum.
+This file is too large for the editor (2 MiB limit).	Ce fichier dépasse la limite de l’éditeur (2 Mio).	El archivo supera el límite del editor (2 MiB).	O arquivo excede o limite do editor (2 MiB).
+This file is binary or uses an encoding other than UTF-8.	Ce fichier est binaire ou utilise un encodage autre qu’UTF-8.	Este archivo es binario o utiliza una codificación distinta de UTF-8.	Este arquivo é binário ou usa uma codificação diferente de UTF-8.
+This appears to be a binary file. The editor opens UTF-8 text files.	Ce fichier semble binaire. L’éditeur ouvre les fichiers texte UTF-8.	Este archivo parece binario. El editor abre archivos de texto UTF-8.	Este arquivo parece ser binário. O editor abre arquivos de texto UTF-8.
+Edited file exceeds the 2 MiB limit.	Le fichier modifié dépasse la limite de 2 Mio.	El archivo modificado supera el límite de 2 MiB.	O arquivo alterado excede o limite de 2 MiB.
+Could not save {path}: {error}	Impossible d’enregistrer {path} : {error}	No se pudo guardar {path}: {error}	Não foi possível salvar {path}: {error}
+Invalid workspace file.	Le fichier de l’espace de travail est invalide.	El archivo del espacio de trabajo no es válido.	O arquivo do espaço de trabalho é inválido.
+The file now points to a different location. Reload before saving.	Le fichier pointe désormais vers un autre emplacement. Rechargez-le avant d’enregistrer.	Ahora el archivo apunta a otra ubicación. Vuelve a cargarlo antes de guardar.	O arquivo agora aponta para outro local. Recarregue-o antes de salvar.
+The file changed on disk. Your edits are still open. Reload to use the disk version.	Le fichier a changé sur le disque. Vos modifications sont toujours ouvertes. Rechargez le fichier pour utiliser la version sur disque.	El archivo cambió en el disco. Tus cambios siguen abiertos. Vuelve a cargarlo para usar la versión del disco.	O arquivo foi alterado no disco. Suas alterações continuam abertas. Recarregue para usar a versão em disco.
+The file is read-only. Your edits are still open.	Le fichier est en lecture seule. Vos modifications sont toujours ouvertes.	El archivo es de solo lectura. Tus cambios siguen abiertos.	O arquivo é somente leitura. Suas alterações continuam abertas.

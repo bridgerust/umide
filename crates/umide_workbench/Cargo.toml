@@ -1,0 +1,36 @@
+[package]
+name = "umide-workbench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+floem.workspace = true
+alacritty_terminal.workspace = true
+base64 = "0.22"
+umide_workbench_agents = { path = "../umide_workbench_agents" }
+umide_emulator.workspace = true
+directories.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+sha2 = "0.10"
+sys-locale = "0.3"
+pulldown-cmark = "0.13"
+open = "5.3"
+rfd = "0.17.2"
+uuid = { version = "1", features = ["v4"] }
+image = "0.25"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "process", "io-util"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+# Alacritty uses std-owned PTY descriptors with rustix-openpty.
+rustix = { version = "0.38", default-features = false, features = ["std"] }
+
+[target.'cfg(windows)'.dependencies]
+dunce = "1.0"
+
+[build-dependencies]
+cc = "1"

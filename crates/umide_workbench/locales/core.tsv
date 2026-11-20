@@ -1,0 +1,33 @@
+Language	Langue	Idioma	Idioma
+Could not save the language preference: {detail}	Impossible d’enregistrer la langue choisie : {detail}	No se pudo guardar el idioma elegido: {detail}	Não foi possível salvar o idioma escolhido: {detail}
+Conversation	Conversation	Conversación	Conversa
+Changes	Modifications	Cambios	Alterações
+Build	Compilation	Compilación	Compilação
+Logs	Journaux	Registros	Logs
+Files	Fichiers	Archivos	Arquivos
+Mobile	Mobile	Móvil	Dispositivos
+Web	Web	Web	Web
+Terminal	Terminal	Terminal	Terminal
+Device logs	Journaux de l’appareil	Registros del dispositivo	Logs do dispositivo
+Build output	Sortie de compilation	Salida de compilación	Saída da compilação
+Select a device to inspect its recent activity.	Sélectionnez un appareil pour consulter son activité récente.	Selecciona un dispositivo para ver su actividad reciente.	Selecione um dispositivo para ver a atividade recente.
+Run your app on a selected device to follow the build.	Lancez l’application sur l’appareil sélectionné pour suivre la compilation.	Ejecuta la aplicación en el dispositivo seleccionado para seguir la compilación.	Execute o aplicativo no dispositivo selecionado para acompanhar a compilação.
+Refresh	Actualiser	Actualizar	Atualizar
+Stop build	Arrêter la compilation	Detener la compilación	Parar compilação
+Console	Console	Consola	Console
+Waiting for build…	En attente de compilation…	Esperando la compilación…	Aguardando a compilação…
+Show mobile preview	Afficher l’aperçu mobile	Mostrar la vista previa móvil	Mostrar prévia do dispositivo
+Hide mobile preview	Masquer l’aperçu mobile	Ocultar la vista previa móvil	Ocultar prévia do dispositivo
+Show web preview	Afficher l’aperçu web	Mostrar la vista previa web	Mostrar prévia da web
+Hide web preview	Masquer l’aperçu web	Ocultar la vista previa web	Ocultar prévia da web
+Show project files	Afficher les fichiers du projet	Mostrar los archivos del proyecto	Mostrar arquivos do projeto
+Hide project files	Masquer les fichiers du projet	Ocultar los archivos del proyecto	Ocultar arquivos do projeto
+Show terminal	Afficher le terminal	Mostrar el terminal	Mostrar terminal
+Hide terminal	Masquer le terminal	Ocultar el terminal	Ocultar terminal
+View active build	Voir la compilation en cours	Ver la compilación en curso	Ver compilação em andamento
+Run app	Lancer l’application	Ejecutar aplicación	Executar aplicativo
+Could not open the task folder: {error}	Impossible d’ouvrir le dossier de la tâche : {error}	No se pudo abrir la carpeta de la tarea: {error}	Não foi possível abrir a pasta da tarefa: {error}
+Could not open the task folder ({status})	Impossible d’ouvrir le dossier de la tâche ({status})	No se pudo abrir la carpeta de la tarea ({status})	Não foi possível abrir a pasta da tarefa ({status})
+Open project…	Ouvrir un projet…	Abrir proyecto…	Abrir projeto…
+Copy	Copier	Copiar	Copiar
+Running	En cours	En ejecución	Em execução

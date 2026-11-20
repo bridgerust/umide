@@ -1,0 +1,115 @@
+Android SDK: {error}	SDK Android : {error}	SDK de Android: {error}	SDK do Android: {error}
+iOS Simulator: {error}	Simulateur iOS : {error}	Simulador de iOS: {error}	Simulador de iOS: {error}
+Starting {name}…	Démarrage de {name}…	Iniciando {name}…	Iniciando {name}…
+Finding devices…	Recherche des appareils…	Buscando dispositivos…	Buscando dispositivos…
+Device is starting. Refresh when it is ready.	L’appareil démarre. Actualisez la liste lorsqu’il est prêt.	El dispositivo se está iniciando. Actualiza la lista cuando esté listo.	O dispositivo está iniciando. Atualize a lista quando estiver pronto.
+Android emulator	Émulateur Android	Emulador de Android	Emulador de Android
+iOS simulator	Simulateur iOS	Simulador de iOS	Simulador de iOS
+Open	Ouvrir	Abrir	Abrir
+Starting	Démarrage	Iniciando	Iniciando
+Start	Démarrer	Iniciar	Iniciar
+Filter devices…	Filtrer les appareils…	Filtrar dispositivos…	Filtrar dispositivos…
+Available	Disponibles	Disponibles	Disponíveis
+No devices found	Aucun appareil détecté	No se encontraron dispositivos	Nenhum dispositivo encontrado
+No matching devices	Aucun appareil ne correspond	Ningún dispositivo coincide	Nenhum dispositivo corresponde
+Try a different device name or platform.	Essayez un autre nom d’appareil ou de plateforme.	Prueba con otro nombre de dispositivo o plataforma.	Tente outro nome de dispositivo ou plataforma.
+Create a device in Android Studio or Xcode and refresh.	Créez un appareil dans Android Studio ou Xcode, puis actualisez la liste.	Crea un dispositivo en Android Studio o Xcode y actualiza la lista.	Crie um dispositivo no Android Studio ou no Xcode e atualize a lista.
+Create a device in Android Studio and refresh.	Créez un appareil dans Android Studio, puis actualisez la liste.	Crea un dispositivo en Android Studio y actualiza la lista.	Crie um dispositivo no Android Studio e atualize a lista.
+Devices	Appareils	Dispositivos	Dispositivos
+Change	Changer	Cambiar	Alterar
+Waiting for screen…	En attente de l’écran…	Esperando la imagen…	Aguardando a imagem…
+Live preview	Aperçu en direct	Vista previa en directo	Prévia ao vivo
+Screen preview	Aperçu de l’écran	Vista previa de la pantalla	Prévia da tela
+Click to tap · Drag to swipe	Cliquez pour toucher · Faites glisser pour balayer	Haz clic para tocar · Arrastra para deslizar	Clique para tocar · Arraste para deslizar
+Unsupported platform	Plateforme non prise en charge	Plataforma no compatible	Plataforma incompatível
+Device did not return a PNG screenshot	L’appareil n’a pas renvoyé de capture d’écran PNG	El dispositivo no devolvió una captura de pantalla PNG	O dispositivo não retornou uma captura de tela PNG
+Connecting…	Connexion…	Conectando…	Conectando…
+Connecting controls…	Connexion des commandes…	Conectando los controles…	Conectando os controles…
+iOS Simulator requires macOS	Le simulateur iOS nécessite macOS	El simulador de iOS requiere macOS	O simulador de iOS requer macOS
+Device connection timed out	Le délai de connexion à l’appareil a expiré	Se agotó el tiempo de conexión con el dispositivo	O tempo de conexão com o dispositivo se esgotou
+Device capture timed out	Le délai de capture de l’écran a expiré	Se agotó el tiempo de captura de la pantalla	O tempo de captura da tela se esgotou
+Invalid display dimensions	Dimensions d’écran non valides	Dimensiones de pantalla no válidas	Dimensões da tela inválidas
+Preview only · install idb_companion to control iOS	Aperçu seul · Installez idb_companion pour contrôler iOS	Solo vista previa · Instala idb_companion para controlar iOS	Apenas prévia · Instale idb_companion para controlar o iOS
+Simulator did not report its screen size	Le simulateur n’a pas indiqué la taille de son écran	El simulador no indicó el tamaño de la pantalla	O simulador não informou o tamanho da tela
+Preview only · {error}	Aperçu seul · {error}	Solo vista previa · {error}	Apenas prévia · {error}
+Gesture failed: {error}	Le geste a échoué : {error}	No se pudo realizar el gesto: {error}	Falha ao executar o gesto: {error}
+{name} timed out	Le délai d’exécution de {name} a expiré	Se agotó el tiempo de espera de {name}	O tempo de espera de {name} se esgotou
+{name} · Isolated	{name} · Copie isolée	{name} · Copia aislada	{name} · Cópia isolada
+Hide	Masquer	Ocultar	Ocultar
+Resize terminal · double-click to reset	Redimensionner le terminal · Double-cliquer pour réinitialiser	Ajustar el tamaño del terminal · Doble clic para restablecer	Redimensionar o terminal · Clique duas vezes para restaurar
+Terminal text copied	Texte du terminal copié	Texto del terminal copiado	Texto do terminal copiado
+Could not copy terminal text	Impossible de copier le texte du terminal	No se pudo copiar el texto del terminal	Não foi possível copiar o texto do terminal
+Restart shell	Relancer le shell	Reiniciar el shell	Reiniciar o shell
+Stop shell	Arrêter le shell	Detener el shell	Parar o shell
+Exited ({code})	Terminé ({code})	Finalizado ({code})	Encerrado ({code})
+Exited	Terminé	Finalizado	Encerrado
+Copy selection or visible screen	Copier la sélection ou l’écran visible	Copiar la selección o la pantalla visible	Copiar a seleção ou a tela visível
+Paste	Coller	Pegar	Colar
+Opening shell…	Ouverture du shell…	Abriendo el shell…	Abrindo o shell…
+Shell stopped	Shell arrêté	Shell detenido	Shell encerrado
+Cannot open the terminal directory: {error}	Impossible d’ouvrir le dossier du terminal : {error}	No se pudo abrir la carpeta del terminal: {error}	Não foi possível abrir a pasta do terminal: {error}
+Cannot start the terminal: {error}	Impossible de démarrer le terminal : {error}	No se pudo iniciar el terminal: {error}	Não foi possível iniciar o terminal: {error}
+Web preview	Aperçu web	Vista previa web	Prévia da web
+Stop server	Arrêter le serveur	Detener servidor	Parar servidor
+Start server	Démarrer le serveur	Iniciar servidor	Iniciar servidor
+Open browser	Ouvrir le navigateur	Abrir navegador	Abrir navegador
+Could not open the browser: {error}	Impossible d’ouvrir le navigateur : {error}	No se pudo abrir el navegador: {error}	Não foi possível abrir o navegador: {error}
+Copy URL	Copier l’URL	Copiar URL	Copiar URL
+Preview URL copied	URL de l’aperçu copiée	URL de la vista previa copiada	URL da prévia copiada
+Could not copy the preview URL to the clipboard	Impossible de copier l’URL de l’aperçu dans le presse-papiers	No se pudo copiar la URL de la vista previa al portapapeles	Não foi possível copiar a URL da prévia para a área de transferência
+Server is live	Serveur en ligne	Servidor en línea	Servidor em execução
+Open {url} in your browser to preview this workspace.	Ouvrez {url} dans votre navigateur pour afficher cet espace de travail.	Abre {url} en el navegador para ver este espacio de trabajo.	Abra {url} no navegador para visualizar este espaço de trabalho.
+Server could not run	Le serveur n’a pas pu fonctionner	No se pudo ejecutar el servidor	Não foi possível executar o servidor
+Starting server…	Démarrage du serveur…	Iniciando el servidor…	Iniciando o servidor…
+Waiting for a local address.	En attente d’une adresse locale.	Esperando una dirección local.	Aguardando um endereço local.
+Server stopped	Serveur arrêté	Servidor detenido	Servidor parado
+Start the server to return to this preview.	Démarrez le serveur pour retrouver cet aperçu.	Inicia el servidor para volver a esta vista previa.	Inicie o servidor para voltar a esta prévia.
+Preview this workspace	Aperçu de cet espace de travail	Vista previa de este espacio de trabajo	Prévia deste espaço de trabalho
+Start the local server to see your changes.	Démarrez le serveur local pour voir vos modifications.	Inicia el servidor local para ver los cambios.	Inicie o servidor local para ver as alterações.
+Reload preview	Recharger l’aperçu	Recargar vista previa	Recarregar prévia
+Hide logs	Masquer les journaux	Ocultar registros	Ocultar registros
+Show logs	Afficher les journaux	Mostrar registros	Mostrar registros
+Waiting for server output…	En attente de la sortie du serveur…	Esperando la salida del servidor…	Aguardando a saída do servidor…
+{name} · Isolated Git copy	{name} · Copie Git isolée	{name} · Copia Git aislada	{name} · Cópia Git isolada
+{name} · Project folder	{name} · Dossier du projet	{name} · Carpeta del proyecto	{name} · Pasta do projeto
+Open a web project	Ouvrir un projet web	Abrir un proyecto web	Abrir um projeto web
+Workspace unavailable	Espace de travail indisponible	Espacio de trabajo no disponible	Espaço de trabalho indisponível
+Static site · index.html	Site statique · index.html	Sitio estático · index.html	Site estático · index.html
+Choose a project folder to preview.	Sélectionnez le dossier du projet à prévisualiser.	Elige la carpeta del proyecto para ver la vista previa.	Escolha a pasta do projeto para visualizar a prévia.
+Cannot read package.json: {error}	Impossible de lire package.json : {error}	No se pudo leer package.json: {error}	Não foi possível ler package.json: {error}
+Cannot open package.json: {error}	Impossible d’ouvrir package.json : {error}	No se pudo abrir package.json: {error}	Não foi possível abrir package.json: {error}
+This folder needs a dev or start script in package.json, or an index.html file.	Ce dossier doit contenir un script dev ou start dans package.json, ou un fichier index.html.	Esta carpeta necesita un script dev o start en package.json, o un archivo index.html.	Esta pasta precisa de um script dev ou start no package.json, ou de um arquivo index.html.
+Unsupported packageManager in package.json: {value}.	La valeur de packageManager dans package.json n’est pas prise en charge : {value}.	Valor de packageManager no compatible en package.json: {value}.	Valor de packageManager incompatível no package.json: {value}.
+Multiple package-manager lockfiles found. Set packageManager in package.json to choose one.	Plusieurs fichiers de verrouillage ont été trouvés. Indiquez le gestionnaire à utiliser avec packageManager dans package.json.	Se encontraron varios archivos de bloqueo. Indica el gestor que quieras usar en packageManager en package.json.	Foram encontrados vários arquivos de lock. Defina packageManager no package.json para escolher o gerenciador.
+Could not start web preview: {error}	Impossible de démarrer l’aperçu web : {error}	No se pudo iniciar la vista previa web: {error}	Não foi possível iniciar a prévia da web: {error}
+Cannot reserve a local preview port: {error}	Impossible de réserver un port local pour l’aperçu : {error}	No se pudo reservar un puerto local para la vista previa: {error}	Não foi possível reservar uma porta local para a prévia: {error}
+Cannot launch {command}: {error}	Impossible de lancer {command} : {error}	No se pudo ejecutar {command}: {error}	Não foi possível executar {command}: {error}
+Could not monitor the web server: {error}	Impossible de suivre l’état du serveur web : {error}	No se pudo supervisar el servidor web: {error}	Não foi possível monitorar o servidor web: {error}
+No HTTP response at {address}. A custom dev script must use the PORT environment variable.	Aucune réponse HTTP à l’adresse {address}. Un script de développement personnalisé doit utiliser la variable d’environnement PORT.	No hay respuesta HTTP en {address}. Un script dev personalizado debe usar la variable de entorno PORT.	Sem resposta HTTP em {address}. Um script dev personalizado precisa usar a variável de ambiente PORT.
+Port in use. Trying another local port…	Port occupé. Essai sur un autre port local…	Puerto en uso. Probando otro puerto local…	Porta em uso. Tentando outra porta local…
+Unknown device platform.	Plateforme de l’appareil inconnue.	Plataforma de dispositivo desconocida.	Plataforma do dispositivo desconhecida.
+Running on an iOS simulator requires macOS.	L’exécution sur un simulateur iOS nécessite macOS.	Para ejecutar la app en un simulador de iOS se necesita macOS.	A execução em um simulador de iOS requer macOS.
+Select a running device before starting the app.	Sélectionnez un appareil en cours d’exécution avant de lancer l’application.	Selecciona un dispositivo en ejecución antes de iniciar la aplicación.	Selecione um dispositivo em execução antes de iniciar o aplicativo.
+[Run stopped]	[Exécution arrêtée]	[Ejecución detenida]	[Execução interrompida]
+[Command finished]	[Commande terminée]	[Comando finalizado]	[Comando concluído]
+Run stopped.	Exécution arrêtée.	Ejecución detenida.	Execução interrompida.
+Cannot start {name}: {error}	Impossible de lancer {name} : {error}	No se pudo iniciar {name}: {error}	Não foi possível iniciar {name}: {error}
+{name} timed out.	Le délai d’exécution de {name} a expiré.	Se agotó el tiempo de espera de {name}.	O tempo de espera de {name} se esgotou.
+{name} exited with {status}.	{name} s’est terminé avec le statut {status}.	{name} finalizó con el estado {status}.	{name} terminou com o status {status}.
+Invalid package.json: {error}	package.json non valide : {error}	package.json no válido: {error}	package.json inválido: {error}
+Multiple .{ext} files found. Open the folder of a single iOS application.	Plusieurs fichiers .{ext} ont été trouvés. Ouvrez le dossier d’une seule application iOS.	Se encontraron varios archivos .{ext}. Abre la carpeta de una sola aplicación de iOS.	Foram encontrados vários arquivos .{ext}. Abra a pasta de um único aplicativo iOS.
+Open a Flutter, Expo, React Native or native {kind} app folder to run it on this device.	Pour lancer l’application sur cet appareil, ouvrez le dossier d’un projet Flutter, Expo, React Native ou {kind} natif.	Para ejecutar la aplicación en este dispositivo, abre la carpeta de un proyecto Flutter, Expo, React Native o {kind} nativo.	Para executar o aplicativo neste dispositivo, abra a pasta de um projeto Flutter, Expo, React Native ou {kind} nativo.
+The selected Android device is no longer connected.	L’appareil Android sélectionné n’est plus connecté.	El dispositivo Android seleccionado ya no está conectado.	O dispositivo Android selecionado não está mais conectado.
+This launcher expects an Android application module named app with a debug variant.	Ce lanceur nécessite un module d’application Android nommé app avec une variante debug.	Este lanzador requiere un módulo de aplicación Android llamado app con una variante debug.	Este inicializador requer um módulo de aplicativo Android chamado app com uma variante debug.
+The debug build has no single app/build/outputs/apk/debug variant. Product flavors require a separate run configuration.	La compilation debug ne fournit pas de variante unique dans app/build/outputs/apk/debug. Les variantes de produit nécessitent une configuration d’exécution distincte.	La compilación debug no genera una única variante en app/build/outputs/apk/debug. Las variantes de producto requieren una configuración de ejecución independiente.	A compilação debug não gera uma única variante em app/build/outputs/apk/debug. As variantes de produto exigem uma configuração de execução separada.
+Missing APK applicationId.	L’APK ne contient pas d’applicationId.	Falta el applicationId del APK.	O applicationId do APK está ausente.
+Missing APK artifacts.	Fichiers de sortie APK manquants.	Faltan los archivos de salida del APK.	Arquivos de saída do APK ausentes.
+This launcher requires a single debug APK.	Ce lanceur nécessite un seul APK de débogage.	Este lanzador requiere un único APK de depuración.	Este inicializador requer um único APK de depuração.
+Missing debug APK filename.	Nom de fichier de l’APK de débogage manquant.	Falta el nombre del archivo APK de depuración.	Nome do arquivo APK de depuração ausente.
+Invalid debug APK output path.	Chemin de sortie de l’APK de débogage non valide.	Ruta de salida del APK de depuración no válida.	Caminho de saída do APK de depuração inválido.
+Invalid Android application ID.	Identifiant d’application Android non valide.	ID de aplicación Android no válido.	ID de aplicativo Android inválido.
+Cannot read Xcode schemes: {error}	Impossible de lire les schémas Xcode : {error}	No se pudieron leer los esquemas de Xcode: {error}	Não foi possível ler os esquemas do Xcode: {error}
+No schemes found.	Aucun schéma trouvé.	No se encontraron esquemas.	Nenhum esquema encontrado.
+Multiple Xcode schemes found. The app scheme must match the project or workspace filename.	Plusieurs schémas Xcode ont été trouvés. Le schéma de l’application doit porter le nom du fichier de projet ou d’espace de travail.	Se encontraron varios esquemas de Xcode. El esquema de la aplicación debe coincidir con el nombre del archivo del proyecto o del espacio de trabajo.	Foram encontrados vários esquemas do Xcode. O esquema do aplicativo deve ter o mesmo nome do arquivo de projeto ou de espaço de trabalho.
+Could not identify a single simulator application in the build products.	Impossible d’identifier une seule application pour le simulateur parmi les produits de compilation.	No se pudo identificar una única aplicación para el simulador entre los productos de compilación.	Não foi possível identificar um único aplicativo para o simulador entre os produtos da compilação.
+Cannot open {path}: {error}	Impossible d’ouvrir {path} : {error}	No se pudo abrir {path}: {error}	Não foi possível abrir {path}: {error}

@@ -8197,6 +8197,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "umide-workbench"
+version = "0.4.0"
+dependencies = [
+ "alacritty_terminal",
+ "base64 0.22.1",
+ "cc",
+ "directories",
+ "dunce",
+ "floem",
+ "image",
+ "libc",
+ "open",
+ "pulldown-cmark",
+ "rfd",
+ "rustix 0.38.44",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sys-locale",
+ "tempfile",
+ "tokio",
+ "umide_emulator",
+ "umide_workbench_agents",
+ "uuid",
+]
+
+[[package]]
 name = "umide_agent"
 version = "0.1.0"
 dependencies = [
@@ -8252,6 +8279,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing 0.1.44",
  "wgpu 28.0.0",
+]
+
+[[package]]
+name = "umide_workbench_agents"
+version = "0.4.0"
+dependencies = [
+ "base64 0.22.1",
+ "libc",
+ "serde_json",
 ]
 
 [[package]]
@@ -8414,6 +8450,7 @@ version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee48d38b119b0cd71fe4141b30f5ba9c7c5d9f4e7a3a8b4a674e4b6ef789976f"
 dependencies = [
+ "getrandom 0.3.4",
  "js-sys",
  "wasm-bindgen",
 ]

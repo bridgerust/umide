@@ -1,0 +1,216 @@
+name: Workbench installers
+
+on:
+  push:
+    branches: [feat/native-workbench]
+    tags: ['workbench-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workbench-installers-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        name: Check the Workbench version
+        shell: python
+        env:
+          IS_RELEASE: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+        run: |
+          import os, pathlib, re, tomllib
+          version = tomllib.loads(pathlib.Path("Cargo.toml").read_text(encoding="utf-8-sig"))["workspace"]["package"]["version"]
+          release = os.environ["IS_RELEASE"] == "true"
+          tag = os.environ["GITHUB_REF_NAME"] if release else f"workbench-v{version}-beta.1"
+          if not re.fullmatch(rf"workbench-v{re.escape(version)}-beta\.[1-9][0-9]*", tag):
+              raise SystemExit(f"Expected a Workbench beta tag for {version}, got {tag}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"tag={tag}", file=output)
+              print(f"publish={'true' if release else 'false'}", file=output)
+
+  macos:
+    name: macOS universal DMG
+    needs: version
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ github.token }}
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p umide-workbench -p umide_workbench_agents -p umide_emulator
+      - name: Test a form in the installed browser
+        run: cargo test --locked -p umide-workbench verify::web::tests::local_form_in_a_real_browser -- --exact --ignored
+      - name: Compile both architectures
+        run: |
+          cargo build --locked --release --target aarch64-apple-darwin -p umide-workbench
+          cargo build --locked --release --target x86_64-apple-darwin -p umide-workbench
+      - name: Import the release signing identity
+        if: needs.version.outputs.publish == 'true'
+        env:
+          CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
+          PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD }}
+          IDENTITY: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_IDENTITY }}
+        run: |
+          set -euo pipefail
+          : "${CERTIFICATE:?Developer ID certificate missing}" "${PASSWORD:?Certificate password missing}" "${IDENTITY:?Signing identity missing}"
+          keychain="$RUNNER_TEMP/workbench.keychain-db"
+          cert="$RUNNER_TEMP/workbench.p12"
+          key="$(openssl rand -hex 24)"
+          echo "::add-mask::$key"
+          printf '%s' "$CERTIFICATE" | base64 -D > "$cert"
+          security create-keychain -p "$key" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$key" "$keychain"
+          security import "$cert" -k "$keychain" -P "$PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$key" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+      - name: Package Workbench
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          APPLE_DEVELOPER_ID_APPLICATION_IDENTITY: ${{ needs.version.outputs.publish == 'true' && secrets.APPLE_DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
+        run: crates/umide_workbench/package-release-macos.sh "$RELEASE_TAG"
+      - name: Notarize the public DMG
+        if: needs.version.outputs.publish == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          dmg=dist/workbench/Umide-Workbench-macOS.dmg
+          xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$TEAM_ID" --wait
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          spctl --assess --type open --context context:primary-signature "$dmg"
+      - name: Install and verify the Workbench from the DMG
+        run: crates/umide_workbench/verify-macos-dmg.sh dist/workbench/Umide-Workbench-macOS.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workbench-macos
+          path: dist/workbench/Umide-Workbench-macOS.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64 MSI
+    needs: version
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ github.token }}
+      - uses: Swatinem/rust-cache@v2
+      - id: tests
+        run: cargo test --locked -p umide-workbench -p umide_workbench_agents -p umide_emulator
+      - name: Find WiX 3
+        shell: pwsh
+        run: |
+          $bin = if ($env:WIX) { Join-Path $env:WIX 'bin' }
+          if (!$bin -or !(Test-Path "$bin/candle.exe")) {
+            choco install wixtoolset --version=3.14.1 --no-progress -y
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            $bin = "${env:ProgramFiles(x86)}/WiX Toolset v3.14/bin"
+          }
+          if (!(Test-Path "$bin/light.exe")) { throw "WiX 3 linker unavailable" }
+          $bin >> $env:GITHUB_PATH
+      - name: Package Workbench
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: ./crates/umide_workbench/package-windows.ps1 -Tag $env:RELEASE_TAG
+      - name: Install, launch and uninstall the MSI
+        run: ./crates/umide_workbench/smoke-windows.ps1 -Msi dist/workbench/Umide-Workbench-Windows-x64.msi -RequireWindow
+      - name: Test a form in the installed browser
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        run: cargo test --locked -p umide-workbench verify::web::tests::local_form_in_a_real_browser -- --exact --ignored
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workbench-windows
+          path: dist/workbench/Umide-Workbench-Windows-x64.msi
+          if-no-files-found: error
+
+  linux:
+    name: Ubuntu 24.04 x64 DEB
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build and test dependencies
+        run: |
+          sudo make ubuntu-deps
+          sudo apt-get install -y binutils dpkg-dev desktop-file-utils libglib2.0-bin dbus-daemon \
+            xvfb xauth xdotool libgl1-mesa-dri mesa-vulkan-drivers
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ github.token }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p umide-workbench -p umide_workbench_agents -p umide_emulator
+      - name: Test a form in the installed browser
+        run: cargo test --locked -p umide-workbench verify::web::tests::local_form_in_a_real_browser -- --exact --ignored
+      - name: Build and package Workbench
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          cargo build --locked --release -p umide-workbench
+          crates/umide_workbench/package-linux.sh "$RELEASE_TAG"
+      - name: Install, launch and uninstall the DEB
+        run: crates/umide_workbench/smoke-linux.sh dist/workbench/Umide-Workbench-Linux-x86_64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workbench-linux
+          path: dist/workbench/Umide-Workbench-Linux-x86_64.deb
+          if-no-files-found: error
+
+  publish:
+    name: Publish the three verified installers together
+    if: needs.version.outputs.publish == 'true'
+    needs: [version, macos, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: workbench-*
+          path: installers
+          merge-multiple: true
+      - name: Publish Workbench beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mac="installers/Umide-Workbench-macOS.dmg"
+          win="installers/Umide-Workbench-Windows-x64.msi"
+          linux="installers/Umide-Workbench-Linux-x86_64.deb"
+          for installer in "$mac" "$win" "$linux"; do test -s "$installer"; done
+          if ! draft="$(gh release view "$TAG" --json isDraft --jq .isDraft)"; then
+            gh release create "$TAG" --verify-tag --draft --prerelease --latest=false \
+              --title "Umide Workbench ${TAG#workbench-v}" \
+              --notes "Develop mobile and web apps with Codex and Claude Code in Umide Workbench. Choose the universal DMG for macOS, the MSI for Windows x64 or the DEB for Ubuntu 24.04 x86-64."
+          elif [[ "$draft" == false ]]; then
+            echo "The release is already public; no published files were replaced."
+            exit 1
+          fi
+          gh release upload "$TAG" "$mac" "$win" "$linux" --clobber
+          gh release view "$TAG" --json assets | jq -e '
+            [.assets[] | select(.size > 0) | .name] as $names |
+            (["Umide-Workbench-macOS.dmg","Umide-Workbench-Windows-x64.msi","Umide-Workbench-Linux-x86_64.deb"] - $names) == []'
+          gh release edit "$TAG" --prerelease --latest=false --draft=false

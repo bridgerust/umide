@@ -83,7 +83,9 @@ export XDG_RUNTIME_DIR="$stage/runtime" XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 LIB
 export XDG_CONFIG_HOME="$stage/config" XDG_DATA_HOME="$stage/data" XDG_CACHE_HOME="$stage/cache"
 export UMIDE_WORKBENCH_DATA_DIR="$stage/profile" UMIDE_CODEX_PATH="$stage/missing-codex" UMIDE_CLAUDE_PATH="$stage/missing-claude"
 unset WAYLAND_DISPLAY
-xvfb-run -a -s "-screen 0 1440x900x24 -nolisten tcp" dbus-run-session -- python3 - "$binary" "$desktop" "$stage" <<'PY'
+xvfb-run -a -s "-screen 0 1440x900x24 -nolisten tcp" dbus-run-session -- \
+    env CODEX_HOME="$stage/codex-settings" CLAUDE_CONFIG_DIR="$stage/claude-settings" \
+    python3 - "$binary" "$desktop" "$stage" <<'PY'
 import os
 from pathlib import Path
 import signal

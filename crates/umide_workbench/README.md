@@ -24,6 +24,12 @@ cargo run --locked -p umide-workbench
 
 You can also pass an app folder after `--`. To build a local macOS development bundle, run `./crates/umide_workbench/package-macos.sh` and open `target/debug/Umide Workbench.app`.
 
+### Beta installers
+
+The **Workbench installers** GitHub workflow tests the Workbench and builds a universal macOS DMG and a Windows x64 MSI. A push to `feat/native-workbench` or a manual run produces test artifacts. The Windows job installs, launches and uninstalls its MSI. The macOS job mounts the DMG and checks the installed executable and both architectures.
+
+A push of a Workbench beta tag matching the workspace version, such as `workbench-v0.4.0-beta.1`, starts public distribution. The release build signs and notarizes the macOS package and publishes one GitHub prerelease with both installers after both jobs succeed. The download page recognizes the two Workbench filenames together. The `v*` tags belong to Umide Classic.
+
 ## Agents
 
 - **Codex** uses the local Codex CLI and its configured authentication. Use a version that supports `codex app-server --stdio`.

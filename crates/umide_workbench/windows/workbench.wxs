@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Umide Workbench" Manufacturer="BridgeRust" Language="1033"
+           Version="$(var.MsiVersion)" UpgradeCode="1249EE51-544B-4470-8CB8-CB02B2F9A89B">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine"
+             Description="Umide Workbench $(var.ReleaseVersion) for Windows x64"/>
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of Umide Workbench is already installed."/>
+    <MediaTemplate EmbedCab="yes"/>
+    <Icon Id="WorkbenchIcon" SourceFile="$(var.Root)\extra\windows\umide.ico"/>
+    <Property Id="ARPPRODUCTICON" Value="WorkbenchIcon"/>
+    <Property Id="ARPCOMMENTS" Value="Umide Workbench $(var.ReleaseVersion)"/>
+    <Property Id="ARPURLINFOABOUT" Value="https://www.umide.dev/"/>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="WorkbenchInstall" Name="Umide Workbench">
+          <Component Id="WorkbenchApp" Guid="*" Win64="yes">
+            <File Id="WorkbenchExecutable" Source="$(var.Binary)" Name="umide-workbench.exe" KeyPath="yes">
+              <Shortcut Id="WorkbenchShortcut" Directory="ProgramMenuFolder" Name="Umide Workbench"
+                        Advertise="yes" Icon="WorkbenchIcon" WorkingDirectory="WorkbenchInstall"/>
+            </File>
+          </Component>
+          <Directory Id="Licenses" Name="Licenses">
+            <Component Id="WorkbenchLicense" Guid="*" Win64="yes">
+              <File Id="License" Name="LICENSE" Source="$(var.Root)\LICENSE" KeyPath="yes"/>
+            </Component>
+            <Component Id="WorkbenchNotice" Guid="*" Win64="yes">
+              <File Id="Notice" Name="NOTICE" Source="$(var.Root)\NOTICE" KeyPath="yes"/>
+            </Component>
+            <Component Id="ThirdPartyNotices" Guid="*" Win64="yes">
+              <File Id="ThirdParty" Name="THIRD-PARTY-NOTICES" Source="$(var.Root)\crates\umide_workbench\THIRD-PARTY-NOTICES" KeyPath="yes"/>
+            </Component>
+            <Component Id="CodiconsLicense" Guid="*" Win64="yes">
+              <File Id="Codicons" Name="Codicons-LICENSE" Source="$(var.Root)\icons\codicons\LICENSE" KeyPath="yes"/>
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder"/>
+    </Directory>
+    <Feature Id="Workbench" Title="Umide Workbench" Level="1">
+      <ComponentRef Id="WorkbenchApp"/>
+      <ComponentRef Id="WorkbenchLicense"/>
+      <ComponentRef Id="WorkbenchNotice"/>
+      <ComponentRef Id="ThirdPartyNotices"/>
+      <ComponentRef Id="CodiconsLicense"/>
+    </Feature>
+  </Product>
+</Wix>

@@ -1,0 +1,543 @@
+//! A native, per-turn client for Codex App Server and Claude Code.
+mod claude;
+mod codex;
+
+use std::{
+    collections::HashMap,
+    env,
+    ffi::OsString,
+    io::{BufRead, BufReader, Read, Write},
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
+    sync::{Arc, mpsc},
+    thread,
+};
+
+use base64::{Engine, engine::general_purpose::STANDARD};
+use serde_json::{Value, json};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Provider {
+    Codex,
+    Claude,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Event {
+    Session(String),
+    Text(String),
+    Activity(String),
+    Approval { id: String, description: String },
+    Done,
+    Cancelled,
+    Error(String),
+}
+
+pub struct Run {
+    pub events: mpsc::Receiver<Event>,
+    pub control: Control,
+}
+
+#[derive(Clone)]
+pub struct Control(Arc<ControlInner>);
+
+struct ControlInner {
+    sender: mpsc::Sender<Input>,
+}
+
+impl Drop for ControlInner {
+    fn drop(&mut self) {
+        let _ = self.sender.send(Input::Cancel);
+    }
+}
+
+impl Control {
+    pub fn cancel(&self) {
+        let _ = self.0.sender.send(Input::Cancel);
+    }
+
+    pub fn decide(&self, id: &str, allow: bool) {
+        let _ = self.0.sender.send(Input::Decision(id.into(), allow));
+    }
+}
+
+enum Input {
+    Frame(Value),
+    Closed,
+    Failed(String),
+    Cancel,
+    Decision(String, bool),
+}
+
+fn cli_environment(provider: Provider) -> Result<(PathBuf, OsString), String> {
+    let (name, key) = match provider {
+        Provider::Codex => ("codex", "UMIDE_CODEX_PATH"),
+        Provider::Claude => ("claude", "UMIDE_CLAUDE_PATH"),
+    };
+    let mut dirs: Vec<_> =
+        env::split_paths(&env::var_os("PATH").unwrap_or_default())
+            .filter(|p| p.is_absolute())
+            .collect();
+    #[cfg(unix)]
+    {
+        if let Some(home) = env::var_os("HOME") {
+            dirs.push(PathBuf::from(home).join(".local/bin"));
+        }
+        dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
+    }
+    let path = env::join_paths(&dirs).map_err(|e| e.to_string())?;
+    let extensions: &[&str] = if cfg!(windows) {
+        &[".exe", ".cmd"]
+    } else {
+        &[""]
+    };
+    let binary = if let Some(value) = env::var_os(key) {
+        let binary = PathBuf::from(value);
+        if !binary.is_absolute() || !binary.is_file() {
+            return Err(format!("{key} must point to the installed executable."));
+        }
+        binary
+    } else {
+        dirs.iter().flat_map(|dir| extensions.iter().map(move |ext| dir.join(format!("{name}{ext}"))))
+            .find(|p| p.is_file())
+            .ok_or_else(|| format!("Could not find {name}. Install the CLI or set {key} to its absolute path."))?
+    };
+    Ok((binary, path))
+}
+
+struct Turn {
+    cwd: PathBuf,
+    session: Option<String>,
+    input: Value,
+}
+
+pub fn start(
+    provider: Provider,
+    project: &Path,
+    prompt: &str,
+    session: Option<&str>,
+) -> Result<Run, String> {
+    start_with_image(provider, project, prompt, session, None)
+}
+
+pub fn start_with_image(
+    provider: Provider,
+    project: &Path,
+    prompt: &str,
+    session: Option<&str>,
+    image: Option<&Path>,
+) -> Result<Run, String> {
+    if prompt.trim().is_empty() {
+        return Err("Enter a prompt.".into());
+    }
+    if !project.is_dir() {
+        return Err("The project folder is unavailable.".into());
+    }
+    if session.is_some_and(|id| {
+        id.is_empty()
+            || id.len() > 128
+            || id.starts_with('-')
+            || !id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    }) {
+        return Err("Invalid session ID.".into());
+    }
+    let cwd = project.canonicalize().map_err(|e| e.to_string())?;
+    let (binary, path) = cli_environment(provider)?;
+    let mut command = Command::new(binary);
+    command.current_dir(&cwd).env("PATH", path);
+    match provider {
+        Provider::Codex => {
+            command.args(["app-server", "--stdio"]);
+        }
+        Provider::Claude => claude::configure(&mut command, session),
+    }
+    let input = prompt_content(provider, prompt, image)?;
+    spawn(
+        command,
+        provider,
+        Turn {
+            cwd,
+            input,
+            session: session.map(String::from),
+        },
+    )
+}
+
+fn prompt_content(
+    provider: Provider,
+    prompt: &str,
+    image: Option<&Path>,
+) -> Result<Value, String> {
+    let mut content = vec![match provider {
+        Provider::Codex => json!({"type":"text","text":prompt,"text_elements":[]}),
+        Provider::Claude => json!({"type":"text","text":prompt}),
+    }];
+    if let Some(path) = image {
+        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+        const MAX: u64 = 24 * 1024 * 1024;
+        let mut bytes = Vec::new();
+        file.take(MAX + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if bytes.len() as u64 > MAX || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("The device screenshot must be a PNG under 24 MiB.".into());
+        }
+        content.push(match provider {
+            Provider::Codex => json!({"type":"localImage","path":path}),
+            Provider::Claude => json!({"type":"image","source":{"type":"base64","media_type":"image/png","data":STANDARD.encode(bytes)}}),
+        });
+    }
+    Ok(Value::Array(content))
+}
+
+fn spawn(
+    mut command: Command,
+    provider: Provider,
+    turn: Turn,
+) -> Result<Run, String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let mut child = command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Could not launch {provider:?}: {e}"))?;
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let stdin = child.stdin.take().unwrap();
+    let (events, receiver) = mpsc::channel();
+    let (send, inputs) = mpsc::channel();
+    let reader = send.clone();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let input = match line {
+                Ok(s) if s.trim().is_empty() => continue,
+                Ok(s) => match serde_json::from_str(&s) {
+                    Ok(msg) => Input::Frame(msg),
+                    Err(e) => Input::Failed(format!(
+                        "Invalid {provider:?} protocol message: {e}"
+                    )),
+                },
+                Err(e) => Input::Failed(e.to_string()),
+            };
+            if reader.send(input).is_err() {
+                return;
+            }
+        }
+        let _ = reader.send(Input::Closed);
+    });
+    let (diagnostics_tx, diagnostics_rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = diagnostics_tx.send(diagnostic_tail(stderr));
+    });
+    thread::spawn(move || {
+        let mut io = ProtocolIo {
+            writer: stdin,
+            events: &events,
+            approvals: HashMap::new(),
+        };
+        let result = drive(provider, &turn, inputs, &mut io);
+        // Closing stdin allows the CLI to flush its conversation before another turn resumes it.
+        drop(io);
+        if matches!(result, Ok(Event::Done)) {
+            for _ in 0..20 {
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    break;
+                }
+                thread::sleep(std::time::Duration::from_millis(25));
+            }
+        }
+        stop_process(&mut child);
+        let end = match result {
+            Ok(event) => event,
+            Err(e) => {
+                // Descendants launched by a tool can keep the pipe open after the CLI exits.
+                // Never make ending the UI turn depend on a detached writer.
+                let diagnostics = diagnostics_rx
+                    .recv_timeout(std::time::Duration::from_millis(200))
+                    .unwrap_or_default();
+                Event::Error(if diagnostics.is_empty() {
+                    e
+                } else {
+                    format!("{e}\n{diagnostics}")
+                })
+            }
+        };
+        let _ = events.send(end);
+    });
+    Ok(Run {
+        events: receiver,
+        control: Control(Arc::new(ControlInner { sender: send })),
+    })
+}
+
+fn diagnostic_tail(mut stderr: impl Read) -> String {
+    let mut tail = Vec::new();
+    let mut block = [0; 2048];
+    loop {
+        match stderr.read(&mut block) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                tail.extend_from_slice(&block[..n]);
+                let excess = tail.len().saturating_sub(2000);
+                tail.drain(..excess);
+            }
+        }
+    }
+    String::from_utf8_lossy(&tail).trim().to_string()
+}
+
+fn stop_process(child: &mut Child) {
+    if matches!(child.try_wait(), Ok(Some(_))) {
+        return;
+    }
+    #[cfg(unix)]
+    {
+        // The child starts a dedicated process group, distinct from UMIDE's group.
+        unsafe {
+            libc::kill(-(child.id() as i32), libc::SIGKILL);
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        if let Some(system) = env::var_os("SystemRoot") {
+            let _ =
+                Command::new(PathBuf::from(system).join("System32/taskkill.exe"))
+                    .creation_flags(0x08000000)
+                    .args(["/PID", &child.id().to_string(), "/T", "/F"])
+                    .output();
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+struct ProtocolIo<'a, W> {
+    writer: W,
+    events: &'a mpsc::Sender<Event>,
+    approvals: HashMap<String, (Value, Value)>,
+}
+
+impl<W: Write> ProtocolIo<'_, W> {
+    fn send(&mut self, message: Value) -> Result<(), String> {
+        serde_json::to_writer(&mut self.writer, &message)
+            .map_err(|e| e.to_string())?;
+        self.writer
+            .write_all(b"\n")
+            .and_then(|_| self.writer.flush())
+            .map_err(|e| e.to_string())
+    }
+
+    fn event(&self, event: Event) {
+        let _ = self.events.send(event);
+    }
+
+    fn approve(
+        &mut self,
+        id: String,
+        description: String,
+        allow: Value,
+        deny: Value,
+    ) -> Result<(), String> {
+        if self.approvals.contains_key(&id) {
+            return Err("Agent repeated a pending approval ID.".into());
+        }
+        self.approvals.insert(id.clone(), (allow, deny));
+        self.event(Event::Approval { id, description });
+        Ok(())
+    }
+}
+
+fn drive<W: Write>(
+    provider: Provider,
+    turn: &Turn,
+    inputs: mpsc::Receiver<Input>,
+    io: &mut ProtocolIo<'_, W>,
+) -> Result<Event, String> {
+    let mut codex = codex::State::default();
+    let mut claude = claude::State::default();
+    match provider {
+        Provider::Codex => io.send(json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"umide","title":"Umide","version":env!("CARGO_PKG_VERSION")},"capabilities":null}}))?,
+        Provider::Claude => io.send(json!({"type":"user","message":{"role":"user","content":turn.input},"parent_tool_use_id":null,"session_id":""}))?,
+    }
+    while let Ok(input) = inputs.recv() {
+        match input {
+            Input::Cancel => return Ok(Event::Cancelled),
+            Input::Closed => {
+                return Err(format!(
+                    "{provider:?} disconnected before the turn finished."
+                ));
+            }
+            Input::Failed(error) => return Err(error),
+            Input::Decision(id, allowed) => {
+                if let Some((allow, deny)) = io.approvals.remove(&id) {
+                    io.send(if allowed { allow } else { deny })?;
+                }
+            }
+            Input::Frame(msg) => {
+                let end = match provider {
+                    Provider::Codex => codex.handle(io, &msg, turn)?,
+                    Provider::Claude => claude.handle(io, &msg)?,
+                };
+                if let Some(event) = end {
+                    return Ok(event);
+                }
+            }
+        }
+    }
+    Ok(Event::Cancelled)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn exercise(provider: Provider, frames: Vec<Input>) -> (Vec<Event>, Vec<Value>) {
+        let (events, receiver) = mpsc::channel();
+        let (send, inputs) = mpsc::channel();
+        for frame in frames {
+            send.send(frame).unwrap();
+        }
+        drop(send);
+        let mut io = ProtocolIo {
+            writer: Vec::new(),
+            events: &events,
+            approvals: HashMap::new(),
+        };
+        let turn = Turn {
+            cwd: PathBuf::from("/my-project"),
+            input: json!([{"type":"text","text":"hello"}]),
+            session: Some("my-session".into()),
+        };
+        let end = drive(provider, &turn, inputs, &mut io).unwrap();
+        let mut emitted: Vec<_> = receiver.try_iter().collect();
+        emitted.push(end);
+        let messages = io
+            .writer
+            .lines()
+            .map(|l| serde_json::from_str(&l.unwrap()).unwrap())
+            .collect();
+        (emitted, messages)
+    }
+
+    #[test]
+    fn codex_resumes_and_routes_only_approved_requests_for_this_thread() {
+        let frame = Input::Frame;
+        let ask = |thread| {
+            frame(
+                json!({"id":6,"method":"item/commandExecution/requestApproval","params":{"threadId":thread,"command":"cargo check"}}),
+            )
+        };
+        let (events, messages) = exercise(
+            Provider::Codex,
+            vec![
+                frame(json!({"id":1,"result":{}})),
+                frame(json!({"id":2,"result":{"thread":{"id":"t"}}})),
+                ask("other"),
+                ask("t"),
+                Input::Decision("6".into(), false),
+                frame(
+                    json!({"method":"item/agentMessage/delta","params":{"threadId":"t","itemId":"m","delta":"ok"}}),
+                ),
+                frame(
+                    json!({"method":"item/completed","params":{"threadId":"t","item":{"id":"m","type":"agentMessage","text":"ok"}}}),
+                ),
+                frame(
+                    json!({"method":"turn/completed","params":{"threadId":"t","turn":{"status":"completed"}}}),
+                ),
+            ],
+        );
+        assert_eq!(messages[2]["method"], "thread/resume");
+        assert_eq!(messages[2]["params"]["sandbox"], "workspace-write");
+        assert_eq!(messages[2]["params"]["threadId"], "my-session");
+        assert_eq!(messages[4]["result"]["decision"], "decline");
+        assert_eq!(messages[5]["result"]["decision"], "decline");
+        assert_eq!(
+            events,
+            vec![
+                Event::Session("t".into()),
+                Event::Approval {
+                    id: "6".into(),
+                    description: "Allow command\ncargo check".into()
+                },
+                Event::Text("ok".into()),
+                Event::Done
+            ]
+        );
+    }
+
+    #[test]
+    fn claude_preserves_requested_input_and_does_not_repeat_partial_text() {
+        let frame = Input::Frame;
+        let (events, messages) = exercise(
+            Provider::Claude,
+            vec![
+                frame(json!({"type":"system","subtype":"init","session_id":"t"})),
+                frame(
+                    json!({"type":"control_request","request_id":"q","request":{"subtype":"can_use_tool","tool_name":"Write","input":{"file_path":"test.rs"}}}),
+                ),
+                Input::Decision("expired".into(), true),
+                Input::Decision("q".into(), true),
+                frame(
+                    json!({"type":"stream_event","event":{"type":"message_start","message":{"id":"m"}}}),
+                ),
+                frame(
+                    json!({"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"he"}}}),
+                ),
+                frame(
+                    json!({"type":"assistant","message":{"id":"m","content":[{"type":"text","text":"hello"}]}}),
+                ),
+                frame(
+                    json!({"type":"result","subtype":"success","is_error":false,"result":"hello"}),
+                ),
+            ],
+        );
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[1]["response"]["response"],
+            json!({"behavior":"allow","updatedInput":{"file_path":"test.rs"}})
+        );
+        assert_eq!(
+            events[2..],
+            [
+                Event::Text("he".into()),
+                Event::Text("llo".into()),
+                Event::Done
+            ]
+        );
+    }
+
+    #[test]
+    fn cancellation_kills_an_idle_process_and_ends_receiver() {
+        #[cfg(unix)]
+        {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "read line; sleep 30"]);
+            let turn = Turn {
+                cwd: env::temp_dir(),
+                session: None,
+                input: json!([]),
+            };
+            let run = spawn(command, Provider::Codex, turn).unwrap();
+            run.control.cancel();
+            assert_eq!(
+                run.events
+                    .recv_timeout(std::time::Duration::from_secs(3))
+                    .unwrap(),
+                Event::Cancelled
+            );
+        }
+    }
+}

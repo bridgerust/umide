@@ -145,6 +145,13 @@ fn parse_discovery_ini(text: &str, console: u32) -> Option<GrpcDiscovery> {
 }
 
 impl AndroidEmulator {
+    /// Build an adb command bound to this exact device using the configured SDK.
+    pub fn adb_command(serial: &str) -> Command {
+        let mut command = quiet_command("adb");
+        command.args(["-s", serial]);
+        command
+    }
+
     pub fn new(device_id: String, grpc_address: String) -> Self {
         Self {
             device_id,

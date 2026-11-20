@@ -13,6 +13,8 @@
 
 UMIDE is a **mobile AI IDE for Windows and macOS**, built in Rust for React Native and Flutter. The **Android emulator** runs inside the editor on both platforms. On macOS, the **iOS Simulator** runs headless in the editor with no Simulator.app window. The built-in **AI assistant can see and drive the embedded devices**.
 
+The [native Umide Workbench](crates/umide_workbench/README.md) is under development in Rust and Floem. Open a mobile project, work with Codex or Claude Code, and run it on an embedded device. From source, run `cargo run --locked -p umide-workbench`.
+
 ## Download (beta)
 
 Choose the **Pre-release** installer for Windows or macOS from the [Releases page](https://github.com/bridgerust/umide/releases).

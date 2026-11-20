@@ -67,6 +67,9 @@ jobs:
       - name: Build
         run: cargo build --frozen
 
+      - name: Test native workbench
+        run: cargo test --frozen -p umide-workbench -p umide_workbench_agents
+
       # Run doc tests here — while `target/` is warm from the build above — so
       # they reuse the just-compiled dependency graph instead of recompiling it.
       # Previously this ran last, AFTER a Windows-only `cargo clean`, which wiped

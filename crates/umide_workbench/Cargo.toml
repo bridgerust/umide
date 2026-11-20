@@ -1,0 +1,21 @@
+[package]
+name = "umide-workbench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+floem.workspace = true
+umide_workbench_agents = { path = "../umide_workbench_agents" }
+umide_emulator.workspace = true
+directories.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+sha2 = "0.10"
+image = "0.25"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "process", "io-util"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

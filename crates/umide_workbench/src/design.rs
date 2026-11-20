@@ -59,6 +59,7 @@ pub enum Glyph {
     Device,
     Globe,
     Shield,
+    Codex,
     Claude,
     Refresh,
     Play,
@@ -116,6 +117,9 @@ impl Glyph {
             Self::Shield => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 2 8 3v6c0 5-3 8-8 11-5-3-8-6-8-11V5z"/></svg>"#
             }
+            Self::Codex => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 18.8a4.9 4.9 0 0 1-.9-9.7 6.6 6.6 0 0 1 12.6-1.2 5.6 5.6 0 0 1-.5 11H6.4z"/><path d="m8.1 10.8 2.7 2.6-2.7 2.5m5 .1h3"/></svg>"#
+            }
             Self::Claude => {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="m12 3 .4 18M4.3 7.4l15.4 9.2M4 16.5l16-9M7.5 4l9 16M3 12h18M7.5 20l9-16"/></svg>"#
             }
@@ -139,20 +143,22 @@ pub fn icon(
 }
 
 pub fn button(title: &'static str, action: impl Fn() + 'static) -> impl IntoView {
-    Button::new(title).action(action).style(|s| {
-        s.padding_horiz(10)
-            .padding_vert(5)
-            .min_height(28)
-            .color(ink())
-            .background(surface())
-            .font_size(12)
-            .border(1)
-            .border_radius(6)
-            .border_color(line())
-            .hover(|s| s.background(raised()))
-            .focus_visible(|s| s.outline(2).outline_color(accent()))
-            .disabled(|s| s.color(faint()).background(panel()))
-    })
+    Button::new(crate::i18n::label(title))
+        .action(action)
+        .style(|s| {
+            s.padding_horiz(10)
+                .padding_vert(5)
+                .min_height(28)
+                .color(ink())
+                .background(surface())
+                .font_size(12)
+                .border(1)
+                .border_radius(6)
+                .border_color(line())
+                .hover(|s| s.background(raised()))
+                .focus_visible(|s| s.outline(2).outline_color(accent()))
+                .disabled(|s| s.color(faint()).background(panel()))
+        })
 }
 
 pub fn action_button(
@@ -161,7 +167,7 @@ pub fn action_button(
     action: impl Fn() + 'static,
 ) -> impl IntoView {
     Button::new(
-        Stack::horizontal((icon(glyph, 14., muted), label))
+        Stack::horizontal((icon(glyph, 14., muted), crate::i18n::label(label)))
             .style(|s| s.items_center().gap(7)),
     )
     .action(action)

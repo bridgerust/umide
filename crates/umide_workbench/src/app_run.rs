@@ -20,7 +20,42 @@ const OUTPUT_LIMIT: usize = 60_000;
 
 struct Console {
     running: bool,
+    output: ToolOutput,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct ToolOutput {
     text: String,
+    notice: String,
+}
+
+impl ToolOutput {
+    pub(crate) fn verbatim(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn notice(notice: impl Into<String>) -> Self {
+        Self {
+            notice: notice.into(),
+            ..Self::default()
+        }
+    }
+
+    /// Only Umide's own diagnostic is localized. Process output is kept verbatim.
+    pub(crate) fn display(&self) -> String {
+        if self.notice.is_empty() {
+            return self.text.clone();
+        }
+        let notice = crate::i18n::message(&self.notice);
+        if self.text.is_empty() {
+            notice
+        } else {
+            format!("{}\n{notice}\n", self.text)
+        }
+    }
 }
 
 struct Runner {
@@ -51,8 +86,10 @@ fn validate_device(platform: &str, device_id: &str) -> RunResult<()> {
     Ok(())
 }
 
-pub fn device_logs(platform: &str, device_id: &str) -> RunResult<String> {
-    validate_device(platform, device_id)?;
+pub(crate) fn device_logs(platform: &str, device_id: &str) -> ToolOutput {
+    if let Err(error) = validate_device(platform, device_id) {
+        return ToolOutput::notice(error);
+    }
     let reader = Runner::new(
         std::env::temp_dir(),
         Some(Instant::now() + Duration::from_secs(15)),
@@ -70,14 +107,24 @@ pub fn device_logs(platform: &str, device_id: &str) -> RunResult<String> {
             &["-s", device_id, "logcat", "-d", "-t", "200", "-v", "brief"],
         ),
     };
-    let output = reader
+    let output = match reader
         .command(program, &args.iter().map(OsStr::new).collect::<Vec<_>>())
-        .map_err(|error| {
-            format!("{error}\n{}", reader.console.lock().unwrap().text)
-        })?;
+    {
+        Ok(output) => output,
+        Err(error) => {
+            let mut result = reader.console.lock().unwrap().output.clone();
+            result.notice = error;
+            return result;
+        }
+    };
     let mut lines = output.lines().rev().take(200).collect::<Vec<_>>();
     lines.reverse();
-    Ok(lines.join("\n"))
+    let text = lines.join("\n");
+    if text.trim().is_empty() {
+        ToolOutput::notice("No recent messages on this device.")
+    } else {
+        ToolOutput::verbatim(text)
+    }
 }
 
 impl AppRun {
@@ -98,20 +145,21 @@ impl AppRun {
             .spawn(move || {
                 let result = plan.run(&worker, &platform, &device_id);
                 let message = match result {
-                    _ if worker.cancelled() => "\n[Run stopped]\n".into(),
-                    Ok(()) => "\n[Command finished]\n".into(),
-                    Err(error) => format!("\n{error}\n"),
+                    _ if worker.cancelled() => "[Run stopped]".into(),
+                    Ok(()) => "[Command finished]".into(),
+                    Err(error) => error,
                 };
-                worker.append(&message);
-                worker.console.lock().unwrap().running = false;
+                let mut console = worker.console.lock().unwrap();
+                console.output.notice = message;
+                console.running = false;
             })
             .map_err(|e| e.to_string())?;
         Ok(Self(runner))
     }
 
-    pub fn snapshot(&self) -> (bool, String) {
+    pub(crate) fn snapshot(&self) -> (bool, ToolOutput) {
         let state = self.0.console.lock().unwrap();
-        (state.running, state.text.clone())
+        (state.running, state.output.clone())
     }
 
     pub fn stop(&self) {
@@ -151,7 +199,7 @@ impl Runner {
             stop: AtomicBool::new(false),
             console: Mutex::new(Console {
                 running: true,
-                text: String::new(),
+                output: ToolOutput::default(),
             }),
             active: Mutex::new(None),
         }
@@ -162,7 +210,7 @@ impl Runner {
     }
 
     fn append(&self, chunk: &str) {
-        extend_bounded(&mut self.console.lock().unwrap().text, chunk);
+        extend_bounded(&mut self.console.lock().unwrap().output.text, chunk);
     }
 
     fn command(
@@ -711,7 +759,7 @@ mod tests {
             assert!(Instant::now() < deadline);
             thread::sleep(Duration::from_millis(20));
         }
-        assert!(run.snapshot().1.contains("[Run stopped]"));
+        assert_eq!(run.snapshot().1.notice, "[Run stopped]");
         thread::sleep(Duration::from_millis(1200));
         assert!(!dir.path().join("survived").exists());
     }

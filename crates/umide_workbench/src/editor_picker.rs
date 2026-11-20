@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::i18n::tr;
 use floem::{ext_event::create_ext_action, reactive::Scope};
 
 pub(crate) fn choose(
@@ -12,13 +13,13 @@ pub(crate) fn choose(
             format!("Could not open the application picker: {error}")
         })?;
     let dialog =
-        rfd::AsyncFileDialog::new().set_title("Choose an editor application");
+        rfd::AsyncFileDialog::new().set_title(tr("Choose an editor application"));
     #[cfg(target_os = "macos")]
     let dialog = dialog
         .set_directory("/Applications")
-        .add_filter("Applications", &["app"]);
+        .add_filter(tr("Applications"), &["app"]);
     #[cfg(target_os = "windows")]
-    let dialog = dialog.add_filter("Applications", &["exe"]);
+    let dialog = dialog.add_filter(tr("Applications"), &["exe"]);
 
     let deliver = create_ext_action(scope, chosen);
     // Let the input event finish before rfd presents its native sheet on AppKit.

@@ -4,7 +4,9 @@ use crate::{
     choose_project,
     design::{Glyph, UiText, accent, action_button, ink, muted, subtle_line},
     file_editor::{self, FileEditor},
-    file_explorer, orphan_drafts,
+    file_explorer,
+    i18n::{label, message, tr},
+    orphan_drafts,
     state::{Workbench, Workspace},
 };
 
@@ -64,17 +66,23 @@ fn workspace_files(
             });
     let scope = Label::derived(move || {
         if wb.isolated.get() {
-            "Isolated Git copy"
+            tr("Isolated Git copy")
         } else {
-            "Project folder"
+            tr("Project folder")
         }
     })
     .style(|s| s.font_size(11).color(muted()));
     let title = Stack::vertical((
-        "Project files".style(|s| s.font_size(18).ui_bold().color(ink())),
+        label("Project files").style(|s| {
+            s.width_full()
+                .text_ellipsis()
+                .font_size(18)
+                .ui_bold()
+                .color(ink())
+        }),
         scope,
     ))
-    .style(|s| s.gap(2).flex_grow(1_f32));
+    .style(|s| s.min_width(0).gap(2).flex_basis(0).flex_grow(1_f32));
     let header = Stack::horizontal((title, browse, resume)).style(|s| {
         s.width_full()
             .items_center()
@@ -113,9 +121,9 @@ pub(crate) fn panel(
                 let needs_project = wb.root.with_untracked(Option::is_none);
                 Stack::vertical((
                     crate::design::icon(Glyph::Folder, 26., accent),
-                    "Project files"
+                    label("Project files")
                         .style(|s| s.font_size(18).ui_bold().color(ink())),
-                    Label::new(detail).style(|s| {
+                    Label::derived(move || message(&detail)).style(|s| {
                         s.width_full()
                             .font_size(13)
                             .color(muted())

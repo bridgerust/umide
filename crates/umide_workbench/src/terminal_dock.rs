@@ -112,7 +112,7 @@ impl Dock {
             |m| m.is_empty(),
             move |_| self.resize(self.height() - 24.),
         )
-        .tooltip(|| "Resize terminal · double-click to reset")
+        .tooltip(|| crate::i18n::tr("Resize terminal · double-click to reset"))
     }
 
     pub fn view(

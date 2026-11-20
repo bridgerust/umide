@@ -1,4 +1,5 @@
 //! Native source editor. Documents live with the window, independently of the visible panel.
+mod app_icons;
 mod external;
 
 use std::{
@@ -34,6 +35,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     design::{button, panel as panel_color, *},
+    i18n::{self, label, tr},
     project_files::{self, TextFile},
     projects,
     state::Workspace,
@@ -583,7 +585,7 @@ pub(crate) fn panel(
         move |path| match path {
             None => Stack::vertical((
                 icon(Glyph::Code, 28., faint),
-                "Select a file to edit",
+                label("Select a file to edit"),
             ))
             .style(|s| {
                 s.size_full()
@@ -619,9 +621,9 @@ fn file_panel(
     let identity = Stack::horizontal((
         icon(Glyph::Code, 17., accent).tooltip(|| {
             if cfg!(target_os = "macos") {
-                "⌘S to save · Esc to leave the editor"
+                tr("⌘S to save · Esc to leave the editor")
             } else {
-                "Ctrl+S to save · Esc to leave the editor"
+                tr("Ctrl+S to save · Esc to leave the editor")
             }
         }),
         Label::new(title.clone())
@@ -634,7 +636,7 @@ fn file_panel(
             })
             .tooltip(move || title.clone())
             .style(|s| s.min_width(0).flex_basis(0).flex_grow(1_f32)),
-        Label::derived(move || if dirty.dirty() { "Edited" } else { "" })
+        Label::derived(move || if dirty.dirty() { tr("Edited") } else { "" })
             .style(|s| s.font_size(11).color(accent())),
     ))
     .style(move |s| {
@@ -666,7 +668,14 @@ fn file_panel(
             )
         }),
     ))
-    .style(|s| s.items_center().gap(5).flex_shrink(0_f32));
+    .style(move |s| {
+        s.items_center()
+            .gap(5)
+            .flex_shrink(0_f32)
+            .apply_if(compact.get(), |s| {
+                s.width_full().flex_wrap(floem::taffy::FlexWrap::Wrap)
+            })
+    });
     let header = Stack::horizontal((identity, actions))
         .on_resize(move |rect| {
             let narrow = rect.width() < 420.;
@@ -689,15 +698,22 @@ fn file_panel(
 
     let confirm = entry.confirm;
     let reload = entry.clone();
-    let warning = Stack::horizontal((
-        Label::new("Discard unsaved edits and reload this file?").style(|s| {
-            s.flex_grow(1_f32)
+    let warning = Stack::vertical((
+        label("Discard unsaved edits and reload this file?").style(|s| {
+            s.width_full()
                 .font_size(12)
                 .color(ink())
                 .text_overflow(TextOverflow::Wrap)
         }),
-        button("Cancel", move || confirm.set(None)),
-        button("Discard and reload", move || reload.read()),
+        Stack::horizontal((
+            button("Cancel", move || confirm.set(None)),
+            button("Discard and reload", move || reload.read()),
+        ))
+        .style(|s| {
+            s.width_full()
+                .gap(5)
+                .flex_wrap(floem::taffy::FlexWrap::Wrap)
+        }),
     ))
     .style(move |s| {
         s.width_full()
@@ -712,19 +728,19 @@ fn file_panel(
     });
     let external_prompt = external::confirmation(entry.clone(), picker_id);
     let external_error = entry.external_error;
-    let launch_error =
-        Label::derived(move || external_error.get().unwrap_or_default()).style(
-            move |s| {
-                s.width_full()
-                    .padding_horiz(12)
-                    .padding_vert(7)
-                    .font_size(12)
-                    .color(danger())
-                    .background(surface())
-                    .text_overflow(TextOverflow::Wrap)
-                    .apply_if(external_error.get().is_none(), |s| s.hide())
-            },
-        );
+    let launch_error = Label::derived(move || {
+        external_error.with(|e| e.as_deref().map(i18n::message).unwrap_or_default())
+    })
+    .style(move |s| {
+        s.width_full()
+            .padding_horiz(12)
+            .padding_vert(7)
+            .font_size(12)
+            .color(danger())
+            .background(surface())
+            .text_overflow(TextOverflow::Wrap)
+            .apply_if(external_error.get().is_none(), |s| s.hide())
+    });
     let message = entry.message;
     let buffer = entry.buffer;
     let clipboard_status = RwSignal::new(None::<String>);
@@ -737,10 +753,11 @@ fn file_panel(
     });
     let notice = Stack::horizontal((
         Label::derived(move || {
-            let mut detail = message.get().unwrap_or_default();
+            let mut detail = message
+                .with(|s| s.as_deref().map(i18n::message).unwrap_or_default());
             if let Some(status) = clipboard_status.get() {
                 detail.push(' ');
-                detail.push_str(&status);
+                detail.push_str(&i18n::message(&status));
             }
             detail
         })
@@ -787,11 +804,15 @@ fn file_panel(
         move || buffer.get(),
         move |buf| match buf {
             Some(buf) => editor_view(entry.clone(), buf, leave_editor).into_any(),
-            None => {
-                Label::derived(move || if busy.get() { "Opening file…" } else { "" })
-                    .style(|s| s.padding(14).font_size(12).color(muted()))
-                    .into_any()
-            }
+            None => Label::derived(move || {
+                if busy.get() {
+                    tr("Opening file…")
+                } else {
+                    ""
+                }
+            })
+            .style(|s| s.padding(14).font_size(12).color(muted()))
+            .into_any(),
         },
     )
     .style(|s| s.width_full().flex_grow(1_f32).min_size(0, 0));

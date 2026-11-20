@@ -474,7 +474,7 @@ fn dock(
                 .unwrap_or(root.as_os_str())
                 .to_string_lossy();
             if wb.isolated.get() {
-                format!("{name} · Isolated")
+                crate::i18n::fmt("{name} · Isolated", &[("name", name.as_ref())])
             } else {
                 name.into_owned()
             }
@@ -489,11 +489,13 @@ fn dock(
     });
     let bar = Stack::horizontal((
         design::icon(Glyph::Terminal, 14., accent),
-        "Terminal".style(|s| s.font_size(13).ui_bold().color(ink())),
+        crate::i18n::label("Terminal")
+            .style(|s| s.font_size(13).ui_bold().color(ink())),
         directory,
         status,
         actions,
-        action_button(Glyph::Chevron, "Hide", hide).tooltip(|| "Hide terminal"),
+        action_button(Glyph::Chevron, "Hide", hide)
+            .tooltip(|| crate::i18n::tr("Hide terminal")),
     ))
     .style(|s| {
         s.width_full()
@@ -516,7 +518,7 @@ fn dock(
 }
 
 fn placeholder(text: String) -> impl IntoView {
-    Label::new(text).style(|s| {
+    Label::derived(move || crate::i18n::message(&text)).style(|s| {
         s.width_full()
             .padding(10)
             .font_size(13)
@@ -769,13 +771,16 @@ fn screen(
     let status = Label::derived(move || {
         grid.with(|g| match g.status {
             TerminalStatus::Running => String::new(),
-            TerminalStatus::Exited(Some(code)) => format!("Exited ({code})"),
-            TerminalStatus::Exited(None) => "Exited".into(),
+            TerminalStatus::Exited(Some(code)) => {
+                crate::i18n::fmt("Exited ({code})", &[("code", &code.to_string())])
+            }
+            TerminalStatus::Exited(None) => crate::i18n::tr("Exited").into(),
         })
     })
     .style(|s| s.font_size(11).color(muted()));
     let actions = Stack::horizontal((
-        design::button("Copy", copy).tooltip(|| "Copy selection or visible screen"),
+        design::button("Copy", copy)
+            .tooltip(|| crate::i18n::tr("Copy selection or visible screen")),
         design::button("Paste", move || {
             paste(&paste_session, grid.with_untracked(|g| g.mode));
             id.request_focus();

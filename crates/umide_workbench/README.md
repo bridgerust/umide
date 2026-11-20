@@ -10,6 +10,8 @@ When both standalone tools are missing, choose **Install both** to get them from
 
 Umide follows the system appearance by default. Choose **Appearance → Light** or **Dark** in the sidebar to keep a fixed theme. Your choice applies to every project on this computer.
 
+Umide starts in the first supported language in your system preferences. Use **Language** during setup or in the sidebar to switch between English, français, español and português. Umide remembers your choice across projects and restarts. Chat messages, source files and command output keep their original language. [See the French interface and editor icons](../../screenshots/umide-workbench-fr.png).
+
 ## Run from source
 
 Use stable Rust and install the Protocol Buffers compiler (`protoc`). On macOS, install the Xcode command line tools. From the repository root:

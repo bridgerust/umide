@@ -1,0 +1,161 @@
+Start a task	Commencer une tâche	Iniciar una tarea	Iniciar uma tarefa
+Describe a change to your app, or choose a starting point.	Décrivez une modification à apporter à votre application ou choisissez un point de départ.	Describe un cambio para tu aplicación o elige un punto de partida.	Descreva uma alteração no seu aplicativo ou escolha um ponto de partida.
+Open a project	Ouvrir un projet	Abrir un proyecto	Abrir um projeto
+Choose the folder containing your mobile app to work with an agent.	Choisissez le dossier de votre application mobile pour travailler avec un agent.	Elige la carpeta de tu aplicación móvil para trabajar con un agente.	Escolha a pasta do seu aplicativo móvel para trabalhar com um agente.
+Review changes	Examiner les modifications	Revisar cambios	Revisar alterações
+Review the current changes in this mobile project. Identify regressions and suggest concrete fixes.	Examine les modifications de ce projet mobile. Repère les régressions et propose des corrections concrètes.	Revisa los cambios de este proyecto móvil. Identifica regresiones y propón correcciones concretas.	Revise as alterações deste projeto móvel. Identifique regressões e proponha correções concretas.
+Run the app	Lancer l’application	Ejecutar la aplicación	Executar o aplicativo
+Inspect this project and explain how to build and run its mobile app on a local device.	Examine ce projet et explique comment compiler et lancer son application mobile sur un appareil local.	Examina este proyecto y explica cómo compilar y ejecutar su aplicación móvil en un dispositivo local.	Examine este projeto e explique como compilar e executar o aplicativo móvel em um dispositivo local.
+Code	Code	Código	Código
+Code copied	Code copié	Código copiado	Código copiado
+Could not copy code to the clipboard	Impossible de copier le code dans le presse-papiers	No se pudo copiar el código al portapapeles	Não foi possível copiar o código para a área de transferência
+Working…	En cours…	En curso…	Em andamento…
+You	Vous	Tú	Você
+Task with {provider}	Tâche avec {provider}	Tarea con {provider}	Tarefa com {provider}
+Your request	Votre demande	Tu solicitud	Sua solicitação
+Permission requested	Autorisation demandée	Permiso solicitado	Permissão solicitada
+Allow once	Autoriser une fois	Permitir una vez	Permitir uma vez
+Deny	Refuser	Denegar	Negar
+Isolated Git copy	Copie Git isolée	Copia Git aislada	Cópia Git isolada
+Project folder	Dossier du projet	Carpeta del proyecto	Pasta do projeto
+Describe a change to your app…	Décrivez une modification à apporter à votre application…	Describe un cambio para tu aplicación…	Descreva uma alteração no seu aplicativo…
+Attached	Écran joint	Adjunta	Tela anexada
+Screen	Écran	Pantalla	Tela
+Remove the screen attachment	Retirer la capture d’écran	Quitar la captura de pantalla	Remover a captura de tela
+Select a running device to attach its screen	Sélectionnez un appareil en cours d’exécution pour joindre une capture de son écran	Selecciona un dispositivo en ejecución para adjuntar una captura de su pantalla	Selecione um dispositivo em execução para anexar uma captura da tela
+Attach the selected device screen to your next message	Joindre une capture de l’écran de l’appareil sélectionné au prochain message	Adjuntar una captura del dispositivo seleccionado al siguiente mensaje	Anexar uma captura da tela do dispositivo selecionado à próxima mensagem
+Stop	Arrêter	Detener	Parar
+Send	Envoyer	Enviar	Enviar
+PROJECT	PROJET	PROYECTO	PROJETO
+Switch project · {path}	Changer de projet · {path}	Cambiar de proyecto · {path}	Trocar de projeto · {path}
+Open a project folder	Ouvrir un dossier de projet	Abrir una carpeta de proyecto	Abrir uma pasta de projeto
+Needs approval	Autorisation requise	Requiere aprobación	Aguarda aprovação
+New conversation	Nouvelle conversation	Nueva conversación	Nova conversa
+Find conversation…	Rechercher une conversation…	Buscar conversación…	Buscar conversa…
+Conversations	Conversations	Conversaciones	Conversas
+Find a conversation	Rechercher une conversation	Buscar una conversación	Buscar uma conversa
+No matches	Aucun résultat	Sin resultados	Nenhum resultado
+Collapse sidebar	Réduire la barre latérale	Contraer la barra lateral	Recolher barra lateral
+Expand sidebar	Déployer la barre latérale	Expandir la barra lateral	Expandir barra lateral
+Agent setup	Configuration des agents	Configurar agentes	Configurar agentes
+Set up coding agents	Configurer les agents de programmation	Configurar los agentes de programación	Configurar os agentes de programação
+Appearance	Apparence	Apariencia	Aparência
+Appearance · {theme}	Apparence · {theme}	Apariencia · {theme}	Aparência · {theme}
+System	Système	Sistema	Sistema
+Dark	Sombre	Oscuro	Escuro
+Light	Clair	Claro	Claro
+Checking this computer…	Vérification de cet ordinateur…	Comprobando este equipo…	Verificando este computador…
+Command-line tool not installed	Outil en ligne de commande à installer	Herramienta de línea de comandos sin instalar	Ferramenta de linha de comando não instalada
+Installing on this computer…	Installation sur cet ordinateur…	Instalando en este equipo…	Instalando neste computador…
+Installed · sign-in needed	Installé · connexion requise	Instalado · inicia sesión	Instalado · faça login
+Sign-in needed · {version}	Connexion requise · {version}	Inicia sesión · {version}	Faça login · {version}
+Complete sign-in in your browser…	Terminez la connexion dans votre navigateur…	Completa el inicio de sesión en tu navegador…	Conclua o login no navegador…
+Connected	Connecté	Conectado	Conectado
+Connected · {version}	Connecté · {version}	Conectado · {version}	Conectado · {version}
+Install	Installer	Instalar	Instalar
+Cancel	Annuler	Cancelar	Cancelar
+Sign in	Se connecter	Iniciar sesión	Entrar
+Check again	Vérifier à nouveau	Volver a comprobar	Verificar novamente
+Setup guide	Guide de configuration	Guía de configuración	Guia de configuração
+Open the official {provider} setup guide	Ouvrir le guide officiel de configuration de {provider}	Abrir la guía oficial de configuración de {provider}	Abrir o guia oficial de configuração do {provider}
+Set up your coding agents	Configurez vos agents de programmation	Configura tus agentes de programación	Configure seus agentes de programação
+Install Codex or Claude Code on this computer. Sign in with your provider to use it in Umide.	Installez Codex ou Claude Code sur cet ordinateur, puis connectez-vous à votre compte pour l’utiliser dans Umide.	Instala Codex o Claude Code en este equipo e inicia sesión con tu proveedor para usarlo en Umide.	Instale o Codex ou o Claude Code neste computador e entre com a conta do seu provedor para usá-lo no Umide.
+Install both	Installer les deux	Instalar ambos	Instalar os dois
+Continue to workspace	Accéder à l’espace de travail	Ir al espacio de trabajo	Ir para a área de trabalho
+Open project	Ouvrir un projet	Abrir proyecto	Abrir projeto
+Open a project to inspect changes.	Ouvrez un projet pour examiner ses modifications.	Abre un proyecto para revisar sus cambios.	Abra um projeto para revisar as alterações.
+Unified diff	Diff unifié	Diferencias unificadas	Diff unificado
+Could not copy diff: {error}	Impossible de copier le diff : {error}	No se pudieron copiar las diferencias: {error}	Não foi possível copiar o diff: {error}
+Page {page} of {total}	Page {page} sur {total}	Página {page} de {total}	Página {page} de {total}
+Previous	Précédent	Anterior	Anterior
+Next	Suivant	Siguiente	Próximo
+Task folder	Dossier de la tâche	Carpeta de la tarea	Pasta da tarefa
+Changes since this task started	Modifications depuis le début de cette tâche	Cambios desde el inicio de esta tarea	Alterações desde o início desta tarefa
+Working tree and staged files	Arborescence de travail et fichiers indexés	Árbol de trabajo y archivos preparados	Árvore de trabalho e arquivos preparados
+Untracked files	Fichiers non suivis	Archivos sin seguimiento	Arquivos não rastreados
+Working tree is clean.	Aucune modification dans le répertoire de travail.	El árbol de trabajo está limpio.	A árvore de trabalho está limpa.
+Reading changes…	Lecture des modifications…	Leyendo los cambios…	Lendo as alterações…
+Ready	Prêt	Listo	Pronto
+Project folder could not be opened	Impossible d’ouvrir le dossier du projet	No se pudo abrir la carpeta del proyecto	Não foi possível abrir a pasta do projeto
+Select a project folder	Sélectionnez un dossier de projet	Selecciona una carpeta de proyecto	Selecione uma pasta de projeto
+Could not read this project's conversations: {error}	Impossible de lire les conversations de ce projet : {error}	No se pudieron leer las conversaciones de este proyecto: {error}	Não foi possível ler as conversas deste projeto: {error}
+No project open	Aucun projet ouvert	No hay ningún proyecto abierto	Nenhum projeto aberto
+Could not save conversation: {error}	Impossible d’enregistrer la conversation : {error}	No se pudo guardar la conversación: {error}	Não foi possível salvar a conversa: {error}
+Open a project first.	Ouvrez d’abord un projet.	Abre primero un proyecto.	Abra um projeto primeiro.
+Send the first message to create this isolated workspace.	Envoyez le premier message pour créer cet espace de travail isolé.	Envía el primer mensaje para crear este espacio de trabajo aislado.	Envie a primeira mensagem para criar esta área de trabalho isolada.
+Conversation unavailable.	Conversation indisponible.	Conversación no disponible.	Conversa indisponível.
+The isolated workspace is unavailable. Check the conversation for setup errors.	L’espace de travail isolé est indisponible. Consultez les erreurs de configuration dans la conversation.	El espacio de trabajo aislado no está disponible. Revisa los errores de configuración en la conversación.	A área de trabalho isolada está indisponível. Consulte os erros de configuração na conversa.
+Another task is using this folder. Enable isolation for a new conversation or wait for that task.	Une autre tâche utilise ce dossier. Activez l’isolation pour la nouvelle conversation ou attendez la fin de cette tâche.	Otra tarea está usando esta carpeta. Activa el aislamiento para una nueva conversación o espera a que termine la tarea.	Outra tarefa está usando esta pasta. Ative o isolamento para uma nova conversa ou aguarde a conclusão da tarefa.
+Starting {provider}	Démarrage de {provider}	Iniciando {provider}	Iniciando {provider}
+Turn stopped	Réponse interrompue	Respuesta interrumpida	Resposta interrompida
+Waiting for permission	En attente d’autorisation	Esperando permiso	Aguardando permissão
+Stopping agent…	Arrêt de l’agent…	Deteniendo el agente…	Parando o agente…
+Select a running device to read its logs.	Sélectionnez un appareil en cours d’exécution pour lire ses journaux.	Selecciona un dispositivo en ejecución para leer sus registros.	Selecione um dispositivo em execução para ler os logs.
+Reading device logs…	Lecture des journaux de l’appareil…	Leyendo los registros del dispositivo…	Lendo os logs do dispositivo…
+No recent messages on this device.	Aucun message récent sur cet appareil.	No hay mensajes recientes en este dispositivo.	Nenhuma mensagem recente neste dispositivo.
+Project	Projet	Proyecto	Projeto
+Starting build on {id}…	Lancement de la compilation sur {id}…	Iniciando la compilación en {id}…	Iniciando a compilação em {id}…
+Window closed during this turn	La fenêtre a été fermée pendant cette réponse	La ventana se cerró durante esta respuesta	A janela foi fechada durante esta resposta
+Agent failed to start	Le démarrage de l’agent a échoué	No se pudo iniciar el agente	Não foi possível iniciar o agente
+Agent disconnected	Agent déconnecté	Agente desconectado	Agente desconectado
+Could not open the setup guide: {error}	Impossible d’ouvrir le guide de configuration : {error}	No se pudo abrir la guía de configuración: {error}	Não foi possível abrir o guia de configuração: {error}
+Cancelled. Check again to see the current state.	Opération annulée. Vérifiez à nouveau l’état actuel.	Operación cancelada. Vuelve a comprobar el estado.	Operação cancelada. Verifique novamente o estado atual.
+Cancelled.	Opération annulée.	Operación cancelada.	Operação cancelada.
+Could not start {tool}: {error}	Impossible de démarrer {tool} : {error}	No se pudo iniciar {tool}: {error}	Não foi possível iniciar {tool}: {error}
+Timed out. Try again or open the setup guide.	Délai dépassé. Réessayez ou ouvrez le guide de configuration.	Se agotó el tiempo de espera. Inténtalo de nuevo o abre la guía de configuración.	O tempo de espera terminou. Tente novamente ou abra o guia de configuração.
+The CLI could not start. Open its setup guide to repair the installation.	L’outil en ligne de commande n’a pas pu démarrer. Ouvrez son guide de configuration pour réparer l’installation.	No se pudo iniciar la herramienta de línea de comandos. Abre su guía de configuración para reparar la instalación.	A ferramenta de linha de comando não iniciou. Abra o guia de configuração para reparar a instalação.
+Sign-in did not finish. Try again or open the setup guide.	La connexion n’a pas abouti. Réessayez ou ouvrez le guide de configuration.	No se completó el inicio de sesión. Inténtalo de nuevo o abre la guía de configuración.	O login não foi concluído. Tente novamente ou abra o guia de configuração.
+Could not download the official installer. Check the network connection and try again.	Impossible de télécharger le programme d’installation officiel. Vérifiez la connexion réseau et réessayez.	No se pudo descargar el instalador oficial. Comprueba la conexión de red y vuelve a intentarlo.	Não foi possível baixar o instalador oficial. Verifique a conexão de rede e tente novamente.
+The official installer did not finish. Check again or open the provider’s setup guide.	L’installation n’a pas abouti. Vérifiez à nouveau ou ouvrez le guide de configuration du fournisseur.	El instalador oficial no terminó. Vuelve a comprobarlo o abre la guía de configuración del proveedor.	O instalador oficial não terminou. Verifique novamente ou abra o guia de configuração do provedor.
+The installer finished, but Umide could not find the CLI. Check its installation path in the setup guide.	L’installation est terminée. Umide ne trouve pas l’outil en ligne de commande. Vérifiez son emplacement dans le guide de configuration.	Terminó la instalación, pero Umide no encuentra la herramienta de línea de comandos. Revisa la ruta en la guía de configuración.	A instalação terminou, mas o Umide não encontrou a ferramenta de linha de comando. Confira o caminho no guia de configuração.
+UMIDE_WORKBENCH_DATA_DIR must be an absolute path.	UMIDE_WORKBENCH_DATA_DIR doit être un chemin absolu.	UMIDE_WORKBENCH_DATA_DIR debe ser una ruta absoluta.	UMIDE_WORKBENCH_DATA_DIR deve ser um caminho absoluto.
+Cannot find the application data directory.	Impossible de trouver le dossier de données de l’application.	No se encuentra la carpeta de datos de la aplicación.	Não foi possível encontrar a pasta de dados do aplicativo.
+Cannot read {path}: {error}	Impossible de lire {path} : {error}	No se puede leer {path}: {error}	Não foi possível ler {path}: {error}
+Cannot save {path}: {error}	Impossible d’enregistrer {path} : {error}	No se puede guardar {path}: {error}	Não foi possível salvar {path}: {error}
+Cannot start Git: {error}	Impossible de démarrer Git : {error}	No se pudo iniciar Git: {error}	Não foi possível iniciar o Git: {error}
+Git exited with {status}	Git s’est arrêté avec {status}	Git terminó con {status}	O Git terminou com {status}
+Invalid worktree base commit	Commit de base de la copie de travail non valide	El commit base del árbol de trabajo no es válido	O commit base da árvore de trabalho é inválido
+Could not launch {provider}: {error}	Impossible de lancer {provider} : {error}	No se pudo iniciar {provider}: {error}	Não foi possível iniciar {provider}: {error}
+Could not find {name}. Install the CLI or set {key} to its absolute path.	Impossible de trouver {name}. Installez l’outil en ligne de commande ou indiquez son chemin absolu dans {key}.	No se encontró {name}. Instala la herramienta de línea de comandos o indica su ruta absoluta en {key}.	Não foi possível encontrar {name}. Instale a ferramenta de linha de comando ou defina o caminho absoluto em {key}.
+{key} must point to the installed executable.	{key} doit pointer vers l’exécutable installé.	{key} debe apuntar al ejecutable instalado.	{key} deve apontar para o executável instalado.
+{provider} disconnected before the turn finished.	{provider} s’est déconnecté avant la fin de la réponse.	{provider} se desconectó antes de terminar la respuesta.	{provider} se desconectou antes de terminar a resposta.
+Invalid {provider} protocol message: {error}	Message de protocole de {provider} non valide : {error}	Mensaje de protocolo de {provider} no válido: {error}	Mensagem de protocolo de {provider} inválida: {error}
+Agent repeated a pending approval ID.	L’agent a répété un identifiant d’autorisation en attente.	El agente repitió un identificador de aprobación pendiente.	O agente repetiu um identificador de aprovação pendente.
+Missing Claude permission request ID.	Identifiant de demande d’autorisation Claude manquant.	Falta el identificador de la solicitud de permiso de Claude.	Falta o identificador da solicitação de permissão do Claude.
+Codex failed to complete the turn.	Codex n’a pas pu terminer sa réponse.	Codex no pudo terminar la respuesta.	O Codex não conseguiu concluir a resposta.
+File changes: {status}	Modifications de fichiers : {status}	Cambios de archivos: {status}	Alterações em arquivos: {status}
+Allow file changes	Autoriser les modifications de fichiers	Permitir cambios en archivos	Permitir alterações em arquivos
+Allow command	Autoriser la commande	Permitir el comando	Permitir o comando
+Codex rejected the request.	Codex a refusé la demande.	Codex rechazó la solicitud.	O Codex recusou a solicitação.
+Codex returned no session ID.	Codex n’a pas renvoyé d’identifiant de session.	Codex no devolvió un identificador de sesión.	O Codex não retornou um identificador de sessão.
+Enter a prompt.	Saisissez une demande.	Escribe una solicitud.	Digite uma solicitação.
+The project folder is unavailable.	Le dossier du projet est indisponible.	La carpeta del proyecto no está disponible.	A pasta do projeto está indisponível.
+Invalid session ID.	Identifiant de session non valide.	Identificador de sesión no válido.	Identificador de sessão inválido.
+The device screenshot must be a PNG under 24 MiB.	La capture d’écran de l’appareil doit être un fichier PNG de moins de 24 Mio.	La captura del dispositivo debe ser una imagen PNG de menos de 24 MiB.	A captura do dispositivo deve ser uma imagem PNG com menos de 24 MiB.
+Unknown error	Erreur inconnue	Error desconocido	Erro desconhecido
+Invalid Git path	Chemin Git non valide	Ruta de Git no válida	Caminho Git inválido
+Invalid Git directory: {error}	Dossier Git non valide : {error}	Directorio de Git no válido: {error}	Diretório Git inválido: {error}
+Cannot create {path}: {error}	Impossible de créer {path} : {error}	No se pudo crear {path}: {error}	Não foi possível criar {path}: {error}
+Missing task folder {path}: {error}	Dossier de tâche {path} introuvable : {error}	No se encuentra la carpeta de tarea {path}: {error}	Pasta da tarefa {path} não encontrada: {error}
+Unexpected task folder: {path}	Dossier de tâche inattendu : {path}	Carpeta de tarea inesperada: {path}	Pasta de tarefa inesperada: {path}
+Invalid isolated task key.	Identifiant de tâche isolée non valide.	Identificador de tarea aislada no válido.	Identificador de tarefa isolada inválido.
+Cannot open project: {error}	Impossible d’ouvrir le projet : {error}	No se pudo abrir el proyecto: {error}	Não foi possível abrir o projeto: {error}
+Invalid app folder in repository.	Dossier d’application non valide dans le dépôt.	Carpeta de aplicación no válida en el repositorio.	Pasta do aplicativo inválida no repositório.
+Workbench storage needs an absolute path.	Le stockage du Workbench nécessite un chemin absolu.	El almacenamiento de Workbench requiere una ruta absoluta.	O armazenamento do Workbench requer um caminho absoluto.
+No storage directory available.	Aucun dossier de stockage disponible.	Ninguna carpeta de almacenamiento disponible.	Nenhuma pasta de armazenamento disponível.
+Choose a Workbench data directory outside this repository.	Choisissez un dossier de données du Workbench en dehors de ce dépôt.	Elige una carpeta de datos de Workbench fuera del repositorio.	Escolha uma pasta de dados do Workbench fora deste repositório.
+Cannot create Workbench storage: {error}	Impossible de créer le dossier de stockage du Workbench : {error}	No se pudo crear el almacenamiento de Workbench: {error}	Não foi possível criar o armazenamento do Workbench: {error}
+Cannot open Workbench storage: {error}	Impossible d’ouvrir le dossier de stockage du Workbench : {error}	No se pudo abrir el almacenamiento de Workbench: {error}	Não foi possível abrir o armazenamento do Workbench: {error}
+Task checkouts must be stored outside the project.	Les copies de travail des tâches doivent se trouver en dehors du projet.	Las copias de trabajo de las tareas deben guardarse fuera del proyecto.	As cópias de trabalho das tarefas devem ficar fora do projeto.
+This checkout no longer belongs to the project.	Cette copie de travail n’appartient plus au projet.	Esta copia de trabajo ya no pertenece al proyecto.	Esta cópia de trabalho já não pertence ao projeto.
+Missing Git worktree registration: {error}	Enregistrement de la copie de travail Git introuvable : {error}	Falta el registro del árbol de trabajo de Git: {error}	Registro da árvore de trabalho do Git não encontrado: {error}
+Git registered this task at a different location.	Git a enregistré cette tâche à un autre emplacement.	Git registró esta tarea en otra ubicación.	O Git registrou esta tarefa em outro local.
+The app folder is missing from this checkout. Is it in the committed project?	Le dossier de l’application est absent de cette copie de travail. Est-il inclus dans un commit du projet ?	La carpeta de la aplicación no está en esta copia de trabajo. ¿Se incluyó en un commit del proyecto?	A pasta do aplicativo não está nesta cópia de trabalho. Ela foi incluída em um commit do projeto?
+The app folder points outside its isolated checkout.	Le dossier de l’application pointe en dehors de sa copie de travail isolée.	La carpeta de la aplicación apunta fuera de su copia de trabajo aislada.	A pasta do aplicativo aponta para fora da cópia de trabalho isolada.
+Invalid task base commit.	Commit de base de la tâche non valide.	Commit base de la tarea no válido.	Commit base da tarefa inválido.
+Isolation requires a committed project. {error}	L’isolation nécessite au moins un commit dans le projet. {error}	Para aislar una tarea, el proyecto debe tener al menos un commit. {error}	O isolamento requer pelo menos um commit no projeto. {error}
+Cannot reserve isolated task: {error}	Impossible de réserver l’espace de la tâche isolée : {error}	No se pudo reservar el espacio de la tarea aislada: {error}	Não foi possível reservar o espaço da tarefa isolada: {error}
+Cannot save task base commit: {error}	Impossible d’enregistrer le commit de base de la tâche : {error}	No se pudo guardar el commit base de la tarea: {error}	Não foi possível salvar o commit base da tarefa: {error}
+Missing task base commit.	Commit de base de la tâche introuvable.	No se encuentra el commit base de la tarea.	Commit base da tarefa não encontrado.
+Cannot read task base commit: {error}	Impossible de lire le commit de base de la tâche : {error}	No se pudo leer el commit base de la tarea: {error}	Não foi possível ler o commit base da tarefa: {error}
+Git: {detail}	Git : {detail}	Git: {detail}	Git: {detail}

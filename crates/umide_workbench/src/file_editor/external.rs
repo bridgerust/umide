@@ -9,13 +9,14 @@ use floem::{
     style::TextOverflow,
 };
 
-use super::{Confirmation, Entry};
+use super::{Confirmation, Entry, app_icons};
 use crate::{
     design::{
         Glyph, accent, button, faint, icon, ink, line, muted, raised, surface,
     },
     editor_picker,
     external_editor::{self, Editor},
+    i18n::{fmt, label, tr},
 };
 
 #[derive(Clone)]
@@ -113,7 +114,7 @@ pub(super) fn picker(entry: Rc<Entry>) -> (impl IntoView, ViewId) {
     let control = Button::new(
         Stack::horizontal((
             icon(Glyph::Open, 14., muted),
-            "Open in…",
+            label("Open in…"),
             icon(Glyph::Chevron, 9., faint),
         ))
         .style(|s| s.items_center().gap(5)),
@@ -143,7 +144,7 @@ pub(super) fn picker(entry: Rc<Entry>) -> (impl IntoView, ViewId) {
                 .set_disabled(busy.get())
                 .disabled(|s| s.color(faint()))
         })
-        .tooltip(|| "Open this file in another editor");
+        .tooltip(|| tr("Open this file in another editor"));
     (control, id)
 }
 
@@ -158,8 +159,16 @@ fn choices(entry: Rc<Entry>, picker: ViewId) -> impl IntoView {
     let buttons: Vec<_> = options
         .map(|option| {
             let entry = entry.clone();
-            let label = option.map(Editor::label).unwrap_or("Cancel");
-            let row = Button::new(label)
+            let content = match option {
+                Some(editor) => Stack::horizontal((
+                    app_icons::view(editor),
+                    label(editor.label()),
+                ))
+                .style(|s| s.items_center().gap(5))
+                .into_any(),
+                None => label("Cancel").into_any(),
+            };
+            let row = Button::new(content)
                 .action(move || match option {
                     Some(Editor::Custom) => entry.choose_application(),
                     Some(editor) => entry.request_external(Target::Named(editor)),
@@ -169,7 +178,7 @@ fn choices(entry: Rc<Entry>, picker: ViewId) -> impl IntoView {
                     }
                 })
                 .style(move |s| {
-                    s.height(27)
+                    s.height(30)
                         .padding_horiz(8)
                         .font_size(12)
                         .border(1)
@@ -242,7 +251,11 @@ pub(super) fn confirmation(entry: Rc<Entry>, picker: ViewId) -> impl IntoView {
             let open = entry.clone();
             let buffer = entry.buffer;
             let save_target = target.clone();
-            let title = format!("Open in {} with unsaved edits?", target.name());
+            let name = target.name();
+            let mark = match &target {
+                Target::Named(editor) => app_icons::view(*editor),
+                Target::Application(path) => app_icons::application(path),
+            };
             let actions = Stack::horizontal((
                 button("Save and open", move || {
                     save.save(Some(save_target.clone()))
@@ -261,17 +274,30 @@ pub(super) fn confirmation(entry: Rc<Entry>, picker: ViewId) -> impl IntoView {
                 }),
             ))
             .style(|s| {
-                s.items_center()
+                s.width_full()
+                    .items_center()
                     .gap(5)
                     .flex_wrap(floem::taffy::FlexWrap::Wrap)
             });
             Stack::vertical((
-                Label::new(title).style(|s| {
-                    s.width_full()
-                        .font_size(12)
-                        .color(ink())
-                        .text_overflow(TextOverflow::Wrap)
-                }),
+                Stack::horizontal((
+                    mark,
+                    Label::derived(move || {
+                        fmt(
+                            "Open in {editor} with unsaved edits?",
+                            &[("editor", &name)],
+                        )
+                    })
+                    .style(|s| {
+                        s.min_width(0)
+                            .flex_basis(0)
+                            .flex_grow(1_f32)
+                            .font_size(12)
+                            .color(ink())
+                            .text_overflow(TextOverflow::Wrap)
+                    }),
+                ))
+                .style(|s| s.width_full().gap(6).items_center()),
                 actions,
             ))
             .style(|s| s.width_full().padding(8).gap(6).background(surface()))

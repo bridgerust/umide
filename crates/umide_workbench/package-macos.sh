@@ -18,6 +18,8 @@ cat > "$contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>umide-workbench</string>
 <key>CFBundleIdentifier</key><string>org.bridgerust.umide.workbench.dev</string>
 <key>CFBundleName</key><string>Umide Workbench</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>fr</string><string>es</string><string>pt</string></array>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>CFBundleIconFile</key><string>umide.icns</string>

@@ -5,29 +5,34 @@ use umide_workbench_agents::Provider;
 
 use crate::{
     design::*,
+    i18n::{self, tr},
     provider_setup::{ProviderSetup, Stage},
     state::provider_name,
 };
 
 fn status_text(stage: &Stage) -> String {
     match stage {
-        Stage::Checking => "Checking this computer…".into(),
-        Stage::Missing => "Command-line tool not installed".into(),
-        Stage::Installing => "Installing on this computer…".into(),
+        Stage::Checking => tr("Checking this computer…").into(),
+        Stage::Missing => tr("Command-line tool not installed").into(),
+        Stage::Installing => tr("Installing on this computer…").into(),
         Stage::SignedOut(version) if version.is_empty() => {
-            "Installed · sign-in needed".into()
+            tr("Installed · sign-in needed").into()
         }
-        Stage::SignedOut(version) => format!("Sign-in needed · {version}"),
-        Stage::SigningIn => "Complete sign-in in your browser…".into(),
-        Stage::Ready(version) if version.is_empty() => "Connected".into(),
-        Stage::Ready(version) => format!("Connected · {version}"),
-        Stage::Error(detail) => detail.clone(),
+        Stage::SignedOut(version) => {
+            i18n::fmt("Sign-in needed · {version}", &[("version", version)])
+        }
+        Stage::SigningIn => tr("Complete sign-in in your browser…").into(),
+        Stage::Ready(version) if version.is_empty() => tr("Connected").into(),
+        Stage::Ready(version) => {
+            i18n::fmt("Connected · {version}", &[("version", version)])
+        }
+        Stage::Error(detail) => i18n::message(detail),
     }
 }
 
 fn provider_card(setup: ProviderSetup, provider: Provider) -> impl IntoView {
     let (glyph, tint): (_, fn() -> Color) = match provider {
-        Provider::Codex => (Glyph::Terminal, lilac),
+        Provider::Codex => (Glyph::Codex, lilac),
         Provider::Claude => (Glyph::Claude, peach),
     };
     let mark = icon(glyph, 23., tint).container().style(|s| {
@@ -76,7 +81,7 @@ fn provider_card(setup: ProviderSetup, provider: Provider) -> impl IntoView {
     .style(|s| s.flex_shrink(0_f32));
     let guide = Button::new(
         Stack::horizontal((
-            Label::new("Setup guide"),
+            i18n::label("Setup guide"),
             icon(Glyph::Open, 11., faint),
         ))
         .style(|s| s.items_center().gap(5)),
@@ -95,7 +100,10 @@ fn provider_card(setup: ProviderSetup, provider: Provider) -> impl IntoView {
             .focus_visible(|s| s.outline(2).outline_color(accent()))
     })
     .tooltip(move || {
-        format!("Open the official {} setup guide", provider_name(provider))
+        i18n::fmt(
+            "Open the official {provider} setup guide",
+            &[("provider", provider_name(provider))],
+        )
     });
     let top = Stack::horizontal((mark, info, action))
         .style(|s| s.width_full().items_center().gap(13));
@@ -123,8 +131,8 @@ pub fn panel(
             .background(mint_wash())
     });
     let intro = Stack::vertical((
-        Label::new("Set up your coding agents").style(|s| s.font_size(30).ui_bold().color(ink())),
-        Label::new("Install Codex or Claude Code on this computer. Sign in with your provider to use it in Umide.")
+        i18n::label("Set up your coding agents").style(|s| s.font_size(30).ui_bold().color(ink())),
+        i18n::label("Install Codex or Claude Code on this computer. Sign in with your provider to use it in Umide.")
             .style(|s| s.width_full().font_size(15).line_height(1.4).color(muted()).text_overflow(TextOverflow::Wrap)),
     ))
     .style(|s| s.width_full().gap(7));
@@ -144,7 +152,7 @@ pub fn panel(
             |s| s.hide(),
         )
     });
-    let proceed = Button::new("Continue to workspace")
+    let proceed = Button::new(i18n::label("Continue to workspace"))
         .action(finish)
         .style(|s| {
             s.height(34)
@@ -166,7 +174,13 @@ pub fn panel(
         proceed,
     ))
     .style(|s| s.width_full().gap(8).items_center());
-    let content = Stack::vertical((logo, intro, providers, footer))
+    let top = Stack::horizontal((
+        logo,
+        Empty::new().style(|s| s.flex_grow(1_f32)),
+        crate::i18n::picker(false).style(|s| s.width(190)),
+    ))
+    .style(|s| s.width_full().items_center());
+    let content = Stack::vertical((top, intro, providers, footer))
         .style(|s| s.width_full().max_width(570).gap(19).items_start());
     Scroll::new(content.container().style(|s| {
         s.width_full()

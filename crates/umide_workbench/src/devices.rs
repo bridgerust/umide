@@ -21,6 +21,7 @@ use crate::design::{
     Glyph, MONO, UiText, accent, button, canvas, faint, icon, ink, line, mint_wash,
     muted, panel as panel_color, surface,
 };
+use crate::i18n::{label, message, tr};
 
 type DeviceId = (String, String);
 
@@ -167,7 +168,7 @@ fn device_row(panel: Panel, device: DeviceInfo) -> impl IntoView {
     let starting = device.state == DeviceState::Starting;
     let name = Label::new(device.name.clone())
         .style(|s| s.width_full().font_size(13.).color(ink()).text_ellipsis());
-    let detail = Label::new(platform_label(device.platform))
+    let detail = label(platform_label(device.platform))
         .style(|s| s.color(muted()).font_size(11.));
     let action = if running {
         "Open"
@@ -178,7 +179,7 @@ fn device_row(panel: Panel, device: DeviceInfo) -> impl IntoView {
     };
     let action_color: fn() -> Color = if running { accent } else { muted };
     let trailing = Stack::horizontal((
-        Label::new(action).style(move |s| s.font_size(11.).color(action_color())),
+        label(action).style(move |s| s.font_size(11.).color(action_color())),
         icon(
             if running { Glyph::Chevron } else { Glyph::Play },
             11.,
@@ -232,7 +233,9 @@ fn device_list(panel: Panel) -> impl IntoView {
             list.iter()
                 .filter(|d| {
                     d.name.to_lowercase().contains(&query)
-                        || platform_label(d.platform).to_lowercase().contains(&query)
+                        || tr(platform_label(d.platform))
+                            .to_lowercase()
+                            .contains(&query)
                 })
                 .cloned()
                 .collect::<Vec<_>>()
@@ -240,24 +243,32 @@ fn device_list(panel: Panel) -> impl IntoView {
     };
     let search = Stack::horizontal((
         icon(Glyph::Search, 14., muted),
-        text_input(query)
-            .placeholder("Filter devices…")
-            .on_key_down(
-                Key::Named(NamedKey::Escape),
-                |m| m.is_empty(),
-                move |_| query.set(String::new()),
-            )
-            .style(|s| {
-                s.background(canvas())
-                    .color(ink())
-                    .class(floem::views::PlaceholderTextClass, |s| s.color(faint()))
-                    .border(0.)
-                    .height(29.)
-                    .min_width(0.)
-                    .flex_grow(1_f32)
-                    .padding_horiz(2.)
-                    .font_size(12.)
-            }),
+        dyn_container(
+            || tr("Filter devices…"),
+            move |placeholder| {
+                text_input(query)
+                    .placeholder(placeholder)
+                    .on_key_down(
+                        Key::Named(NamedKey::Escape),
+                        |m| m.is_empty(),
+                        move |_| query.set(String::new()),
+                    )
+                    .style(|s| {
+                        s.background(canvas())
+                            .color(ink())
+                            .class(floem::views::PlaceholderTextClass, |s| {
+                                s.color(faint())
+                            })
+                            .border(0.)
+                            .height(29.)
+                            .min_width(0.)
+                            .flex_grow(1_f32)
+                            .padding_horiz(2.)
+                            .font_size(12.)
+                    })
+            },
+        )
+        .style(|s| s.min_width(0.).flex_grow(1_f32)),
     ))
     .style(move |s| {
         s.width_full()
@@ -282,7 +293,7 @@ fn device_list(panel: Panel) -> impl IntoView {
                 .collect::<Vec<_>>()
         };
         let header = Stack::horizontal((
-            if running { "Running" } else { "Available" }
+            label(if running { "Running" } else { "Available" })
                 .style(|s| s.ui_bold().font_size(11.).color(muted())),
             Label::derived(move || devices().len().to_string())
                 .style(|s| s.font_size(11.).color(faint())),
@@ -325,19 +336,19 @@ fn device_list(panel: Panel) -> impl IntoView {
         }),
         Label::derived(move || {
             if query.with(String::is_empty) {
-                "No devices found"
+                tr("No devices found")
             } else {
-                "No matching devices"
+                tr("No matching devices")
             }
         })
         .style(|s| s.font_size(14.).ui_bold().color(ink())),
         Label::derived(move || {
             if !query.with(String::is_empty) {
-                "Try a different device name or platform."
+                tr("Try a different device name or platform.")
             } else if cfg!(target_os = "macos") {
-                "Create a device in Android Studio or Xcode and refresh."
+                tr("Create a device in Android Studio or Xcode and refresh.")
             } else {
-                "Create a device in Android Studio and refresh."
+                tr("Create a device in Android Studio and refresh.")
             }
         })
         .style(|s| {
@@ -374,12 +385,12 @@ pub fn device_panel(selected: RwSignal<Option<DeviceId>>) -> impl IntoView {
     panel.refresh(None);
     let header = Stack::horizontal((
         icon(Glyph::Device, 17., muted),
-        Label::new("Devices")
+        label("Devices")
             .style(|s| s.ui_bold().font_size(16.).color(ink()).flex_grow(1_f32)),
         Button::new(
             Stack::horizontal((
                 icon(Glyph::Refresh, 12., muted),
-                Label::new("Refresh").style(|s| s.color(muted()).font_size(11.)),
+                label("Refresh").style(|s| s.color(muted()).font_size(11.)),
             ))
             .style(|s| s.items_center().gap(5.)),
         )
@@ -396,13 +407,14 @@ pub fn device_panel(selected: RwSignal<Option<DeviceId>>) -> impl IntoView {
         }),
     ))
     .style(|s| s.width_full().items_center().gap(8.));
-    let message = Label::derived(move || panel.message.get()).style(move |s| {
-        s.font_size(12.)
-            .color(muted())
-            .width_full()
-            .text_overflow(TextOverflow::Wrap)
-            .apply_if(panel.message.with(String::is_empty), |s| s.hide())
-    });
+    let notice = Label::derived(move || panel.message.with(|text| message(text)))
+        .style(move |s| {
+            s.font_size(12.)
+                .color(muted())
+                .width_full()
+                .text_overflow(TextOverflow::Wrap)
+                .apply_if(panel.message.with(String::is_empty), |s| s.hide())
+        });
     let content = dyn_container(
         move || selected.get(),
         move |open| match open {
@@ -416,7 +428,7 @@ pub fn device_panel(selected: RwSignal<Option<DeviceId>>) -> impl IntoView {
             .flex_grow(1_f32)
             .flex_basis(0.)
     });
-    Stack::vertical((header, message, content)).style(|s| {
+    Stack::vertical((header, notice, content)).style(|s| {
         s.width_full()
             .min_height(0.)
             .flex_grow(1_f32)
@@ -453,8 +465,7 @@ fn preview_view(panel: Panel, platform: String, id: String) -> impl IntoView {
         device_icon(kind, true),
         Stack::vertical((
             name,
-            Label::new(platform_label(kind))
-                .style(|s| s.color(muted()).font_size(11.)),
+            label(platform_label(kind)).style(|s| s.color(muted()).font_size(11.)),
         ))
         .style(|s| s.flex_grow(1_f32).min_width(0.).flex_basis(0.).row_gap(2.)),
         button("Change", move || panel.selected.set(None))
@@ -525,7 +536,7 @@ fn preview_view(panel: Panel, platform: String, id: String) -> impl IntoView {
     });
     let placeholder = Stack::vertical((
         icon(Glyph::Device, 30., faint),
-        Label::new("Waiting for screen…").style(|s| s.color(muted()).font_size(12.)),
+        label("Waiting for screen…").style(|s| s.color(muted()).font_size(12.)),
     ))
     .style(move |s| {
         s.items_center()
@@ -565,9 +576,9 @@ fn preview_view(panel: Panel, platform: String, id: String) -> impl IntoView {
         }),
         Label::derived(move || {
             if live.get() {
-                "Live preview"
+                tr("Live preview")
             } else {
-                "Screen preview"
+                tr("Screen preview")
             }
         })
         .style(|s| s.font_size(12.).ui_bold().color(muted()).flex_grow(1_f32)),
@@ -590,14 +601,14 @@ fn preview_view(panel: Panel, platform: String, id: String) -> impl IntoView {
             return if state == "Connecting…" {
                 String::new()
             } else {
-                state
+                message(&state)
             };
         }
         let controls = control_status.get();
         if controls.is_empty() && live.get() {
-            "Click to tap · Drag to swipe".to_owned()
+            tr("Click to tap · Drag to swipe").to_owned()
         } else {
-            controls
+            message(&controls)
         }
     });
     let notice = Label::derived(move || notice.get()).style(move |s| {

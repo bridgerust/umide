@@ -18,6 +18,7 @@ use crate::{
     design::{
         self, Glyph, UiText, accent, faint, icon, ink, mint_wash, muted, raised,
     },
+    i18n::{self, fmt, tr},
     project_files::{self, FileEntry},
     state::Workspace,
 };
@@ -225,7 +226,8 @@ impl Tree {
     fn row(self: &Rc<Self>, row: Row) -> floem::view::AnyView {
         let indent = row.indent();
         if let Row::Notice(_, message) = row {
-            return Label::new(message.clone())
+            let detail = message.clone();
+            return Label::derived(move || i18n::message(&detail))
                 .style(move |s| {
                     s.width_full()
                         .min_width(0)
@@ -235,7 +237,7 @@ impl Tree {
                         .font_size(11)
                         .color(faint())
                 })
-                .tooltip(move || message.clone())
+                .tooltip(move || i18n::message(&message))
                 .into_any();
         }
         let folder = matches!(row, Row::Entry(_, true));
@@ -265,15 +267,17 @@ impl Tree {
         } else {
             Glyph::Code
         };
-        let title = if more {
-            "Show more…".to_owned()
+        let label = if more {
+            i18n::label("Show more…")
         } else {
-            path.file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned()
+            Label::new(
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+            )
         };
-        let label = Label::new(title).style(|s| {
+        let label = label.style(|s| {
             s.min_width(0)
                 .flex_grow(1_f32)
                 .text_ellipsis()
@@ -351,9 +355,12 @@ impl Tree {
             })
             .tooltip(move || {
                 if more {
-                    "Show more entries".into()
+                    tr("Show more entries").into()
                 } else if !folder && (tooltip_tree.dirty)(&path) {
-                    format!("{} · Unsaved changes", path.display())
+                    fmt(
+                        "{path} · Unsaved changes",
+                        &[("path", &path.to_string_lossy())],
+                    )
                 } else {
                     path.display().to_string()
                 }
@@ -402,7 +409,7 @@ pub(crate) fn panel(
                 .hover(|s| s.background(raised()))
                 .focus_visible(|s| s.outline(1).outline_color(accent()))
         })
-        .tooltip(|| "Refresh files");
+        .tooltip(|| tr("Refresh files"));
     let header = Stack::horizontal((
         icon(Glyph::Folder, 14., accent),
         Label::derived(move || name.get()).style(|s| {

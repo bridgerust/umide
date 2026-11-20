@@ -263,6 +263,54 @@ pub enum Status {
 pub struct Snapshot {
     pub status: Status,
     pub output: String,
+    retry_offsets: Vec<usize>,
+}
+
+impl Snapshot {
+    pub fn empty(status: Status) -> Self {
+        Self {
+            status,
+            output: String::new(),
+            retry_offsets: Vec::new(),
+        }
+    }
+
+    pub fn display_output(&self) -> String {
+        if self.retry_offsets.is_empty() {
+            return self.output.clone();
+        }
+        let mut output = String::new();
+        let mut from = 0;
+        for &pos in &self.retry_offsets {
+            output.push_str(&self.output[from..pos]);
+            output.push('\n');
+            output.push_str(crate::i18n::tr(
+                "Port in use. Trying another local port…",
+            ));
+            output.push('\n');
+            from = pos;
+        }
+        output.push_str(&self.output[from..]);
+        output
+    }
+
+    fn append_output(&mut self, chunk: &str) {
+        self.output.push_str(chunk);
+        let mut cut = self.output.len().saturating_sub(OUTPUT_LIMIT);
+        while !self.output.is_char_boundary(cut) {
+            cut += 1;
+        }
+        if cut > 0 {
+            self.output.drain(..cut);
+            self.retry_offsets.retain_mut(|offset| {
+                if *offset < cut {
+                    return false;
+                }
+                *offset -= cut;
+                true
+            });
+        }
+    }
 }
 
 struct State {
@@ -275,10 +323,7 @@ pub struct WebServer(Arc<Mutex<State>>);
 impl WebServer {
     pub fn start(project: WebProject) -> Result<Self, String> {
         let state = Arc::new(Mutex::new(State {
-            snapshot: Snapshot {
-                status: Status::Starting,
-                output: format!("{}\n", project.command_label()),
-            },
+            snapshot: Snapshot::empty(Status::Starting),
             child: None,
         }));
         let worker = Arc::clone(&state);
@@ -353,15 +398,9 @@ fn drain(
                 break;
             }
             let mut state = shared.lock().unwrap();
-            let out = &mut state.snapshot.output;
-            out.push_str(&String::from_utf8_lossy(&chunk[..n]));
-            let mut cut = out.len().saturating_sub(OUTPUT_LIMIT);
-            while !out.is_char_boundary(cut) {
-                cut += 1;
-            }
-            if cut > 0 {
-                out.drain(..cut);
-            }
+            state
+                .snapshot
+                .append_output(&String::from_utf8_lossy(&chunk[..n]));
         }
         let _ = done.send(());
     });
@@ -485,10 +524,8 @@ fn supervise(
         {
             return Err(failure);
         }
-        state
-            .snapshot
-            .output
-            .push_str("\nPort in use. Trying another local port…\n");
+        let position = state.snapshot.output.len();
+        state.snapshot.retry_offsets.push(position);
     }
     unreachable!()
 }
@@ -686,7 +723,7 @@ http.createServer((req, res) => res.end(process.cwd())).listen(
         assert!(
             server
                 .snapshot()
-                .output
+                .display_output()
                 .contains("Trying another local port")
         );
         server.stop();

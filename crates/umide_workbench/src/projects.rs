@@ -12,8 +12,8 @@ use sha2::{Digest, Sha256};
 
 #[path = "app_run.rs"]
 mod app_run;
-pub(crate) use app_run::terminate;
-pub use app_run::{AppRun, device_logs};
+pub use app_run::AppRun;
+pub(crate) use app_run::{ToolOutput, device_logs, terminate};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -36,6 +36,15 @@ pub struct Conversation {
 pub struct Message {
     pub role: String,
     pub text: String,
+}
+
+impl Message {
+    pub(crate) fn notice(text: impl Into<String>) -> Self {
+        Self {
+            role: "system".into(),
+            text: text.into(),
+        }
+    }
 }
 
 pub(crate) fn data_dir() -> Result<PathBuf, String> {
@@ -140,7 +149,7 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
         return Err(if msg.trim().is_empty() {
             format!("Git exited with {status}")
         } else {
-            msg.trim().into()
+            format!("Git: {}", msg.trim())
         });
     }
     let mut text = String::from_utf8_lossy(&bytes).trim_end().to_string();

@@ -16,6 +16,7 @@ use serde::Deserialize;
 use crate::{
     design::{UiText, accent, button, ink, muted, subtle_line, surface},
     file_editor::{Draft, recovery_dir, workspace_drafts_dir},
+    i18n::{self, fmt},
     project_files, projects,
     state::Workspace,
 };
@@ -159,18 +160,23 @@ pub(crate) fn panel(workspace: Workspace) -> impl IntoView {
             records: vec![],
         }));
     });
-    let header = "Drafts with unavailable files"
+    let header = i18n::label("Drafts with unavailable files")
         .style(|s| s.font_size(12).ui_bold().color(ink()));
     let rows = dyn_stack(
         move || scan_result.with(|s| s.records.clone()),
         |r| r.stored.clone(),
         move |record| {
             let relative = record.relative.display().to_string();
-            let title = match record.version {
-                Some(n) => format!("{relative} · Version {n}"),
-                None => relative.clone(),
+            let title_path = relative.clone();
+            let version = record.version;
+            let title = move || match version {
+                Some(n) => fmt(
+                    "{path} · Version {version}",
+                    &[("path", &title_path), ("version", &n.to_string())],
+                ),
+                None => title_path.clone(),
             };
-            let label = Label::new(title.clone())
+            let label = Label::derived(title.clone())
                 .style(|s| {
                     s.min_width(0)
                         .text_ellipsis()
@@ -178,7 +184,7 @@ pub(crate) fn panel(workspace: Workspace) -> impl IntoView {
                         .font_size(12)
                         .color(muted())
                 })
-                .tooltip(move || title.clone());
+                .tooltip(title);
             let copy = button("Copy edits", move || {
                 if copying.get_untracked() {
                     return;
@@ -221,14 +227,16 @@ pub(crate) fn panel(workspace: Workspace) -> impl IntoView {
             .get()
             .or_else(|| scan_result.with(|s| s.problem.clone()))
     };
-    let notice =
-        Label::derived(move || message().unwrap_or_default()).style(move |s| {
-            s.width_full()
-                .font_size(11)
-                .color(accent())
-                .text_overflow(TextOverflow::Wrap)
-                .apply_if(message().is_none(), |s| s.hide())
-        });
+    let notice = Label::derived(move || {
+        message().as_deref().map(i18n::message).unwrap_or_default()
+    })
+    .style(move |s| {
+        s.width_full()
+            .font_size(11)
+            .color(accent())
+            .text_overflow(TextOverflow::Wrap)
+            .apply_if(message().is_none(), |s| s.hide())
+    });
     Stack::vertical((header, scroll, notice)).style(move |s| {
         s.width_full()
             .min_width(0)

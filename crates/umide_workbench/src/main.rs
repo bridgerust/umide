@@ -9,6 +9,7 @@ mod external_editor;
 mod file_editor;
 mod file_explorer;
 mod files_panel;
+mod i18n;
 mod navigation;
 mod onboarding;
 mod orphan_drafts;
@@ -37,13 +38,19 @@ use review::changes_view;
 use state::{Tab, Workbench};
 
 use design::*;
+use i18n::{label, tr};
 
 fn choose_project(wb: Workbench) {
-    floem::open_file(FileDialogOptions::new().select_directories(), move |info| {
-        if let Some(path) = info.and_then(|x| x.path.into_iter().next()) {
-            wb.open(&path);
-        }
-    });
+    floem::open_file(
+        FileDialogOptions::new()
+            .title(tr("Open a project"))
+            .select_directories(),
+        move |info| {
+            if let Some(path) = info.and_then(|x| x.path.into_iter().next()) {
+                wb.open(&path);
+            }
+        },
+    );
 }
 
 fn open_folder(path: &std::path::Path) -> Result<(), String> {
@@ -83,13 +90,13 @@ fn output_view(wb: Workbench, tab: Tab) -> impl IntoView {
                 t.as_ref()
                     .map(|(platform, id)| format!("{platform}  /  {id}"))
                     .unwrap_or_else(|| {
-                        "Select a device to inspect its recent activity.".into()
+                        tr("Select a device to inspect its recent activity.").into()
                     })
             })
         } else {
             let label = wb.build_label.get();
             if label.is_empty() {
-                "Run your app on a selected device to follow the build.".into()
+                tr("Run your app on a selected device to follow the build.").into()
             } else {
                 label
             }
@@ -102,7 +109,7 @@ fn output_view(wb: Workbench, tab: Tab) -> impl IntoView {
             .text_overflow(TextOverflow::Wrap)
     });
     let header = Stack::vertical((
-        title.style(|s| s.color(ink()).font_size(25).ui_bold()),
+        label(title).style(|s| s.color(ink()).font_size(25).ui_bold()),
         context,
     ))
     .style(|s| s.width_full().gap(4));
@@ -119,7 +126,7 @@ fn output_view(wb: Workbench, tab: Tab) -> impl IntoView {
         );
     let bar = Stack::horizontal((
         icon(Glyph::Terminal, 15., faint),
-        "Console".style(|s| s.color(muted()).font_size(12)),
+        label("Console").style(|s| s.color(muted()).font_size(12)),
         Empty::new().style(|s| s.flex_grow(1_f32)),
         log_action,
         build_action,
@@ -136,11 +143,11 @@ fn output_view(wb: Workbench, tab: Tab) -> impl IntoView {
     });
     let console = Label::derived(move || {
         if is_logs {
-            wb.logs.get()
+            wb.logs.with(|output| output.display())
         } else {
-            let output = wb.output.get();
+            let output = wb.output.with(|output| output.display());
             if output.is_empty() {
-                "Waiting for build…".into()
+                tr("Waiting for build…").into()
             } else {
                 output
             }
@@ -219,7 +226,7 @@ fn workspace(
     let tab = move |name, glyph, t| {
         let contents = Stack::horizontal((
             icon(glyph, 14., muted),
-            Label::new(name).style(move |s| {
+            label(name).style(move |s| {
                 s.apply_if(tight.get() && wb.tab.get() != t, |s| s.hide())
             }),
         ))
@@ -248,7 +255,7 @@ fn workspace(
                     .hover(|s| s.background(panel()))
                     .focus_visible(|s| s.outline(2).outline_color(accent()))
             })
-            .tooltip(move || name)
+            .tooltip(move || tr(name))
     };
     let panel_toggle = move |mode: SidePanel, glyph, name: &'static str| {
         let content = Stack::horizontal((
@@ -259,7 +266,8 @@ fn workspace(
                     muted()
                 }
             }),
-            name.style(move |s| s.font_size(11).apply_if(tight.get(), |s| s.hide())),
+            label(name)
+                .style(move |s| s.font_size(11).apply_if(tight.get(), |s| s.hide())),
         ))
         .style(|s| s.items_center().gap(4));
         let toggle = Button::new(content)
@@ -273,19 +281,14 @@ fn workspace(
             focus.files_button.set(Some(toggle.id()));
         }
         toggle.tooltip(move || {
-            format!(
-                "{} {}",
-                if side_panel.get() == Some(mode) {
-                    "Hide"
-                } else {
-                    "Show"
-                },
-                match mode {
-                    SidePanel::Devices => "mobile preview",
-                    SidePanel::Web => "web preview",
-                    SidePanel::Files => "project files",
-                }
-            )
+            tr(match (mode, side_panel.get() == Some(mode)) {
+                (SidePanel::Devices, false) => "Show mobile preview",
+                (SidePanel::Devices, true) => "Hide mobile preview",
+                (SidePanel::Web, false) => "Show web preview",
+                (SidePanel::Web, true) => "Hide web preview",
+                (SidePanel::Files, false) => "Show project files",
+                (SidePanel::Files, true) => "Hide project files",
+            })
         })
     };
     let terminal_toggle = Button::new(
@@ -297,7 +300,7 @@ fn workspace(
                     muted()
                 }
             }),
-            "Terminal"
+            label("Terminal")
                 .style(move |s| s.font_size(11).apply_if(tight.get(), |s| s.hide())),
         ))
         .style(|s| s.items_center().gap(4)),
@@ -312,9 +315,9 @@ fn workspace(
     .style(move |s| toolbar_toggle_style(s, dock.visible.get()))
     .tooltip(move || {
         if dock.visible.get() {
-            "Hide terminal"
+            tr("Hide terminal")
         } else {
-            "Show terminal"
+            tr("Show terminal")
         }
     });
     let tabs = Stack::horizontal((
@@ -359,7 +362,7 @@ fn workspace(
                 },
             )
         }),
-        Label::derived(move || wb.status.get()).style(|s| {
+        Label::derived(move || wb.status.display()).style(|s| {
             s.min_width(0)
                 .width_full()
                 .text_ellipsis()
@@ -379,7 +382,7 @@ fn workspace(
     Stack::vertical((tabs, body, dock.view(wb, terminals, hide_terminal), status))
         .on_resize(move |rect| {
             dock.window_resized(rect.height());
-            let cramped = rect.width() < 600.;
+            let cramped = rect.width() < 690.;
             if tight.get_untracked() != cramped {
                 tight.set(cramped);
             }
@@ -406,9 +409,11 @@ fn inspector(wb: Workbench, narrow: RwSignal<bool>) -> impl IntoView {
                 action_button(Glyph::Stop, "Stop build", move || wb.stop_app())
                     .into_any()
             } else {
-                let content =
-                    Stack::horizontal((icon(Glyph::Play, 14., accent), "Run app"))
-                        .style(|s| s.items_center().gap(7));
+                let content = Stack::horizontal((
+                    icon(Glyph::Play, 14., accent),
+                    label("Run app"),
+                ))
+                .style(|s| s.items_center().gap(7));
                 Button::new(content)
                     .action(move || wb.launch())
                     .style(move |s| {
@@ -464,6 +469,7 @@ fn app(
     preference: appearance::Preference,
 ) -> impl IntoView {
     let appearance = appearance::Appearance::install(preference);
+    i18n::install();
     let wb = Workbench::new();
     if let Some(project) = initial.or_else(projects::last_project) {
         wb.open(&project);

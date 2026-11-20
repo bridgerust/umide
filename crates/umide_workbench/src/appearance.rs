@@ -1,10 +1,15 @@
 //! Workbench appearance follows the operating system unless the user pins a theme.
 use std::time::Duration;
 
-use floem::{action, menu::Menu, prelude::*, reactive::Context, window::Theme};
+use floem::{action, prelude::*, reactive::Context, window::Theme};
 use serde::{Deserialize, Serialize};
 
-use crate::{design::*, projects, state::Workbench};
+use crate::{
+    design::*,
+    i18n::{self, tr},
+    projects,
+    state::Workbench,
+};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -99,18 +104,6 @@ impl Appearance {
             wb.status.set(error);
         }
     }
-
-    fn menu(self, wb: Workbench) -> Menu {
-        let selected = self.preference.get_untracked();
-        [Preference::System, Preference::Light, Preference::Dark]
-            .into_iter()
-            .fold(Menu::new(), |menu, choice| {
-                menu.item(choice.name(), |item| {
-                    item.checked(selected == choice)
-                        .action(move || self.choose(choice, wb))
-                })
-            })
-    }
 }
 
 pub fn is_light() -> bool {
@@ -122,9 +115,11 @@ pub fn picker(wb: Workbench, compact: bool) -> impl IntoView {
         Context::get::<Appearance>().expect("window appearance is installed");
     let symbol = svg(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><path fill="currentColor" stroke="none" d="M12 3.5a8.5 8.5 0 0 1 0 17z"/></svg>"#)
         .style(|s| s.size(16, 16).color(muted()));
+    let expanded = RwSignal::new(false);
     let label = Stack::horizontal((
-        "Appearance".style(|s| s.color(ink()).font_size(12).flex_grow(1_f32)),
-        Label::derived(move || appearance.preference.get().name())
+        i18n::label("Appearance")
+            .style(|s| s.color(ink()).font_size(12).flex_grow(1_f32)),
+        Label::derived(move || tr(appearance.preference.get().name()))
             .style(|s| s.color(muted()).font_size(11)),
         icon(Glyph::Chevron, 10., faint),
     ))
@@ -141,14 +136,8 @@ pub fn picker(wb: Workbench, compact: bool) -> impl IntoView {
             .apply_if(compact, |s| s.justify_center())
     }));
     let id = control.id();
-    control
-        .action(move || {
-            let bounds = id.get_layout_rect();
-            action::show_context_menu(
-                appearance.menu(wb),
-                Some((bounds.x0, bounds.y1).into()),
-            );
-        })
+    let control = control
+        .action(move || expanded.update(|open| *open = !*open))
         .style(move |s| {
             s.width_full()
                 .height(30)
@@ -160,8 +149,67 @@ pub fn picker(wb: Workbench, compact: bool) -> impl IntoView {
                 .focus_visible(|s| s.outline(2).outline_color(accent()))
         })
         .tooltip(move || {
-            format!("Appearance · {}", appearance.preference.get().name())
-        })
+            i18n::fmt(
+                "Appearance · {theme}",
+                &[("theme", tr(appearance.preference.get().name()))],
+            )
+        });
+    let choices = Stack::vertical_from_iter(
+        [Preference::System, Preference::Light, Preference::Dark].map(
+            move |choice| {
+                let selected = move || appearance.preference.get() == choice;
+                let choice_label = if compact {
+                    Label::new(match choice {
+                        Preference::System => "◐",
+                        Preference::Light => "☀",
+                        Preference::Dark => "☾",
+                    })
+                } else {
+                    i18n::label(choice.name())
+                };
+                Button::new(choice_label)
+                    .action(move || {
+                        expanded.set(false);
+                        appearance.choose(choice, wb);
+                        id.request_focus();
+                    })
+                    .style(move |s| {
+                        s.width_full()
+                            .height(25)
+                            .font_size(if compact { 15 } else { 12 })
+                            .border(0)
+                            .border_radius(5)
+                            .background(if selected() {
+                                mint_wash()
+                            } else {
+                                rail()
+                            })
+                            .color(if selected() { accent() } else { muted() })
+                            .apply_if(!compact, |s| {
+                                s.padding_left(30).justify_start()
+                            })
+                            .hover(|s| s.background(surface()))
+                            .focus_visible(|s| s.outline(1).outline_color(accent()))
+                    })
+                    .tooltip(move || i18n::label(choice.name()))
+            },
+        ),
+    )
+    .style(move |s| {
+        s.width_full()
+            .gap(2)
+            .apply_if(!expanded.get(), |s| s.hide())
+    });
+    Stack::vertical((control, choices))
+        .style(|s| s.width_full().gap(2))
+        .on_key_down(
+            Key::Named(NamedKey::Escape),
+            |_| true,
+            move |_| {
+                expanded.set(false);
+                id.request_focus();
+            },
+        )
 }
 
 #[cfg(test)]

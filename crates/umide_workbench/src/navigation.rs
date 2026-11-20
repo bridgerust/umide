@@ -1,6 +1,11 @@
 use floem::prelude::*;
 
-use crate::{choose_project, design::*, state::Workbench};
+use crate::{
+    choose_project,
+    design::*,
+    i18n::{self, tr},
+    state::Workbench,
+};
 
 fn project_picker(wb: Workbench, compact: bool) -> impl IntoView {
     let name = Label::derived(move || {
@@ -8,7 +13,7 @@ fn project_picker(wb: Workbench, compact: bool) -> impl IntoView {
             root.as_ref()
                 .and_then(|p| p.file_name())
                 .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "Open project…".to_owned())
+                .unwrap_or_else(|| tr("Open project…").to_owned())
         })
     })
     .style(|s| {
@@ -19,7 +24,7 @@ fn project_picker(wb: Workbench, compact: bool) -> impl IntoView {
             .text_ellipsis()
     });
     let title = Stack::vertical((
-        "PROJECT".style(|s| s.color(faint()).font_size(10).ui_bold()),
+        i18n::label("PROJECT").style(|s| s.color(faint()).font_size(10).ui_bold()),
         name,
     ))
     .style(move |s| {
@@ -57,8 +62,13 @@ fn project_picker(wb: Workbench, compact: bool) -> impl IntoView {
         .tooltip(move || {
             wb.root.with_untracked(|r| {
                 r.as_ref()
-                    .map(|p| format!("Switch project · {}", p.display()))
-                    .unwrap_or_else(|| "Open a project folder".into())
+                    .map(|p| {
+                        i18n::fmt(
+                            "Switch project · {path}",
+                            &[("path", &p.display().to_string())],
+                        )
+                    })
+                    .unwrap_or_else(|| tr("Open a project folder").into())
             })
         })
 }
@@ -72,7 +82,7 @@ fn task_row(wb: Workbench, index: usize, compact: bool) -> impl IntoView {
     let glyph = if is_claude {
         Glyph::Claude
     } else {
-        Glyph::Terminal
+        Glyph::Codex
     };
     let provider = if is_claude { "Claude Code" } else { "Codex" };
     let color = move || if is_claude { peach() } else { lilac() };
@@ -107,7 +117,7 @@ fn task_row(wb: Workbench, index: usize, compact: bool) -> impl IntoView {
         if badge.is_empty() {
             provider.to_string()
         } else {
-            format!("{provider} · {badge}")
+            format!("{provider} · {}", tr(badge))
         }
     })
     .style(move |s| {
@@ -198,7 +208,7 @@ pub fn sidebar(
                     accent()
                 }
             }),
-            "New conversation".style(move |s| {
+            i18n::label("New conversation").style(move |s| {
                 s.ui_bold().font_size(12).apply_if(compact, |s| s.hide())
             }),
         ))
@@ -223,24 +233,19 @@ pub fn sidebar(
                     .border_color(subtle_line())
             })
     })
-    .tooltip(|| "New conversation");
-    let field =
-        text_input(filter)
-            .placeholder("Find conversation…")
-            .style(move |s| {
-                s.width_full()
-                    .height(30)
-                    .color(ink())
-                    .padding_horiz(8)
-                    .background(panel())
-                    .border(1)
-                    .border_color(line())
-                    .border_radius(5)
-                    .font_size(12)
-                    .class(floem::views::PlaceholderTextClass, |s| s.color(faint()))
-                    .focus(|s| s.border_color(accent()))
-                    .apply_if(compact || !searching.get(), |s| s.hide())
-            });
+    .tooltip(|| i18n::label("New conversation"));
+    let field = text_input(filter).style(move |s| {
+        s.width_full()
+            .height(30)
+            .color(ink())
+            .padding_horiz(8)
+            .background(panel())
+            .border(1)
+            .border_color(line())
+            .border_radius(5)
+            .font_size(12)
+            .focus(|s| s.border_color(accent()))
+    });
     let field_id = field.id();
     let search = Button::new(icon(Glyph::Search, 14., muted))
         .action(move || {
@@ -272,13 +277,29 @@ pub fn sidebar(
             search_id.request_focus();
         },
     );
+    let hint = i18n::label("Find conversation…").style(move |s| {
+        s.absolute()
+            .inset_left(9)
+            .inset_right(6)
+            .text_ellipsis()
+            .pointer_events_none()
+            .font_size(12)
+            .color(faint())
+            .apply_if(!filter.with(String::is_empty), |s| s.hide())
+    });
+    let field = Stack::horizontal((field, hint)).style(move |s| {
+        s.width_full()
+            .items_center()
+            .apply_if(compact || !searching.get(), |s| s.hide())
+    });
     let section = Stack::horizontal((
-        "Conversations".style(|s| s.color(muted()).font_size(12).ui_bold()),
+        i18n::label("Conversations")
+            .style(|s| s.color(muted()).font_size(12).ui_bold()),
         Label::derived(move || {
             wb.history.with(|h| h.conversations.len().to_string())
         })
         .style(|s| s.color(faint()).font_size(11).flex_grow(1_f32)),
-        search.tooltip(|| "Find a conversation"),
+        search.tooltip(|| i18n::label("Find a conversation")),
     ))
     .style(move |s| {
         s.width_full()
@@ -307,7 +328,7 @@ pub fn sidebar(
         move |(i, _)| task_row(wb, i, compact),
     )
     .style(|s| s.flex_col().gap(3).width_full());
-    let no_match = Label::new("No matches").style(move |s| {
+    let no_match = i18n::label("No matches").style(move |s| {
         s.color(faint()).font_size(12).padding(6).apply_if(
             compact || filter.with(String::is_empty) || !indexes().is_empty(),
             |s| s.hide(),
@@ -316,7 +337,7 @@ pub fn sidebar(
     let collapse = Button::new(
         Stack::horizontal((
             icon(Glyph::Rail, 15., muted),
-            "Collapse sidebar".style(move |s| {
+            i18n::label("Collapse sidebar").style(move |s| {
                 s.font_size(11)
                     .color(muted())
                     .apply_if(compact, |s| s.hide())
@@ -337,9 +358,9 @@ pub fn sidebar(
     })
     .tooltip(move || {
         if compact {
-            "Expand sidebar"
+            tr("Expand sidebar")
         } else {
-            "Collapse sidebar"
+            tr("Collapse sidebar")
         }
     });
     Stack::vertical((
@@ -359,7 +380,7 @@ pub fn sidebar(
         Button::new(
             Stack::horizontal((
                 icon(Glyph::Terminal, 15., muted),
-                "Agent setup".style(move |s| {
+                i18n::label("Agent setup").style(move |s| {
                     s.font_size(12).color(ink()).apply_if(compact, |s| s.hide())
                 }),
             ))
@@ -376,7 +397,8 @@ pub fn sidebar(
                 .hover(|s| s.background(surface()))
                 .focus_visible(|s| s.outline(2).outline_color(accent()))
         })
-        .tooltip(|| "Set up coding agents"),
+        .tooltip(|| i18n::label("Set up coding agents")),
+        crate::i18n::picker(compact),
         crate::appearance::picker(wb, compact),
         collapse,
     ))

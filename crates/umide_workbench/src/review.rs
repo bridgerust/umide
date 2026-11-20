@@ -1,5 +1,10 @@
 use crate::{
-    choose_project, design::*, open_folder, projects, state::Workbench, worktree,
+    choose_project,
+    design::*,
+    i18n::{self, tr},
+    open_folder, projects,
+    state::Workbench,
+    worktree,
 };
 use floem::{prelude::*, style::TextOverflow};
 const LINES_PER_PAGE: usize = 200;
@@ -103,7 +108,12 @@ fn patch_line(row: &Row) -> impl IntoView + use<> {
                 .justify_end()
         })
     };
-    let label = Label::new(row.text.clone()).style(move |s| {
+    let label = if kind == Line::File && row.text == "Untracked files" {
+        i18n::label("Untracked files")
+    } else {
+        Label::new(row.text.clone())
+    }
+    .style(move |s| {
         s.color(foreground())
             .font_size(12)
             .padding_horiz(9)
@@ -136,10 +146,12 @@ fn patch(wb: Workbench, text: String) -> impl IntoView {
                 });
         return Stack::vertical((
             icon(symbol, 23., color),
-            Label::new(if empty {
-                "Open a project to inspect changes.".into()
-            } else {
-                text
+            Label::derived(move || {
+                if empty {
+                    tr("Open a project to inspect changes.").into()
+                } else {
+                    i18n::message(&text)
+                }
             })
             .style(|s| {
                 s.color(muted())
@@ -158,7 +170,7 @@ fn patch(wb: Workbench, text: String) -> impl IntoView {
     let removed = parsed.iter().filter(|r| r.kind == Line::Removed).count();
     let summary = Stack::horizontal((
         icon(Glyph::Diff, 14., faint),
-        "Unified diff".style(|s| s.font_size(12).color(muted())),
+        i18n::label("Unified diff").style(|s| s.font_size(12).color(muted())),
         Empty::new().style(|s| s.flex_grow(1_f32)),
         format!("+{added}")
             .style(|s| s.color(accent()).font_family(MONO.to_owned()).font_size(11)),
@@ -183,8 +195,16 @@ fn patch(wb: Workbench, text: String) -> impl IntoView {
     let page = RwSignal::new(0usize);
     let page_count = count.div_ceil(LINES_PER_PAGE);
     let pages = Stack::horizontal((
-        Label::derived(move || format!("Page {} of {page_count}", page.get() + 1))
-            .style(|s| s.color(muted()).font_size(12)),
+        Label::derived(move || {
+            i18n::fmt(
+                "Page {page} of {total}",
+                &[
+                    ("page", &(page.get() + 1).to_string()),
+                    ("total", &page_count.to_string()),
+                ],
+            )
+        })
+        .style(|s| s.color(muted()).font_size(12)),
         Empty::new().style(|s| s.flex_grow(1_f32)),
         crate::button("Previous", move || {
             page.update(|p| *p = p.saturating_sub(1))
@@ -280,14 +300,14 @@ pub fn changes_view(wb: Workbench) -> impl IntoView {
     });
     let subtitle = Label::derived(move || {
         if wb.isolated.get() && wb.current.get().is_some() {
-            "Changes since this task started"
+            tr("Changes since this task started")
         } else {
-            "Working tree and staged files"
+            tr("Working tree and staged files")
         }
     })
     .style(|s| s.font_size(12).color(faint()));
     let header = Stack::vertical((
-        "Changes".style(|s| s.font_size(25).ui_bold().color(ink())),
+        i18n::label("Changes").style(|s| s.font_size(25).ui_bold().color(ink())),
         subtitle,
         Stack::horizontal((
             open,

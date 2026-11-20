@@ -24,10 +24,10 @@ impl State {
                 self.request(io, id, method, p)?;
             } else {
                 if let Some(error) = msg.get("error") {
-                    return Err(error["message"]
-                        .as_str()
-                        .unwrap_or("Codex rejected the request.")
-                        .into());
+                    return Ok(Some(match error["message"].as_str() {
+                        Some(message) => Event::ProviderError(message.into()),
+                        None => Event::Error("Codex rejected the request.".into()),
+                    }));
                 }
                 match id.as_u64() {
                     Some(1) => {
@@ -81,7 +81,7 @@ impl State {
             }
             "item/started" if item["type"] == "commandExecution" => {
                 if let Some(cmd) = item["command"].as_str() {
-                    io.event(Event::Activity(cmd.into()));
+                    io.event(Event::Command(cmd.into()));
                 }
             }
             "item/completed" if item["type"] == "fileChange" => {
@@ -94,12 +94,15 @@ impl State {
                 let end = match p.pointer("/turn/status").and_then(Value::as_str) {
                     Some("completed") => Event::Done,
                     Some("interrupted") => Event::Cancelled,
-                    _ => Event::Error(
-                        p.pointer("/turn/error/message")
-                            .and_then(Value::as_str)
-                            .unwrap_or("Codex failed to complete the turn.")
-                            .into(),
-                    ),
+                    _ => match p
+                        .pointer("/turn/error/message")
+                        .and_then(Value::as_str)
+                    {
+                        Some(message) => Event::ProviderError(message.into()),
+                        None => {
+                            Event::Error("Codex failed to complete the turn.".into())
+                        }
+                    },
                 };
                 return Ok(Some(end));
             }

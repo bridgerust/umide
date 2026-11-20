@@ -8214,6 +8214,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sys-locale",
  "tempfile",
  "tokio",
  "umide_emulator",

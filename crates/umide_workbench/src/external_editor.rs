@@ -82,7 +82,11 @@ pub(crate) fn launch_custom(
         Command::new(application)
     };
     cmd.current_dir(&root).arg(editor_path(&file));
-    start(cmd, "the selected editor")
+    let app_name = application
+        .file_stem()
+        .unwrap_or(application.as_os_str())
+        .to_string_lossy();
+    start(cmd, &app_name)
 }
 
 fn editor_command(

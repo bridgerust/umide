@@ -27,10 +27,12 @@ pub enum Event {
     Session(String),
     Text(String),
     Activity(String),
+    Command(String),
     Approval { id: String, description: String },
     Done,
     Cancelled,
     Error(String),
+    ProviderError(String),
 }
 
 pub struct Run {
@@ -278,21 +280,18 @@ fn spawn(
             }
         }
         stop_process(&mut child);
-        let end = match result {
-            Ok(event) => event,
-            Err(e) => {
-                // Descendants launched by a tool can keep the pipe open after the CLI exits.
-                // Never make ending the UI turn depend on a detached writer.
-                let diagnostics = diagnostics_rx
-                    .recv_timeout(std::time::Duration::from_millis(200))
-                    .unwrap_or_default();
-                Event::Error(if diagnostics.is_empty() {
-                    e
-                } else {
-                    format!("{e}\n{diagnostics}")
-                })
+        let mut end = result.unwrap_or_else(Event::Error);
+        if let Event::Error(detail) | Event::ProviderError(detail) = &mut end {
+            // Descendants launched by a tool can keep the pipe open after the CLI exits.
+            // Never make ending the UI turn depend on a detached writer.
+            let diagnostics = diagnostics_rx
+                .recv_timeout(std::time::Duration::from_millis(200))
+                .unwrap_or_default();
+            if !diagnostics.is_empty() {
+                detail.push('\n');
+                detail.push_str(&diagnostics);
             }
-        };
+        }
         let _ = events.send(end);
     });
     Ok(Run {
@@ -463,6 +462,9 @@ mod tests {
             vec![
                 frame(json!({"id":1,"result":{}})),
                 frame(json!({"id":2,"result":{"thread":{"id":"t"}}})),
+                frame(
+                    json!({"method":"item/started","params":{"threadId":"t","item":{"type":"commandExecution","command":"Build"}}}),
+                ),
                 ask("other"),
                 ask("t"),
                 Input::Decision("6".into(), false),
@@ -486,6 +488,7 @@ mod tests {
             events,
             vec![
                 Event::Session("t".into()),
+                Event::Command("Build".into()),
                 Event::Approval {
                     id: "6".into(),
                     description: "Allow command\ncargo check".into()
@@ -535,6 +538,19 @@ mod tests {
                 Event::Done
             ]
         );
+    }
+
+    #[test]
+    fn provider_errors_are_distinct_from_translatable_statuses() {
+        let codex = Input::Frame(json!({"id":1,"error":{"message":"Build"}}));
+        let claude =
+            Input::Frame(json!({"type":"result","is_error":true,"result":"Build"}));
+        for (provider, frame) in
+            [(Provider::Codex, codex), (Provider::Claude, claude)]
+        {
+            let (events, _) = exercise(provider, vec![frame]);
+            assert_eq!(events, [Event::ProviderError("Build".into())]);
+        }
     }
 
     #[test]

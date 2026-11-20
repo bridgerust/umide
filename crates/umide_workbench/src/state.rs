@@ -23,7 +23,7 @@ use umide_workbench_agents::{self as agents, Event, Provider, Run};
 
 use crate::{
     devices,
-    projects::{self, AppRun, Conversation, History, Message},
+    projects::{self, AppRun, Conversation, History, Message, ToolOutput},
     worktree,
 };
 
@@ -52,7 +52,7 @@ enum Stage {
 struct ActiveTurn {
     stage: RefCell<Stage>,
     cancelled: Arc<AtomicBool>,
-    status: String,
+    status: ToolOutput,
     approvals: Vec<(String, String)>,
     worktree_id: Option<String>,
 }
@@ -95,7 +95,10 @@ impl ActiveTurn {
                 Ok(event) => {
                     let final_event = matches!(
                         event,
-                        Event::Done | Event::Cancelled | Event::Error(_)
+                        Event::Done
+                            | Event::Cancelled
+                            | Event::Error(_)
+                            | Event::ProviderError(_)
                     );
                     events.push(event);
                     if final_event {
@@ -147,6 +150,19 @@ pub enum Tab {
 }
 
 #[derive(Clone, Copy)]
+pub(crate) struct WorkbenchStatus(RwSignal<ToolOutput>);
+
+impl WorkbenchStatus {
+    pub(crate) fn set(self, notice: String) {
+        self.0.set(ToolOutput::notice(notice));
+    }
+
+    pub(crate) fn display(self) -> String {
+        self.0.with(ToolOutput::display)
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct Workbench {
     scope: Scope,
     pub root: RwSignal<Option<PathBuf>>,
@@ -157,10 +173,10 @@ pub struct Workbench {
     pub target: RwSignal<Option<Target>>,
     pub attach: RwSignal<bool>,
     pub tab: RwSignal<Tab>,
-    pub status: RwSignal<String>,
+    pub(crate) status: WorkbenchStatus,
     pub changes: RwSignal<String>,
-    pub logs: RwSignal<String>,
-    pub output: RwSignal<String>,
+    pub(crate) logs: RwSignal<projects::ToolOutput>,
+    pub(crate) output: RwSignal<projects::ToolOutput>,
     pub build_label: RwSignal<String>,
     pub build_owner: RwSignal<Option<usize>>,
     pub busy: RwSignal<bool>,
@@ -187,7 +203,7 @@ impl Workbench {
         Self {
             scope: Scope::current(),
             root: RwSignal::new(None),
-            logs: RwSignal::new(String::new()),
+            logs: RwSignal::new(projects::ToolOutput::default()),
             log_seq: RwSignal::new(0),
             stop_build_requested: RwSignal::new(false),
             history: RwSignal::new(History::default()),
@@ -197,9 +213,9 @@ impl Workbench {
             target: RwSignal::new(None),
             attach: RwSignal::new(false),
             tab: RwSignal::new(Tab::Chat),
-            status: RwSignal::new(String::from("Ready")),
+            status: WorkbenchStatus(RwSignal::new(ToolOutput::notice("Ready"))),
             changes: RwSignal::new(String::new()),
-            output: RwSignal::new(String::new()),
+            output: RwSignal::new(projects::ToolOutput::default()),
             build_label: RwSignal::new(String::new()),
             build_owner: RwSignal::new(None),
             busy: RwSignal::new(false),
@@ -239,7 +255,7 @@ impl Workbench {
                     self.select(index);
                 }
                 self.changes.set(String::new());
-                self.output.set(String::new());
+                self.output.set(projects::ToolOutput::default());
                 self.build_label.set(String::new());
                 self.build_owner.set(None);
                 self.status.set("Ready".into());
@@ -339,9 +355,10 @@ impl Workbench {
                 .map(|t| (t.status.clone(), t.approvals.clone()))
         });
         self.busy.set(info.is_some());
-        let (status, approvals) = info.unwrap_or_else(|| ("Ready".into(), vec![]));
+        let (status, approvals) =
+            info.unwrap_or_else(|| (ToolOutput::notice("Ready"), vec![]));
         self.approvals.set(approvals);
-        self.status.set(status);
+        self.status.0.set(status);
     }
 
     fn persist(self) -> Result<(), String> {
@@ -505,7 +522,10 @@ impl Workbench {
                     stage: RefCell::new(Stage::Preparing(rx)),
                     cancelled: cancelled.clone(),
                     worktree_id: key.clone(),
-                    status: format!("Starting {}", provider_name(p)),
+                    status: ToolOutput::notice(format!(
+                        "Starting {}",
+                        provider_name(p)
+                    )),
                     approvals: vec![],
                 },
             );
@@ -572,7 +592,7 @@ impl Workbench {
                 // Failure to reopen an existing checkout must preserve its key.
                 self.history
                     .update(|h| h.conversations[index].worktree_id = None);
-                self.finish(index, Some(e));
+                self.finish(index, Some(Message::notice(e)));
             }
         }
         if self.active.with_untracked(|a| a.contains_key(&index)) {
@@ -593,12 +613,21 @@ impl Workbench {
             match ev {
                 Event::Text(s) => text.push_str(&s),
                 Event::Session(id) => session = Some(id),
-                Event::Activity(s) => activity = Some(s),
+                Event::Activity(s) => activity = Some(ToolOutput::notice(s)),
+                Event::Command(s) => activity = Some(ToolOutput::verbatim(s)),
                 Event::Approval { id, description } => {
                     requests.push((id, description))
                 }
-                Event::Error(e) => terminal = Some(Some(e)),
-                Event::Cancelled => terminal = Some(Some("Turn stopped".into())),
+                Event::Error(e) => terminal = Some(Some(Message::notice(e))),
+                Event::ProviderError(text) => {
+                    terminal = Some(Some(Message {
+                        role: "provider_error".into(),
+                        text,
+                    }))
+                }
+                Event::Cancelled => {
+                    terminal = Some(Some(Message::notice("Turn stopped")))
+                }
                 Event::Done => terminal = Some(None),
             }
         }
@@ -624,7 +653,7 @@ impl Workbench {
                 if let Some(t) = a.get_mut(&index) {
                     t.approvals.extend(requests);
                     if !t.approvals.is_empty() {
-                        t.status = "Waiting for permission".into();
+                        t.status = ToolOutput::notice("Waiting for permission");
                     } else if let Some(s) = activity {
                         t.status = s;
                     }
@@ -642,7 +671,7 @@ impl Workbench {
         }
     }
 
-    fn finish(self, index: usize, issue: Option<String>) {
+    fn finish(self, index: usize, issue: Option<Message>) {
         self.active.update(|a| {
             a.remove(&index);
         });
@@ -655,16 +684,17 @@ impl Workbench {
                 messages.pop();
             }
             if let Some(e) = &issue {
-                messages.push(Message {
-                    role: "system".into(),
-                    text: e.clone(),
-                });
+                messages.push(e.clone());
             }
         });
         if self.current.get_untracked() == Some(index) {
             self.sync_selection();
             if let Some(e) = issue {
-                self.status.set(e);
+                self.status.0.set(if e.role == "provider_error" {
+                    ToolOutput::verbatim(e.text)
+                } else {
+                    ToolOutput::notice(e.text)
+                });
             }
             if self.tab.get_untracked() == Tab::Changes {
                 self.show_diff();
@@ -680,7 +710,7 @@ impl Workbench {
             self.active.update(|a| {
                 if let Some(t) = a.get_mut(&i) {
                     t.cancel();
-                    t.status = "Stopping agent…".into();
+                    t.status = ToolOutput::notice("Stopping agent…");
                 }
             });
             self.sync_selection();
@@ -699,7 +729,7 @@ impl Workbench {
                 run.control.decide(id, allow);
                 t.approvals.remove(0);
                 if t.approvals.is_empty() {
-                    t.status = "Working…".into();
+                    t.status = ToolOutput::notice("Working…");
                 }
             }
         });
@@ -740,20 +770,17 @@ impl Workbench {
         let next = self.log_seq.get_untracked().wrapping_add(1);
         self.log_seq.set(next);
         let Some((platform, id)) = self.target.get_untracked() else {
-            self.logs
-                .set("Select a running device to read its logs.".into());
+            self.logs.set(projects::ToolOutput::notice(
+                "Select a running device to read its logs.",
+            ));
             return;
         };
-        self.logs.set("Reading device logs…".into());
+        self.logs
+            .set(projects::ToolOutput::notice("Reading device logs…"));
         let receive =
-            create_ext_action(self.scope, move |result: Result<String, String>| {
+            create_ext_action(self.scope, move |result: projects::ToolOutput| {
                 if next == self.log_seq.get_untracked() {
-                    self.logs.set(match result {
-                        Ok(logs) if logs.trim().is_empty() => {
-                            "No recent messages on this device.".into()
-                        }
-                        Ok(logs) | Err(logs) => logs,
-                    });
+                    self.logs.set(result);
                 }
             });
         thread::spawn(move || receive(projects::device_logs(&platform, &id)));
@@ -781,13 +808,15 @@ impl Workbench {
         let workspace = match self.selected_workspace() {
             Ok(ws) => ws,
             Err(e) => {
-                self.output.set(e);
+                self.output.set(projects::ToolOutput::notice(e));
                 return;
             }
         };
         self.launching.set(true);
         self.stop_build_requested.set(false);
-        self.output.set(format!("Starting build on {id}…"));
+        self.output.set(projects::ToolOutput::notice(format!(
+            "Starting build on {id}…"
+        )));
         let send =
             create_ext_action(self.scope, move |result: Result<AppRun, String>| {
                 match result {
@@ -800,7 +829,7 @@ impl Workbench {
                     }
                     Err(e) => {
                         self.launching.set(false);
-                        self.output.set(e);
+                        self.output.set(projects::ToolOutput::notice(e));
                     }
                 }
             });
@@ -847,7 +876,7 @@ impl Workbench {
         });
         self.tab.set(Tab::Chat);
         for i in indices {
-            self.finish(i, Some("Window closed during this turn".into()));
+            self.finish(i, Some(Message::notice("Window closed during this turn")));
         }
         self.stop_app();
         self.app.set(None);
@@ -948,7 +977,7 @@ done
                 assert!(
                     Instant::now() < deadline,
                     "Timed out: {} {:?}",
-                    wb.status.get_untracked(),
+                    wb.status.display(),
                     wb.history.get_untracked()
                 );
                 wb.poll_agent(0);

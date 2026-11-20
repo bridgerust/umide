@@ -7,12 +7,13 @@ use umide_workbench_agents::Provider;
 use crate::{
     choose_project,
     design::*,
+    i18n::{self, tr},
     state::{Workbench, provider_name},
 };
 
 fn provider_glyph(provider: Provider) -> Glyph {
     match provider {
-        Provider::Codex => Glyph::Terminal,
+        Provider::Codex => Glyph::Codex,
         Provider::Claude => Glyph::Claude,
     }
 }
@@ -25,7 +26,7 @@ fn provider_color(provider: Provider) -> Color {
 }
 
 fn caption(text: &'static str) -> impl IntoView {
-    Label::new(text).style(|s| s.font_size(11).ui_bold().color(muted()))
+    i18n::label(text).style(|s| s.font_size(11).ui_bold().color(muted()))
 }
 
 fn prompt_shortcut(
@@ -36,11 +37,11 @@ fn prompt_shortcut(
     prompt: &'static str,
 ) -> impl IntoView {
     Button::new(
-        Stack::horizontal((icon(glyph, 14., muted), Label::new(name)))
+        Stack::horizontal((icon(glyph, 14., muted), i18n::label(name)))
             .style(|s| s.gap(7).items_center()),
     )
     .action(move || {
-        wb.draft.set(prompt.into());
+        wb.draft.set(tr(prompt).into());
         input.request_focus();
     })
     .style(move |s| {
@@ -75,7 +76,7 @@ fn welcome(wb: Workbench, open: bool, input: ViewId) -> impl IntoView {
                 "Review the current changes in this mobile project. Identify regressions and suggest concrete fixes."),
             prompt_shortcut(wb, input, Glyph::Device, "Run the app",
                 "Inspect this project and explain how to build and run its mobile app on a local device."),
-        )).style(|s|s.gap(8)).into_any()
+        )).style(|s| s.width_full().flex_wrap(floem::taffy::FlexWrap::Wrap).gap(8)).into_any()
     } else {
         crate::button("Open project…", move || choose_project(wb)).into_any()
     };
@@ -89,8 +90,8 @@ fn welcome(wb: Workbench, open: bool, input: ViewId) -> impl IntoView {
     Stack::vertical((
         mark,
         Stack::vertical((
-            Label::new(title).style(|s| s.font_size(30).ui_bold().color(ink())),
-            Label::new(hint).style(|s| {
+            i18n::label(title).style(|s| s.font_size(30).ui_bold().color(ink())),
+            i18n::label(hint).style(|s| {
                 s.width_full()
                     .font_size(15)
                     .line_height(1.4)
@@ -234,14 +235,14 @@ fn response(wb: Workbench, text: Memo<String>) -> impl IntoView {
                         {
                             language.clone()
                         }
-                        _ => "Code".into(),
+                        _ => tr("Code").into(),
                     })
                 })
                 .style(|s| {
                     s.font_family(MONO.to_string()).font_size(10).color(muted())
                 });
                 {
-                    let copy = Button::new("Copy")
+                    let copy = Button::new(i18n::label("Copy"))
                         .action(move || {
                             let code = blocks.with_untracked(|v| match v.get(n) {
                                 Some(Block::Code { body, .. }) => Some(body.clone()),
@@ -312,7 +313,7 @@ fn message(wb: Workbench, index: usize, n: usize, agent: Provider) -> impl IntoV
                 .style(|s| s.font_size(12).ui_bold().color(ink()));
             let icon =
                 icon(provider_glyph(agent), 15., move || provider_color(agent));
-            let thinking = Label::new("Working…").style(move |s| {
+            let thinking = i18n::label("Working…").style(move |s| {
                 s.font_size(13)
                     .color(muted())
                     .apply_if(!wb.busy.get() || !text.with(String::is_empty), |s| {
@@ -327,18 +328,25 @@ fn message(wb: Workbench, index: usize, n: usize, agent: Provider) -> impl IntoV
             .style(|s| s.width_full().gap(7).padding_vert(5))
             .into_any();
         }
-        let system = role == "system";
+        let notice = role == "system";
+        let system = notice || role == "provider_error";
         let name = if system { "Umide" } else { "You" };
-        let body = Label::derived(move || text.get())
-            .label_style(|s| s.selectable(true))
-            .style(|s| {
-                s.width_full()
-                    .font_size(15)
-                    .line_height(1.4)
-                    .text_overflow(TextOverflow::Wrap)
-            });
+        let body = Label::derived(move || {
+            if notice {
+                i18n::message(&text.get())
+            } else {
+                text.get()
+            }
+        })
+        .label_style(|s| s.selectable(true))
+        .style(|s| {
+            s.width_full()
+                .font_size(15)
+                .line_height(1.4)
+                .text_overflow(TextOverflow::Wrap)
+        });
         Stack::vertical((
-            Label::new(name).style(move |s| {
+            i18n::label(name).style(move |s| {
                 s.ui_bold().font_size(11).color(if system {
                     peach()
                 } else {
@@ -381,26 +389,30 @@ fn transcript(wb: Workbench, index: usize) -> impl IntoView {
     });
     // A short first prompt already serves as the conversation title.
     let promoted = !title.is_empty() && title == first;
-    let heading = if title.is_empty() || (!promoted && first.starts_with(&title)) {
-        format!("Task with {}", provider_name(agent))
-    } else {
-        title
-    };
+    let generic_title = title.is_empty() || (!promoted && first.starts_with(&title));
+    let heading = Label::derived(move || {
+        if generic_title {
+            i18n::fmt(
+                "Task with {provider}",
+                &[("provider", provider_name(agent))],
+            )
+        } else {
+            title.clone()
+        }
+    });
     let header = Stack::vertical((
         caption(if promoted {
             "Your request"
         } else {
             "Conversation"
         }),
-        Label::new(heading)
-            .label_style(|s| s.selectable(true))
-            .style(|s| {
-                s.width_full()
-                    .font_size(23)
-                    .ui_bold()
-                    .line_height(1.12)
-                    .text_overflow(TextOverflow::Wrap)
-            }),
+        heading.label_style(|s| s.selectable(true)).style(|s| {
+            s.width_full()
+                .font_size(23)
+                .ui_bold()
+                .line_height(1.12)
+                .text_overflow(TextOverflow::Wrap)
+        }),
     ))
     .style(|s| s.width_full().gap(5).margin_bottom(1));
     let messages = dyn_stack(
@@ -455,19 +467,31 @@ fn approval(wb: Workbench) -> impl IntoView {
             let allow_id = id.clone();
             let heading = Stack::horizontal((
                 icon(Glyph::Shield, 16., peach),
-                Label::new("Permission requested")
+                i18n::label("Permission requested")
                     .style(|s| s.ui_bold().font_size(13)),
             ))
             .style(|s| s.items_center().gap(8));
             let detail = Scroll::new(
-                Label::new(description)
-                    .label_style(|s| s.selectable(true))
-                    .style(|s| {
-                        s.font_family(MONO.to_string())
-                            .width_full()
-                            .font_size(12)
-                            .text_overflow(TextOverflow::Wrap)
-                    }),
+                Label::derived(move || {
+                    // Only the first line of a Codex request is UI copy. The
+                    // remainder includes literal commands, paths and arguments.
+                    let first_end =
+                        description.find('\n').unwrap_or(description.len());
+                    let (title, suffix) = description.split_at(first_end);
+                    let heading = match title {
+                        "Allow command" => tr("Allow command"),
+                        "Allow file changes" => tr("Allow file changes"),
+                        _ => return description.clone(),
+                    };
+                    format!("{heading}{suffix}")
+                })
+                .label_style(|s| s.selectable(true))
+                .style(|s| {
+                    s.font_family(MONO.to_string())
+                        .width_full()
+                        .font_size(12)
+                        .text_overflow(TextOverflow::Wrap)
+                }),
             )
             .style(|s| s.max_height(75).width_full());
             Stack::vertical((
@@ -498,7 +522,7 @@ fn approval(wb: Workbench) -> impl IntoView {
 
 fn workspace_option(wb: Workbench) -> impl IntoView {
     let option = move |name: &'static str, isolated| {
-        Button::new(name)
+        Button::new(i18n::label(name))
             .action(move || wb.isolated.set(isolated))
             .style(move |s| {
                 s.font_size(11)
@@ -521,9 +545,9 @@ fn workspace_option(wb: Workbench) -> impl IntoView {
             if existing {
                 return Label::derived(move || {
                     if wb.isolated.get() {
-                        "Isolated Git copy"
+                        tr("Isolated Git copy")
                     } else {
-                        "Project folder"
+                        tr("Project folder")
                     }
                 })
                 .style(|s| s.font_size(11).color(muted()))
@@ -577,7 +601,6 @@ pub(super) fn chat(
     composer_focus: RwSignal<Option<ViewId>>,
 ) -> impl IntoView {
     let input = text_input(wb.draft)
-        .placeholder("Describe a change to your app…")
         .on_enter(move || wb.send())
         .style(move |s| {
             s.width_full()
@@ -587,13 +610,24 @@ pub(super) fn chat(
                 .background(surface())
                 .color(ink())
                 .font_size(15)
-                .class(floem::views::PlaceholderTextClass, |s| s.color(muted()))
                 .padding_horiz(3)
                 .focus(|s| s.border(0))
                 .set_disabled(wb.root.with(Option::is_none) || wb.busy.get())
         });
     let input_id = input.id();
     composer_focus.set(Some(input_id));
+    let hint = i18n::label("Describe a change to your app…").style(move |s| {
+        s.absolute()
+            .inset_left(3)
+            .inset_right(3)
+            .text_ellipsis()
+            .pointer_events_none()
+            .font_size(15)
+            .color(muted())
+            .apply_if(!wb.draft.with(String::is_empty), |s| s.hide())
+    });
+    let input =
+        Stack::horizontal((input, hint)).style(|s| s.width_full().items_center());
     let conversation = dyn_container(
         move || (wb.current.get(), wb.root.get()),
         move |(index, root)| match index {
@@ -629,9 +663,9 @@ pub(super) fn chat(
             ),
             Label::derived(move || {
                 if wb.attach.get() {
-                    "Attached"
+                    tr("Attached")
                 } else {
-                    "Screen"
+                    tr("Screen")
                 }
             }),
         ))
@@ -657,7 +691,7 @@ pub(super) fn chat(
             .disabled(|s| s.color(faint()))
     })
     .tooltip(move || {
-        Label::new(if wb.attach.get_untracked() {
+        i18n::label(if wb.attach.get_untracked() {
             "Remove the screen attachment"
         } else if wb.target.with_untracked(Option::is_none) {
             "Select a running device to attach its screen"
@@ -684,7 +718,7 @@ pub(super) fn chat(
                         icon(glyph, 13., move || {
                             if disabled() { muted() } else { on_accent() }
                         }),
-                        Label::new(label),
+                        i18n::label(label),
                     ))
                     .style(|s| s.items_center().gap(5)),
                 )
@@ -709,7 +743,12 @@ pub(super) fn chat(
         Empty::new().style(|s| s.flex_grow(1_f32)),
         send,
     ))
-    .style(|s| s.width_full().items_center().gap(5));
+    .style(|s| {
+        s.width_full()
+            .items_center()
+            .flex_wrap(floem::taffy::FlexWrap::Wrap)
+            .gap(5)
+    });
     let card = Stack::vertical((input, toolbar)).style(|s| {
         s.width_full()
             .min_width(0)

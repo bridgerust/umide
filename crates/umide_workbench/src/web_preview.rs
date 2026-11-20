@@ -33,10 +33,7 @@ impl Session {
         Self {
             generation,
             command: String::new(),
-            snapshot: Snapshot {
-                status: Status::Starting,
-                output: String::new(),
-            },
+            snapshot: Snapshot::empty(Status::Starting),
             server: None,
         }
     }
@@ -134,10 +131,7 @@ impl WebPreview {
                         server.stop();
                         server.snapshot()
                     }
-                    None => Snapshot {
-                        status: Status::Stopped,
-                        output: String::new(),
-                    },
+                    None => Snapshot::empty(Status::Stopped),
                 };
             }
         });
@@ -188,8 +182,8 @@ fn note(
                 if failed { danger() } else { accent() }
             },
         ),
-        title.style(|s| s.font_size(18).ui_bold().color(ink())),
-        Label::new(detail)
+        crate::i18n::label(title).style(|s| s.font_size(18).ui_bold().color(ink())),
+        Label::derived(move || crate::i18n::message(&detail))
             .label_style(|s| s.selectable(true))
             .style(|s| {
                 s.width_full()
@@ -374,7 +368,13 @@ fn workspace_panel(
     let command = Label::derived(move || {
         web.sessions.with(|s| {
             s.get(&command_key)
-                .map(|s| s.command.clone())
+                .map(|s| {
+                    if s.command == "Static site · index.html" {
+                        crate::i18n::tr("Static site · index.html").to_owned()
+                    } else {
+                        s.command.clone()
+                    }
+                })
                 .unwrap_or_default()
         })
     })
@@ -389,9 +389,9 @@ fn workspace_panel(
     });
     let log_button = Button::new(Label::derived(move || {
         if logs_open.get() {
-            "Hide logs"
+            crate::i18n::tr("Hide logs")
         } else {
-            "Show logs"
+            crate::i18n::tr("Show logs")
         }
     }))
     .action(move || logs_open.update(|show| *show = !*show))
@@ -412,10 +412,11 @@ fn workspace_panel(
     let logs = Label::derived(move || {
         web.sessions.with(|s| {
             s.get(&workspace)
-                .map(|s| s.snapshot.output.as_str())
+                .map(|s| s.snapshot.display_output())
                 .filter(|out| !out.is_empty())
-                .unwrap_or("Waiting for server output…")
-                .to_owned()
+                .unwrap_or_else(|| {
+                    crate::i18n::tr("Waiting for server output…").to_owned()
+                })
         })
     })
     .label_style(|s| s.selectable(true))
@@ -443,7 +444,8 @@ fn workspace_panel(
 
 pub(crate) fn panel(wb: Workbench, web: WebPreview) -> impl IntoView {
     let selected = wb.workspace_selection();
-    let title = "Web preview".style(|s| s.font_size(21).ui_bold().color(ink()));
+    let title = crate::i18n::label("Web preview")
+        .style(|s| s.font_size(21).ui_bold().color(ink()));
     let folder = Label::derived(move || {
         wb.root.with(|root| {
             let Some(root) = root else {
@@ -454,9 +456,15 @@ pub(crate) fn panel(wb: Workbench, web: WebPreview) -> impl IntoView {
                 .unwrap_or(root.as_os_str())
                 .to_string_lossy();
             if wb.isolated.get() {
-                format!("{name} · Isolated Git copy")
+                crate::i18n::fmt(
+                    "{name} · Isolated Git copy",
+                    &[("name", name.as_ref())],
+                )
             } else {
-                format!("{name} · Project folder")
+                crate::i18n::fmt(
+                    "{name} · Project folder",
+                    &[("name", name.as_ref())],
+                )
             }
         })
     })

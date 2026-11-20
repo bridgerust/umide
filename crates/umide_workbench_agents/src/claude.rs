@@ -171,12 +171,14 @@ impl State {
                     let detail = [
                         text,
                         reason.as_str(),
-                        msg["subtype"].as_str().unwrap_or("Unknown error"),
+                        msg["subtype"].as_str().unwrap_or_default(),
                     ]
                     .into_iter()
-                    .find(|s| !s.is_empty())
-                    .unwrap();
-                    return Ok(Some(Event::Error(detail.into())));
+                    .find(|s| !s.is_empty());
+                    return Ok(Some(match detail {
+                        Some(text) => Event::ProviderError(text.into()),
+                        None => Event::Error("Unknown error".into()),
+                    }));
                 }
                 if !self.emitted {
                     self.text(io, text);

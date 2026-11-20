@@ -120,7 +120,50 @@ struct Turn {
     cwd: PathBuf,
     session: Option<String>,
     input: Value,
+    verify_server: Option<Value>,
 }
+
+#[derive(Clone, Debug)]
+pub struct VerifyConfig {
+    /// Umide's installed executable, which implements the verification server.
+    pub executable: PathBuf,
+    /// Per-turn evidence and context directory created by the Workbench.
+    pub event_directory: PathBuf,
+}
+
+impl VerifyConfig {
+    fn server(&self, checkout: &Path) -> Result<Value, String> {
+        let path = |p: &Path| {
+            if p.is_absolute() {
+                p.to_str().map(String::from)
+            } else {
+                None
+            }
+            .ok_or_else(|| {
+                "Verification requires absolute Unicode paths.".to_owned()
+            })
+        };
+        Ok(json!({
+            "command": path(&self.executable)?,
+            "args": ["--umide-verify", path(checkout)?, path(&self.event_directory)?]
+        }))
+    }
+}
+
+// These calls only observe the current local verification session. Launch,
+// stop, navigation, clicks, text entry and taps retain CLI permission handling.
+const READ_ONLY_VERIFY_TOOLS: &[&str] = &[
+    "workspace_context",
+    "mobile_devices",
+    "mobile_status",
+    "mobile_logs",
+    "mobile_screenshot",
+    "web_inspect",
+    "web_wait",
+    "web_screenshot",
+];
+
+const VERIFY_INSTRUCTIONS: &str = "Inside Umide, use its tools to verify UI changes. Consult workspace_context when needed. Report observations and limits.";
 
 pub fn start(
     provider: Provider,
@@ -137,6 +180,17 @@ pub fn start_with_image(
     prompt: &str,
     session: Option<&str>,
     image: Option<&Path>,
+) -> Result<Run, String> {
+    start_with_verification(provider, project, prompt, session, image, None)
+}
+
+pub fn start_with_verification(
+    provider: Provider,
+    project: &Path,
+    prompt: &str,
+    session: Option<&str>,
+    image: Option<&Path>,
+    verify: Option<&VerifyConfig>,
 ) -> Result<Run, String> {
     if prompt.trim().is_empty() {
         return Err("Enter a prompt.".into());
@@ -167,13 +221,20 @@ pub fn start_with_image(
     ] {
         command.env_remove(key);
     }
+    let verify_server = verify.map(|config| config.server(&cwd)).transpose()?;
     match provider {
         Provider::Codex => {
             command.args(["app-server", "--stdio"]);
         }
-        Provider::Claude => claude::configure(&mut command, session),
+        Provider::Claude => {
+            claude::configure(&mut command, session, verify_server.as_ref())
+        }
     }
-    let input = prompt_content(provider, prompt, image)?;
+    // Keep Codex's configured developer instructions intact. Claude snapshots
+    // its first system prompt, including across resumes of older conversations.
+    let turn_hint =
+        verify.is_some() && (provider == Provider::Codex || session.is_some());
+    let input = prompt_content(provider, prompt, image, turn_hint)?;
     spawn(
         command,
         provider,
@@ -181,6 +242,7 @@ pub fn start_with_image(
             cwd,
             input,
             session: session.map(String::from),
+            verify_server,
         },
     )
 }
@@ -189,11 +251,17 @@ fn prompt_content(
     provider: Provider,
     prompt: &str,
     image: Option<&Path>,
+    turn_hint: bool,
 ) -> Result<Value, String> {
-    let mut content = vec![match provider {
-        Provider::Codex => json!({"type":"text","text":prompt,"text_elements":[]}),
-        Provider::Claude => json!({"type":"text","text":prompt}),
-    }];
+    let block = |text: &str| match provider {
+        Provider::Codex => json!({"type":"text","text":text,"text_elements":[]}),
+        Provider::Claude => json!({"type":"text","text":text}),
+    };
+    let mut content = Vec::new();
+    if turn_hint {
+        content.push(block(VERIFY_INSTRUCTIONS));
+    }
+    content.push(block(prompt));
     if let Some(path) = image {
         let path = path.canonicalize().map_err(|e| e.to_string())?;
         let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
@@ -422,6 +490,14 @@ fn drive<W: Write>(
 mod tests {
     use super::*;
     fn exercise(provider: Provider, frames: Vec<Input>) -> (Vec<Event>, Vec<Value>) {
+        exercise_with_mcp(provider, frames, false)
+    }
+
+    fn exercise_with_mcp(
+        provider: Provider,
+        frames: Vec<Input>,
+        mcp: bool,
+    ) -> (Vec<Event>, Vec<Value>) {
         let (events, receiver) = mpsc::channel();
         let (send, inputs) = mpsc::channel();
         for frame in frames {
@@ -437,6 +513,7 @@ mod tests {
             cwd: PathBuf::from("/my-project"),
             input: json!([{"type":"text","text":"hello"}]),
             session: Some("my-session".into()),
+            verify_server: mcp.then(|| json!({"command":"fixture","args":[]})),
         };
         let end = drive(provider, &turn, inputs, &mut io).unwrap();
         let mut emitted: Vec<_> = receiver.try_iter().collect();
@@ -541,6 +618,39 @@ mod tests {
     }
 
     #[test]
+    fn codex_routes_only_local_confirmation_forms_for_the_active_turn() {
+        let request = |id, thread, required| {
+            Input::Frame(
+                json!({"id":id,"method":"mcpServer/elicitation/request","params":{"serverName":"umide","threadId":thread,"mode":"form","message":"Launch the app?","requestedSchema":{"type":"object","properties":{},"required":required}}}),
+            )
+        };
+        let (events, sent) = exercise_with_mcp(
+            Provider::Codex,
+            vec![
+                Input::Frame(json!({"id":1,"result":{}})),
+                Input::Frame(json!({"id":2,"result":{"thread":{"id":"current"}}})),
+                request(12, "other", vec![]),
+                request(13, "current", vec!["input"]),
+                request(14, "current", vec![]),
+                Input::Decision("14".into(), true),
+                Input::Cancel,
+            ],
+            true,
+        );
+        assert_eq!(
+            &sent[4..],
+            [
+                json!({"id":12,"result":{"action":"decline","content":null}}),
+                json!({"id":13,"result":{"action":"decline","content":null}}),
+                json!({"id":14,"result":{"action":"accept","content":{}}}),
+            ]
+        );
+        assert!(
+            matches!(&events[..], [Event::Session(_), Event::Approval{id,..}, Event::Cancelled] if id=="14")
+        );
+    }
+
+    #[test]
     fn provider_errors_are_distinct_from_translatable_statuses() {
         let codex = Input::Frame(json!({"id":1,"error":{"message":"Build"}}));
         let claude =
@@ -554,6 +664,82 @@ mod tests {
     }
 
     #[test]
+    fn verification_protocol_keeps_literal_paths_and_existing_approvals_on_start_and_resume()
+     {
+        let root = env::temp_dir().join("Démo 'mobile'");
+        let config = VerifyConfig {
+            executable: root.join("Umide application"),
+            event_directory: root.join("events $2"),
+        };
+        let server = config.server(&root).unwrap();
+        assert_eq!(
+            server["args"],
+            json!(["--umide-verify", root, config.event_directory])
+        );
+        for session in [None, Some("old-thread")] {
+            let turn = Turn {
+                cwd: root.clone(),
+                session: session.map(String::from),
+                input: json!([]),
+                verify_server: Some(server.clone()),
+            };
+            let request = codex::thread_request(&turn);
+            assert_eq!(
+                request["method"],
+                if session.is_some() {
+                    "thread/resume"
+                } else {
+                    "thread/start"
+                }
+            );
+            let params = &request["params"];
+            assert!(params.get("developerInstructions").is_none());
+            let blocks =
+                prompt_content(Provider::Codex, "request", None, true).unwrap();
+            assert_eq!(blocks[0]["text"], VERIFY_INSTRUCTIONS);
+            assert_eq!(blocks[1]["text"], "request");
+            assert_eq!(
+                params["config"]["mcp_servers.umide"]["args"],
+                server["args"]
+            );
+            let tool_policy = &params["config"]["mcp_servers.umide"]["tools"];
+            assert_eq!(tool_policy["workspace_context"]["approval_mode"], "approve");
+            assert!(tool_policy.get("mobile_tap").is_none());
+            assert_eq!(params["approvalPolicy"], "on-request");
+            assert_eq!(params["sandbox"], "workspace-write");
+            let mut cmd = Command::new("claude");
+            claude::configure(&mut cmd, session, Some(&server));
+            let args: Vec<_> = cmd.get_args().map(|s| s.to_str().unwrap()).collect();
+            let after = |flag: &str| {
+                args.iter().position(|s| *s == flag).map(|i| args[i + 1])
+            };
+            assert_eq!(after("--resume"), session);
+            assert_eq!(after("--permission-prompt-tool"), Some("stdio"));
+            assert_eq!(
+                after("--append-system-prompt"),
+                session.is_none().then_some(VERIFY_INSTRUCTIONS)
+            );
+            let parsed: Value =
+                serde_json::from_str(after("--mcp-config").unwrap()).unwrap();
+            assert_eq!(parsed["mcpServers"]["umide"], server);
+            assert!(args.contains(&"--strict-mcp-config"));
+            let allowed = after("--allowedTools").unwrap();
+            assert!(
+                allowed
+                    .split(',')
+                    .any(|t| t == "mcp__umide__workspace_context")
+            );
+            assert!(!allowed.contains("mobile_tap") && !allowed.contains("Bash"));
+            assert!(after("--tools").unwrap().contains("ToolSearch"));
+        }
+        let bad = VerifyConfig {
+            executable: "relative".into(),
+            ..config
+        };
+        assert!(bad.server(&root).is_err());
+    }
+
+    #[test]
     fn cancellation_kills_an_idle_process_and_ends_receiver() {
         #[cfg(unix)]
         {
@@ -563,6 +749,7 @@ mod tests {
                 cwd: env::temp_dir(),
                 session: None,
                 input: json!([]),
+                verify_server: None,
             };
             let run = spawn(command, Provider::Codex, turn).unwrap();
             run.control.cancel();

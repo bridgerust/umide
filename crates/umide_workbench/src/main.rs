@@ -1,3 +1,4 @@
+mod agent_memory;
 mod appearance;
 #[cfg(target_os = "macos")]
 mod browser;
@@ -21,6 +22,7 @@ mod state;
 mod terminal_dock;
 mod terminal_session;
 mod typography;
+mod verify;
 mod web_preview;
 mod web_server;
 mod workbench_terminal;
@@ -483,6 +485,35 @@ fn app(
     let web = web_preview::WebPreview::new();
     let terminals = workbench_terminal::Terminals::new();
     let files = file_editor::FileEditor::new();
+    let selected_workspace = wb.workspace_selection();
+    floem::reactive::Effect::new(move |_| {
+        let workspace = selected_workspace.get().ok();
+        let file = workspace.as_ref().and_then(|w| files.selected(w));
+        let dirty = workspace
+            .as_ref()
+            .zip(file.as_ref())
+            .is_some_and(|(w, f)| files.is_dirty(w, f));
+        let preview = workspace.as_ref().and_then(|w| web.ready_url(w));
+        let panel = side_panel.get().map(|mode| match mode {
+            SidePanel::Devices => "mobile",
+            SidePanel::Web => "web",
+            SidePanel::Files => "files",
+        });
+        wb.view_context.set(verify::ViewContext {
+            file,
+            dirty,
+            preview,
+            panel,
+        });
+    });
+    floem::reactive::Effect::new(move |_| match wb.preview_request.get() {
+        Some(verify::Preview::Mobile(platform, id)) => {
+            wb.target.set(Some((platform, id)));
+            side_panel.set(Some(SidePanel::Devices));
+        }
+        Some(verify::Preview::Web) => side_panel.set(Some(SidePanel::Web)),
+        None => {}
+    });
     let focus = WorkspaceFocus {
         composer: RwSignal::new(None),
         files_button: RwSignal::new(None),
@@ -628,7 +659,24 @@ fn app(
 }
 
 fn main() {
-    let project = std::env::args_os().nth(1).map(PathBuf::from);
+    let mut args = std::env::args_os().skip(1);
+    let first = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new("--umide-verify")) {
+        let result = match (args.next(), args.next(), args.next()) {
+            (Some(root), Some(session), None) => {
+                verify::relay(root.as_ref(), session.as_ref())
+            }
+            _ => Err(std::io::Error::other(
+                "Expected checkout and session directory.",
+            )),
+        };
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    let project = first.map(PathBuf::from);
     typography::configure();
     let preference = appearance::Preference::load();
     let config = WindowConfig::default()

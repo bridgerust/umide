@@ -145,6 +145,18 @@ fn parse_discovery_ini(text: &str, console: u32) -> Option<GrpcDiscovery> {
 }
 
 impl AndroidEmulator {
+    pub fn avd_list_command() -> Command {
+        let mut command = quiet_command("emulator");
+        command.arg("-list-avds");
+        command
+    }
+
+    pub fn device_list_command() -> Command {
+        let mut command = quiet_command("adb");
+        command.arg("devices");
+        command
+    }
+
     /// Build an adb command bound to this exact device using the configured SDK.
     pub fn adb_command(serial: &str) -> Command {
         let mut command = quiet_command("adb");
@@ -161,7 +173,7 @@ impl AndroidEmulator {
 
     /// Get list of currently running emulator serials from adb devices
     pub fn get_running_serials() -> Vec<String> {
-        let output = match quiet_command("adb").arg("devices").output() {
+        let output = match Self::device_list_command().output() {
             Ok(out) => out,
             Err(_) => return Vec::new(),
         };
@@ -289,7 +301,7 @@ impl AndroidEmulator {
     }
 
     pub fn list_devices() -> Result<Vec<DeviceInfo>> {
-        let output = quiet_command("emulator").arg("-list-avds").output()?;
+        let output = Self::avd_list_command().output()?;
 
         if !output.status.success() {
             return Err(anyhow!("Failed to list Android AVDs"));
@@ -342,26 +354,36 @@ impl AndroidEmulator {
         ))
     }
 
-    /// Spawn the headless emulator with the given `-gpu` mode and wait for it to
-    /// register with adb. Returns `Ok(true)` if it came up, `Ok(false)` if the
-    /// process exited early (this GPU mode is unsupported on this host, so the
-    /// caller should fall back), or `Err` if it could not be spawned at all.
-    fn spawn_and_wait(avd_name: &str, gpu: &str) -> Result<bool> {
-        let mut child = quiet_command("emulator")
-            .arg("-avd")
+    /// Spawn a headless emulator without inheriting caller streams.
+    pub fn spawn_headless(
+        avd_name: &str,
+        gpu: &str,
+        grpc_port: Option<u16>,
+    ) -> Result<std::process::Child> {
+        let mut cmd = quiet_command("emulator");
+        if let Some(port) = grpc_port {
+            cmd.arg("-grpc").arg(port.to_string());
+        }
+        cmd.arg("-avd")
             .arg(avd_name)
             .arg("-gpu")
             .arg(gpu)
             .arg("-no-boot-anim")
             .arg("-no-skin")
             .arg("-no-window") // Headless: no desktop window, frames via gRPC
-            .arg("-grpc")
-            .arg("8554") // gRPC endpoint for streamScreenshot + sendTouch
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::null())
             .stdin(Stdio::null())
             .spawn()
-            .map_err(|e| anyhow!("Failed to spawn emulator: {}", e))?;
+            .map_err(|e| anyhow!("Failed to spawn emulator: {}", e))
+    }
+
+    /// Spawn the headless emulator with the given `-gpu` mode and wait for it to
+    /// register with adb. Returns `Ok(true)` if it came up, `Ok(false)` if the
+    /// process exited early (this GPU mode is unsupported on this host, so the
+    /// caller should fall back), or `Err` if it could not be spawned at all.
+    fn spawn_and_wait(avd_name: &str, gpu: &str) -> Result<bool> {
+        let mut child = Self::spawn_headless(avd_name, gpu, Some(8554))?;
 
         tracing::info!("Emulator spawned for AVD {} (-gpu {})", avd_name, gpu);
 
@@ -424,7 +446,11 @@ impl AndroidEmulator {
                 );
 
                 if name_trimmed == avd_name {
-                    tracing::info!("Found matching emulator {} for AVD {}, sending kill command", serial, avd_name);
+                    tracing::info!(
+                        "Found matching emulator {} for AVD {}, sending kill command",
+                        serial,
+                        avd_name
+                    );
 
                     // Kill this emulator
                     let result = quiet_command("adb")

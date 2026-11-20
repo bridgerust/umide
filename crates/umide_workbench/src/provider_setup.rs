@@ -293,14 +293,19 @@ fn install(p: Provider, cancel: &AtomicBool) -> Result<(), String> {
 
 pub fn first_run() -> bool {
     projects::data_dir().ok().and_then(|dir| {
-        projects::load::<bool>(&dir.join("setup-complete.json"))
+        projects::load::<bool>(&dir.join("setup-with-agent-guidance.json"))
             .ok()
             .flatten()
     }) != Some(true)
 }
 
 pub fn remember() -> Result<(), String> {
-    projects::save(&projects::data_dir()?.join("setup-complete.json"), &true)
+    let result = crate::agent_memory::install();
+    projects::save(
+        &projects::data_dir()?.join("setup-with-agent-guidance.json"),
+        &true,
+    )?;
+    result
 }
 
 #[cfg(test)]

@@ -65,6 +65,15 @@ impl WebPreview {
         self.sessions.update(HashMap::clear);
     }
 
+    pub(crate) fn ready_url(self, workspace: &Workspace) -> Option<String> {
+        self.sessions.with_untracked(|sessions| {
+            match &sessions.get(workspace)?.snapshot.status {
+                Status::Ready(url) => Some(url.clone()),
+                _ => None,
+            }
+        })
+    }
+
     fn start(self, workspace: Workspace) {
         if self.closed.get_untracked() {
             return;
@@ -444,8 +453,56 @@ fn workspace_panel(
 
 pub(crate) fn panel(wb: Workbench, web: WebPreview) -> impl IntoView {
     let selected = wb.workspace_selection();
-    let title = crate::i18n::label("Web preview")
-        .style(|s| s.font_size(21).ui_bold().color(ink()));
+    let observation = Memo::new(move |_| wb.browser_observation());
+    let chat = Memo::new(move |_| (wb.root.get(), wb.current.get()));
+    let manual_for = RwSignal::new(None);
+    let agent = Memo::new(move |_| {
+        observation.with(Option::is_some)
+            && manual_for.get().as_ref() != Some(&chat.get())
+    });
+    let title = Label::derived(move || {
+        crate::i18n::tr(if agent.get() {
+            "Agent browser"
+        } else {
+            "Web preview"
+        })
+    })
+    .style(|s| {
+        s.font_size(21)
+            .ui_bold()
+            .color(ink())
+            .min_width(0)
+            .text_ellipsis()
+    });
+    let switch = dyn_container(
+        move || (observation.with(Option::is_some), agent.get()),
+        move |(available, following)| {
+            if !available {
+                return Empty::new().into_any();
+            }
+            action_button(
+                if following {
+                    Glyph::Globe
+                } else {
+                    Glyph::Image
+                },
+                if following {
+                    "Manual preview"
+                } else {
+                    "Agent browser"
+                },
+                move || manual_for.set(following.then(|| chat.get_untracked())),
+            )
+            .into_any()
+        },
+    );
+    let header = Stack::horizontal((title, switch)).style(|s| {
+        s.width_full()
+            .items_center()
+            .justify_between()
+            .gap(6)
+            .flex_wrap(floem::taffy::FlexWrap::Wrap)
+    });
     let folder = Label::derived(move || {
         wb.root.with(|root| {
             let Some(root) = root else {
@@ -470,8 +527,9 @@ pub(crate) fn panel(wb: Workbench, web: WebPreview) -> impl IntoView {
     })
     .style(|s| s.width_full().text_ellipsis().font_size(12).color(muted()));
     let body = dyn_container(
-        move || selected.get(),
-        move |selection| match selection {
+        move || (selected.get(), agent.get()),
+        move |(selection, agent)| match selection {
+            Ok(_) if agent => agent_page(observation).into_any(),
             Ok(workspace) => workspace_panel(wb, web, workspace).into_any(),
             Err(error) => {
                 let open = wb.root.with_untracked(Option::is_none);
@@ -495,12 +553,66 @@ pub(crate) fn panel(wb: Workbench, web: WebPreview) -> impl IntoView {
         },
     )
     .style(|s| s.width_full().min_height(0).flex_grow(1_f32));
-    Stack::vertical((title, folder, body)).style(|s| {
+    Stack::vertical((header, folder, body)).style(|s| {
         s.size_full()
             .min_size(0, 0)
             .padding(14)
             .gap(8)
             .background(panel_color())
+    })
+}
+
+fn agent_page(
+    observation: Memo<Option<crate::verify::BrowserObservation>>,
+) -> impl IntoView {
+    let action = Label::derived(move || {
+        observation
+            .with(|value| value.as_ref().map_or("", |o| crate::i18n::tr(o.action)))
+    })
+    .style(|s| s.width_full().font_size(12).ui_bold().color(muted()));
+    let screenshot = dyn_container(
+        move || {
+            observation.with(|value| value.as_ref().and_then(|o| o.capture.clone()))
+        },
+        |capture| match capture {
+            Some(bytes) => floem::views::img(move || bytes.as_ref().clone())
+                .style(|s| {
+                    s.width_full()
+                        .min_width(0)
+                        .aspect_ratio(4.0 / 3.0)
+                        .border(1)
+                        .border_color(subtle_line())
+                        .background(surface())
+                })
+                .into_any(),
+            None => Empty::new().into_any(),
+        },
+    )
+    .style(|s| s.width_full().min_width(0));
+    let page = Label::derived(move || {
+        observation
+            .with(|value| value.as_ref().map(|o| o.page.clone()).unwrap_or_default())
+    })
+    .label_style(|s| s.selectable(true))
+    .style(|s| {
+        s.width_full()
+            .min_width(0)
+            .font_size(13)
+            .line_height(1.4)
+            .color(ink())
+            .text_overflow(TextOverflow::Wrap)
+    });
+    Scroll::new(
+        Stack::vertical((action, screenshot, page))
+            .style(|s| s.width_full().min_width(0).padding(10).gap(8)),
+    )
+    .style(|s| {
+        s.size_full()
+            .min_size(0, 0)
+            .border(1)
+            .border_color(subtle_line())
+            .border_radius(6)
+            .background(surface())
     })
 }
 

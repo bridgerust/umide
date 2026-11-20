@@ -12,6 +12,8 @@ Umide follows the system appearance by default. Choose **Appearance → Light** 
 
 Umide starts in the first supported language in your system preferences. Use **Language** during setup or in the sidebar to switch between English, français, español and português. Umide remembers your choice across projects and restarts. Chat messages, source files and command output keep their original language. [See the French interface and editor icons](../../screenshots/umide-workbench-fr.png).
 
+Continuing setup adds one short Umide section to the personal instructions for Codex and Claude Code. Umide respects their configured settings directories and existing instructions. The section applies when a conversation runs inside Umide. Project context, recent logs and screenshots are available to the agent on request.
+
 ## Run from source
 
 Use stable Rust and install the Protocol Buffers compiler (`protoc`). On macOS, install the Xcode command line tools. From the repository root:
@@ -31,6 +33,14 @@ You can also pass an app folder after `--`. To build a local macOS development b
 - Use **Project folder** for a conversation that edits the current checkout. For parallel work, choose **Isolated Git copy** before sending the first message. Each copy starts from the project's latest commit and excludes local uncommitted files. Commits, branches and edits made in a task checkout are accessible from **Changes → Open task folder**.
 - You can move between active conversations. The sidebar indicates which agent is running or waiting for permission. Approving a tool or stopping a turn affects the selected task. Umide limits the project folder to one active agent turn at a time.
 - **Changes** shows the selected task's edits. For an isolated task, it includes changes committed after the task started and lists untracked files. Its checkout stays on disk for review and later conversation turns. Open the task folder to commit or transfer the changes with Git.
+
+### Agent verification
+
+Describe the result you want to check. For example, “On iOS, fix Save and check that the new name appears in the list.” The agent can ask Umide for the selected device, app directory and open file, including whether the file has unsaved edits. Verification uses the conversation's checkout. A project can contain several apps, and the agent can pick the relevant subdirectory. Each conversation gets fresh context when you send or resume a turn.
+
+- For mobile UI, the agent can select and boot an installed Android emulator or iOS simulator, launch the app, inspect its build output and device logs, take a screenshot and tap a visible control. Umide opens the device preview as the agent works. iOS requires macOS and Xcode. Tapping on iOS also requires `idb_companion`.
+- For web UI, the agent can start the local dev server, open a page, interact with its controls, check visible text and capture the result. The test browser needs Node.js and an installed Chrome, Chromium, Edge or Brave. It uses a temporary profile and the local preview's origin. In **Web**, switch between **Agent browser** and **Manual preview**.
+- For a logic change, the agent can run the project's own tests. Documentation work can be checked directly. The agent reports the actions it performed and any missing prerequisites. Its test server and browser close when the turn ends. An already booted virtual device stays available in Umide.
 
 ## Terminal
 

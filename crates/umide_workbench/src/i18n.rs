@@ -7,11 +7,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{design, projects};
 
-const CATALOGS: [&str; 4] = [
+const CATALOGS: [&str; 5] = [
     include_str!("../locales/core.tsv"),
     include_str!("../locales/chat.tsv"),
     include_str!("../locales/files.tsv"),
     include_str!("../locales/tools.tsv"),
+    include_str!("../locales/verification.tsv"),
 ];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,6 +87,10 @@ fn current() -> Language {
     Context::get::<Locale>()
         .map(|locale| locale.active.get())
         .unwrap_or_default()
+}
+
+pub(crate) fn language_name() -> &'static str {
+    current().name()
 }
 
 struct Catalog {

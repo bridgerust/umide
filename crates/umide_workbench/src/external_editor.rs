@@ -459,15 +459,22 @@ mod tests {
         let receipt = tmp.path().join("received");
         cmd.env("RECEIPT", &receipt);
         start(cmd, "fixture editor").unwrap();
-        assert_eq!(
-            fs::read_to_string(receipt).unwrap(),
-            format!(
-                "{}\n{}\n{}\n",
-                root.display(),
-                root.display(),
-                file.display()
-            ),
+        // A busy runner can hand back the launcher before the fixture has written its receipt.
+        let expected = format!(
+            "{}\n{}\n{}\n",
+            root.display(),
+            root.display(),
+            file.display()
         );
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while fs::read_to_string(&receipt).ok().as_deref() != Some(expected.as_str())
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "The editor never received the selected file"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
         let bad = Command::new("/usr/bin/false");
         assert!(
             start(bad, "fixture editor")

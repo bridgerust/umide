@@ -134,6 +134,8 @@ pub fn panel(
         i18n::label("Set up your coding agents").style(|s| s.font_size(30).ui_bold().color(ink())),
         i18n::label("Install Codex or Claude Code on this computer. Sign in with your provider to use it in Umide.")
             .style(|s| s.width_full().font_size(15).line_height(1.4).color(muted()).text_overflow(TextOverflow::Wrap)),
+        i18n::label("Continuing adds a short Umide section to the personal instructions for Codex and Claude Code.")
+            .style(|s| s.width_full().font_size(12).line_height(1.4).color(muted()).text_overflow(TextOverflow::Wrap)),
     ))
     .style(|s| s.width_full().gap(7));
     let providers = Stack::vertical((

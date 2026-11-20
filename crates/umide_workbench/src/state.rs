@@ -24,11 +24,18 @@ use umide_workbench_agents::{self as agents, Event, Provider, Run};
 use crate::{
     devices,
     projects::{self, AppRun, Conversation, History, Message, ToolOutput},
+    verify::{self, BrowserObservation, Observation, Preview},
     worktree,
 };
 
 pub type Target = (String, String);
-type Prepared = Result<(Run, Option<NamedTempFile>), StartError>;
+type Prepared = Result<Started, StartError>;
+
+struct Started {
+    run: Run,
+    picture: Option<NamedTempFile>,
+    verification: Result<verify::Host, String>,
+}
 
 enum StartError {
     CreateWorkspace(String),
@@ -46,6 +53,7 @@ enum Stage {
     Running {
         run: Run,
         _picture: Option<NamedTempFile>,
+        host: Option<verify::Host>,
     },
 }
 
@@ -55,27 +63,47 @@ struct ActiveTurn {
     status: ToolOutput,
     approvals: Vec<(String, String)>,
     worktree_id: Option<String>,
+    last_preview: RefCell<Option<Preview>>,
 }
 
 impl ActiveTurn {
     fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
-        if let Stage::Running { run, .. } = &*self.stage.borrow() {
+        if let Stage::Running { run, host, .. } = &*self.stage.borrow() {
+            if let Some(host) = host {
+                host.stop();
+            }
             run.control.cancel();
         }
     }
 
     fn events(&self) -> Result<Vec<Event>, String> {
         let mut stage = self.stage.borrow_mut();
+        let mut events = Vec::new();
         if let Stage::Preparing(rx) = &*stage {
             match rx.try_recv() {
-                Ok(Ok((run, picture))) => {
+                Ok(Ok(Started {
+                    run,
+                    picture,
+                    verification,
+                })) => {
+                    let host = match verification {
+                        Ok(host) => Some(host),
+                        Err(detail) => {
+                            events.push(Event::Activity(detail));
+                            None
+                        }
+                    };
                     if self.cancelled.load(Ordering::Acquire) {
+                        if let Some(host) = &host {
+                            host.stop();
+                        }
                         run.control.cancel();
                     }
                     *stage = Stage::Running {
                         run,
                         _picture: picture,
+                        host,
                     };
                 }
                 Ok(Err(StartError::CreateWorkspace(e))) => return Err(e),
@@ -89,7 +117,6 @@ impl ActiveTurn {
         let Stage::Running { run, .. } = &*stage else {
             unreachable!()
         };
-        let mut events = Vec::new();
         for _ in 0..256 {
             match run.events.try_recv() {
                 Ok(event) => {
@@ -183,6 +210,9 @@ pub struct Workbench {
     pub isolated: RwSignal<bool>,
     pub launching: RwSignal<bool>,
     pub approvals: RwSignal<Vec<(String, String)>>,
+    pub(crate) view_context: RwSignal<verify::ViewContext>,
+    pub(crate) preview_request: RwSignal<Option<Preview>>,
+    browser_checks: RwSignal<Vec<(usize, BrowserObservation)>>,
     active: RwSignal<HashMap<usize, ActiveTurn>>,
     drafts: RwSignal<HashMap<usize, String>>,
     app: RwSignal<Option<AppRun>>,
@@ -221,6 +251,9 @@ impl Workbench {
             busy: RwSignal::new(false),
             launching: RwSignal::new(false),
             approvals: RwSignal::new(vec![]),
+            view_context: RwSignal::new(verify::ViewContext::default()),
+            preview_request: RwSignal::new(None),
+            browser_checks: RwSignal::new(Vec::new()),
             isolated: RwSignal::new(false),
             active: RwSignal::new(HashMap::new()),
             drafts: RwSignal::new(HashMap::new()),
@@ -247,6 +280,7 @@ impl Workbench {
             Ok(history) => {
                 let last = history.conversations.len().checked_sub(1);
                 self.current.set(None);
+                self.browser_checks.set(Vec::new());
                 self.drafts.set(HashMap::new());
                 self.root.set(Some(root.clone()));
                 self.history.set(history);
@@ -459,6 +493,7 @@ impl Workbench {
         let index = current.unwrap_or_else(|| {
             self.history.with_untracked(|h| h.conversations.len())
         });
+        let view = self.view_context.get_untracked();
         let mut displayed = draft.clone();
         if let Some((platform, id)) = &device {
             displayed.push_str(&format!("\n[Screen: {platform} · {id}]"));
@@ -514,11 +549,24 @@ impl Workbench {
         self.attach.set(false);
         self.tab.set(Tab::Chat);
         let cancelled = Arc::new(AtomicBool::new(false));
+        let context = verify::Context {
+            isolated: key.is_some(),
+            project_name: root
+                .file_name()
+                .unwrap_or(root.as_os_str())
+                .to_string_lossy()
+                .into_owned(),
+            provider: provider_name(p),
+            device: self.target.get_untracked(),
+            language: crate::i18n::language_name(),
+            view,
+        };
         let (tx, rx) = mpsc::channel();
         self.active.update(|a| {
             a.insert(
                 index,
                 ActiveTurn {
+                    last_preview: RefCell::default(),
                     stage: RefCell::new(Stage::Preparing(rx)),
                     cancelled: cancelled.clone(),
                     worktree_id: key.clone(),
@@ -559,17 +607,27 @@ impl Workbench {
                 if cancelled.load(Ordering::Acquire) {
                     return Err(StartError::Agent("Turn stopped".into()));
                 }
-                let run = agents::start_with_image(
+                let verification =
+                    verify::Host::start(&cwd, context).and_then(|host| {
+                        let config = host.config()?;
+                        Ok((host, config))
+                    });
+                let run = agents::start_with_verification(
                     p,
                     &cwd,
                     &draft,
                     session.as_deref(),
                     image.as_ref().map(|f| f.path()),
+                    verification.as_ref().ok().map(|(_, config)| config),
                 )?;
                 if cancelled.load(Ordering::Acquire) {
                     run.control.cancel();
                 }
-                Ok((run, image))
+                Ok(Started {
+                    run,
+                    picture: image,
+                    verification: verification.map(|(host, _)| host),
+                })
             })();
             let _ = tx.send(result);
         });
@@ -586,7 +644,10 @@ impl Workbench {
             return;
         };
         match events {
-            Ok(events) => self.apply_events(index, events),
+            Ok(events) => {
+                self.observe_checks(index);
+                self.apply_events(index, events);
+            }
             Err(e) => {
                 // Only a failed first creation may be retried with a fresh key.
                 // Failure to reopen an existing checkout must preserve its key.
@@ -598,6 +659,59 @@ impl Workbench {
         if self.active.with_untracked(|a| a.contains_key(&index)) {
             exec_after(Duration::from_millis(50), move |_| self.poll_agent(index));
         }
+    }
+
+    pub(crate) fn browser_observation(self) -> Option<BrowserObservation> {
+        let current = self.current.get()?;
+        self.browser_checks.with(|checks| {
+            checks
+                .iter()
+                .find(|(i, _)| *i == current)
+                .map(|(_, v)| v.clone())
+        })
+    }
+
+    fn observe_checks(self, index: usize) {
+        self.active.with_untracked(|turns| {
+            let Some(turn) = turns.get(&index) else {
+                return;
+            };
+            let stage = turn.stage.borrow();
+            let Stage::Running {
+                host: Some(host), ..
+            } = &*stage
+            else {
+                return;
+            };
+            for observed in host.observations.try_iter() {
+                let preview = match observed {
+                    Observation::Mobile(p, id) => Preview::Mobile(p, id),
+                    Observation::Web(mut latest) => {
+                        self.browser_checks.update(|checks| {
+                            if latest.capture.is_some()
+                                && latest.page.is_empty()
+                                && let Some((_, prior)) =
+                                    checks.iter().find(|(i, _)| *i == index)
+                            {
+                                latest.page.clone_from(&prior.page);
+                            }
+                            checks.retain(|(i, _)| *i != index);
+                            if checks.len() >= 4 {
+                                checks.remove(0);
+                            }
+                            checks.push((index, latest));
+                        });
+                        Preview::Web
+                    }
+                };
+                if self.current.get_untracked() == Some(index)
+                    && turn.last_preview.borrow().as_ref() != Some(&preview)
+                {
+                    *turn.last_preview.borrow_mut() = Some(preview.clone());
+                    self.preview_request.set(Some(preview));
+                }
+            }
+        });
     }
 
     fn apply_events(self, index: usize, events: Vec<Event>) {

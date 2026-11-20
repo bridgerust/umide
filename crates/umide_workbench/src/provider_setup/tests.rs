@@ -78,6 +78,8 @@ fn installs_probes_and_signs_in_with_only_fixture_tools() {
             .env_clear()
             .env("PATH", &bin)
             .env("TMPDIR", &root)
+            .env("CODEX_HOME", root.join("codex-config"))
+            .env("CLAUDE_CONFIG_DIR", root.join("claude-config"))
             .env("UMIDE_SETUP_FIXTURE", &root)
             .env("UMIDE_CODEX_PATH", bin.join("codex"))
             .env("UMIDE_CLAUDE_PATH", bin.join("claude"))
@@ -100,6 +102,8 @@ fn installs_probes_and_signs_in_with_only_fixture_tools() {
     assert!(first_run());
     remember().unwrap();
     assert!(!first_run());
+    assert!(root.join("codex-config/AGENTS.md").is_file());
+    assert!(root.join("claude-config/CLAUDE.md").is_file());
     for (provider, name) in
         [(Provider::Codex, "codex"), (Provider::Claude, "claude")]
     {

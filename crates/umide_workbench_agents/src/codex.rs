@@ -4,6 +4,27 @@ use serde_json::{Value, json};
 
 use crate::{Event, ProtocolIo, Turn};
 
+pub(super) fn thread_request(turn: &Turn) -> Value {
+    let mut config = json!({"cwd":turn.cwd,"sandbox":"workspace-write","approvalPolicy":"on-request","approvalsReviewer":"user"});
+    if let Some(server) = &turn.verify_server {
+        // A dotted key overrides only Umide for this thread. Other
+        // configured servers keep their own settings.
+        let mut server = server.clone();
+        for &name in crate::READ_ONLY_VERIFY_TOOLS {
+            server["tools"][name] = json!({"approval_mode":"approve"});
+        }
+        config["config"] = json!({"mcp_servers.umide": server});
+    }
+    let method = if let Some(thread) = &turn.session {
+        config["threadId"] = json!(thread);
+        config["excludeTurns"] = json!(true);
+        "thread/resume"
+    } else {
+        "thread/start"
+    };
+    json!({"id":2,"method":method,"params":config})
+}
+
 #[derive(Default)]
 pub(super) struct State {
     thread: Option<String>,
@@ -21,7 +42,7 @@ impl State {
         let method = msg["method"].as_str();
         if let Some(id) = msg.get("id") {
             if let Some(method) = method {
-                self.request(io, id, method, p)?;
+                self.request(io, id, method, p, turn.verify_server.is_some())?;
             } else {
                 if let Some(error) = msg.get("error") {
                     return Ok(Some(match error["message"].as_str() {
@@ -32,15 +53,7 @@ impl State {
                 match id.as_u64() {
                     Some(1) => {
                         io.send(json!({"method":"initialized"}))?;
-                        let mut config = json!({"cwd":turn.cwd,"sandbox":"workspace-write","approvalPolicy":"on-request","approvalsReviewer":"user"});
-                        let method = if let Some(thread) = &turn.session {
-                            config["threadId"] = json!(thread);
-                            config["excludeTurns"] = json!(true);
-                            "thread/resume"
-                        } else {
-                            "thread/start"
-                        };
-                        io.send(json!({"id":2,"method":method,"params":config}))?;
+                        io.send(thread_request(turn))?;
                     }
                     Some(2) => {
                         let id = msg
@@ -117,8 +130,22 @@ impl State {
         id: &Value,
         method: &str,
         p: &Value,
+        verification: bool,
     ) -> Result<(), String> {
         match method {
+            "mcpServer/elicitation/request" => {
+                let decline=json!({"id":id,"result":{"action":"decline","content":null}});
+                let schema=&p["requestedSchema"];
+                let is_confirmation = p["mode"]=="form" && schema["type"]=="object"
+                    && schema["required"].as_array().is_none_or(Vec::is_empty)
+                    && schema["properties"].as_object().is_none_or(serde_json::Map::is_empty);
+                if !verification || p["serverName"]!="umide" || self.thread.is_none() || p["threadId"].as_str()!=self.thread.as_deref() || !is_confirmation {
+                    return io.send(decline);
+                }
+                let Some(message)=p["message"].as_str() else { return io.send(decline); };
+                let description = format!("Umide · {message}");
+                io.approve(id.to_string(),description,json!({"id":id,"result":{"action":"accept","content":{}}}),decline)
+            }
             "item/permissions/requestApproval" => io.send(json!({"id":id,"result":{"permissions":{},"scope":"turn"}})),
             "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
                 let deny = json!({"id":id,"result":{"decision":"decline"}});

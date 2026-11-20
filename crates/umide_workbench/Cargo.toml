@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 floem.workspace = true
 alacritty_terminal.workspace = true
+base64 = "0.22"
 umide_workbench_agents = { path = "../umide_workbench_agents" }
 umide_emulator.workspace = true
 directories.workspace = true

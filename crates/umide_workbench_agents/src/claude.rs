@@ -4,7 +4,11 @@ use serde_json::{Value, json};
 
 use crate::{Event, ProtocolIo};
 
-pub(super) fn configure(cmd: &mut Command, session: Option<&str>) {
+pub(super) fn configure(
+    cmd: &mut Command,
+    session: Option<&str>,
+    verify_server: Option<&Value>,
+) {
     // Bare mode skips the CLI's keychain. Keep it for configured API/cloud
     // clients, and allow the normal CLI sign-in for desktop users.
     if [
@@ -35,10 +39,27 @@ pub(super) fn configure(cmd: &mut Command, session: Option<&str>) {
         "default",
         "--strict-mcp-config",
         "--tools",
-        "Read,Glob,Grep,Edit,Write,Bash,PowerShell",
+        if verify_server.is_some() {
+            "Read,Glob,Grep,Edit,Write,Bash,PowerShell,ToolSearch"
+        } else {
+            "Read,Glob,Grep,Edit,Write,Bash,PowerShell"
+        },
         "--settings",
         r#"{"disableAllHooks":true,"permissions":{"ask":["Edit","Write","Bash","PowerShell"]}}"#,
     ]);
+    if let Some(server) = verify_server {
+        cmd.arg("--mcp-config")
+            .arg(json!({"mcpServers": {"umide": server}}).to_string());
+        let reads = crate::READ_ONLY_VERIFY_TOOLS
+            .iter()
+            .map(|name| format!("mcp__umide__{name}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        cmd.arg("--allowedTools").arg(reads);
+        if session.is_none() {
+            cmd.args(["--append-system-prompt", crate::VERIFY_INSTRUCTIONS]);
+        }
+    }
     if let Some(id) = session {
         cmd.args(["--resume", id]);
     }

@@ -46,6 +46,10 @@ fn runtime() -> Result<tokio::runtime::Runtime> {
         .map_err(|e| e.to_string())
 }
 
+pub(crate) fn device_command(command: Command, seconds: u64) -> Result<Vec<u8>> {
+    runtime()?.block_on(execute(command, seconds))
+}
+
 async fn execute(command: Command, seconds: u64) -> Result<Vec<u8>> {
     let name = command.get_program().to_string_lossy().into_owned();
     let mut cmd = tokio::process::Command::from(command);
@@ -110,6 +114,64 @@ async fn screenshot(platform: &str, id: &str) -> Result<Vec<u8>> {
 /// Capture the selected adb serial or simulator UDID. Call on a worker thread.
 pub fn capture_png(platform: &str, id: &str) -> Result<Vec<u8>> {
     runtime()?.block_on(screenshot(platform, id))
+}
+
+/// The point uses full-resolution screenshot pixels, including device rotation.
+pub(crate) fn tap(
+    platform: &str,
+    id: &str,
+    point: (u32, u32),
+    frame: (u32, u32),
+) -> Result<()> {
+    if point.0 >= frame.0 || point.1 >= frame.1 {
+        return Err("Tap falls outside the screenshot.".into());
+    }
+    match platform {
+        "android" => {
+            let mut cmd = AndroidEmulator::adb_command(id);
+            cmd.args(["shell", "input", "tap"])
+                .arg(point.0.to_string())
+                .arg(point.1.to_string());
+            device_command(cmd, 8).map(|_| ())
+        }
+        #[cfg(target_os = "macos")]
+        "ios" => {
+            if !ios_grpc::IosCompanion::available() {
+                return Err(
+                    "Install idb_companion to send taps to an iOS simulator.".into(),
+                );
+            }
+            let companion =
+                ios_grpc::IosCompanion::spawn(id).map_err(|e| e.to_string())?;
+            runtime()?.block_on(async {
+                timeout(Duration::from_secs(8), async {
+                    let mut client = ios_grpc::connect(companion.grpc_port)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let (_, _, w, h, _) = ios_grpc::screen_dimensions(&mut client)
+                        .await
+                        .map_err(|e| e.to_string())?
+                        .filter(|it| it.2 > 0 && it.3 > 0)
+                        .ok_or("Simulator did not report its screen size")?;
+                    let (w, h) = if (w > h) != (frame.0 > frame.1) {
+                        (h, w)
+                    } else {
+                        (w, h)
+                    };
+                    ios_grpc::hid_tap(
+                        &mut client,
+                        point.0 as f64 * w as f64 / frame.0 as f64,
+                        point.1 as f64 * h as f64 / frame.1 as f64,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())
+                })
+                .await
+                .map_err(|_| "Simulator tap timed out".to_string())?
+            })
+        }
+        _ => Err("Unsupported platform".into()),
+    }
 }
 
 pub(super) fn start(platform: String, id: String) -> Preview {

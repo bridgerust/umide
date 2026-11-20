@@ -50,7 +50,7 @@ fn workspace_root(root: &Path) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-fn resolve(root: &Path, relative: &Path) -> Result<PathBuf, String> {
+pub(crate) fn resolve(root: &Path, relative: &Path) -> Result<PathBuf, String> {
     if relative
         .components()
         .any(|part| !matches!(part, Component::Normal(_) | Component::CurDir))

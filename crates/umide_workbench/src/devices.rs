@@ -1,6 +1,7 @@
 mod session;
 
 pub use session::capture_png;
+pub(crate) use session::{device_command, tap};
 
 use std::{cell::Cell, rc::Rc, time::Instant};
 

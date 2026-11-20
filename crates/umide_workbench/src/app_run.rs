@@ -18,8 +18,18 @@ use serde_json::Value;
 type RunResult<T> = Result<T, String>;
 const OUTPUT_LIMIT: usize = 60_000;
 
+#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RunState {
+    Running,
+    Succeeded,
+    Failed,
+    Stopped,
+}
+
 struct Console {
-    running: bool,
+    state: RunState,
+    written: u64,
     output: ToolOutput,
 }
 
@@ -42,6 +52,10 @@ impl ToolOutput {
             notice: notice.into(),
             ..Self::default()
         }
+    }
+
+    pub(crate) fn parts(&self) -> (&str, &str) {
+        (&self.text, &self.notice)
     }
 
     /// Only Umide's own diagnostic is localized. Process output is kept verbatim.
@@ -133,10 +147,19 @@ impl AppRun {
         platform: &str,
         device_id: &str,
     ) -> RunResult<Self> {
+        Self::start_until(project, platform, device_id, None)
+    }
+
+    pub(crate) fn start_until(
+        project: &Path,
+        platform: &str,
+        device_id: &str,
+        deadline: Option<Instant>,
+    ) -> RunResult<Self> {
         validate_device(platform, device_id)?;
         let project = project.canonicalize().map_err(|e| e.to_string())?;
         let plan = Plan::detect(&project, platform)?;
-        let runner = Arc::new(Runner::new(project, None));
+        let runner = Arc::new(Runner::new(project, deadline));
         let worker = runner.clone();
         let platform = platform.to_owned();
         let device_id = device_id.to_owned();
@@ -144,14 +167,16 @@ impl AppRun {
             .name("mobile-app-run".into())
             .spawn(move || {
                 let result = plan.run(&worker, &platform, &device_id);
-                let message = match result {
-                    _ if worker.cancelled() => "[Run stopped]".into(),
-                    Ok(()) => "[Command finished]".into(),
-                    Err(error) => error,
+                let (state, message) = match result {
+                    _ if worker.cancelled() => {
+                        (RunState::Stopped, "[Run stopped]".into())
+                    }
+                    Ok(()) => (RunState::Succeeded, "[Command finished]".into()),
+                    Err(error) => (RunState::Failed, error),
                 };
                 let mut console = worker.console.lock().unwrap();
                 console.output.notice = message;
-                console.running = false;
+                console.state = state;
             })
             .map_err(|e| e.to_string())?;
         Ok(Self(runner))
@@ -159,7 +184,16 @@ impl AppRun {
 
     pub(crate) fn snapshot(&self) -> (bool, ToolOutput) {
         let state = self.0.console.lock().unwrap();
-        (state.running, state.output.clone())
+        (state.state == RunState::Running, state.output.clone())
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.0.console.lock().unwrap().state == RunState::Running
+    }
+
+    pub(crate) fn report(&self) -> (RunState, u64, ToolOutput) {
+        let state = self.0.console.lock().unwrap();
+        (state.state, state.written, state.output.clone())
     }
 
     pub fn stop(&self) {
@@ -198,7 +232,8 @@ impl Runner {
             deadline,
             stop: AtomicBool::new(false),
             console: Mutex::new(Console {
-                running: true,
+                state: RunState::Running,
+                written: 0,
                 output: ToolOutput::default(),
             }),
             active: Mutex::new(None),
@@ -210,7 +245,9 @@ impl Runner {
     }
 
     fn append(&self, chunk: &str) {
-        extend_bounded(&mut self.console.lock().unwrap().output.text, chunk);
+        let mut console = self.console.lock().unwrap();
+        console.written = console.written.saturating_add(chunk.len() as u64);
+        extend_bounded(&mut console.output.text, chunk);
     }
 
     fn command(

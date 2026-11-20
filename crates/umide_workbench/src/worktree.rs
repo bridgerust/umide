@@ -32,6 +32,8 @@ pub(crate) fn git(root: &Path) -> Command {
         ])
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null());
+    #[cfg(windows)]
+    cmd.args(["-c", "core.longpaths=true"]);
     for key in [
         "GIT_DIR",
         "GIT_COMMON_DIR",
@@ -80,9 +82,13 @@ fn path_line(mut bytes: Vec<u8>) -> Result<PathBuf, String> {
     }
 }
 
-fn git_path(root: &Path, arg: &str) -> Result<PathBuf, String> {
+fn reported_git_path(root: &Path, arg: &str) -> Result<PathBuf, String> {
     let out = run(git(root).args(["rev-parse", "--path-format=absolute", arg]))?;
-    path_line(out.stdout)?
+    path_line(out.stdout)
+}
+
+fn git_path(root: &Path, arg: &str) -> Result<PathBuf, String> {
+    reported_git_path(root, arg)?
         .canonicalize()
         .map_err(|e| format!("Invalid Git directory: {e}"))
 }
@@ -233,17 +239,25 @@ pub fn create_with_key(
         run(git(&task.repository).args(["rev-parse", "--verify", "HEAD^{commit}"]))
             .map_err(|e| format!("Isolation requires a committed project. {e}"))?;
     let head = commit_id(&head.stdout)?;
+    let git_dir = reported_git_path(&task.repository, "--absolute-git-dir")?;
     // Exclusive creation prevents parallel calls from adopting or overwriting a task.
     fs::create_dir(&task.storage)
         .map_err(|e| format!("Cannot reserve isolated task: {e}"))?;
     let base = task.storage.join("base-commit");
     let root = task.root();
+    // Git for Windows cannot use a verbatim Win32 path as a worktree argument.
+    // Use Git's own spelling of its admin directory and resolve the checkout
+    // relative to the reserved folder, even when it lives on another volume.
+    let worktree = || {
+        let mut cmd = git(&task.storage);
+        cmd.arg("--git-dir").arg(&git_dir).arg("worktree");
+        cmd
+    };
     let create = || {
         fs::write(&base, &head)
             .map_err(|e| format!("Cannot save task base commit: {e}"))?;
-        run(git(&task.repository)
-            .args(["worktree", "add", "--quiet", "--detach", "--"])
-            .arg(&root)
+        run(worktree()
+            .args(["add", "--quiet", "--detach", "--", "./checkout"])
             .arg(&head))?;
         task.validate()?;
         task.app_path()
@@ -254,10 +268,7 @@ pub fn create_with_key(
             // Release only the new, still unused checkout. Git refuses to remove
             // a dirty or locked worktree; leave its metadata intact in that case.
             if fs::symlink_metadata(&root).is_ok()
-                && run(git(&task.repository)
-                    .args(["worktree", "remove", "--"])
-                    .arg(&root))
-                .is_err()
+                && run(worktree().args(["remove", "--", "./checkout"])).is_err()
             {
                 return Err(format!(
                     "{error}\nCheck the unfinished task at {}.",
@@ -304,6 +315,9 @@ mod tests {
         let app = project.join("apps/ios");
         fs::create_dir_all(&app).unwrap();
         run(git(&project).arg("init").arg("--quiet")).unwrap();
+        // The assertions below compare the exact bytes in each checkout.
+        run(git(&project).args(["config", "--local", "core.autocrlf", "false"]))
+            .unwrap();
         fs::write(app.join("app.txt"), "published\n").unwrap();
         run(git(&project).args(["add", "--", "."])).unwrap();
         commit(&project);
@@ -392,6 +406,8 @@ mod tests {
     #[test]
     fn uncommitted_app_folder_fails_without_registering_an_empty_task() {
         let (_temp, app, data) = fixture();
+        let active_key = new_key();
+        let active = create_with_key(&app, &data, &active_key).unwrap();
         let new_app = app.join("untracked");
         fs::create_dir(&new_app).unwrap();
         let key = new_key();
@@ -404,8 +420,24 @@ mod tests {
                 .lines()
                 .filter(|line| line.starts_with("worktree "))
                 .count(),
-            1
+            2
         );
+        assert_eq!(open(&app, &data, &active_key).unwrap(), active);
         assert!(open(&new_app, &data, &key).is_err());
+    }
+
+    #[test]
+    fn starts_from_the_selected_linked_worktrees_head() {
+        let (temp, app, data) = fixture();
+        let linked = create_with_key(&app, &data, &new_key()).unwrap();
+        fs::write(linked.join("app.txt"), "committed in linked checkout\n").unwrap();
+        commit(&linked);
+        let next =
+            create_with_key(&linked, &temp.path().join("second éspace"), &new_key())
+                .unwrap();
+        assert_eq!(
+            fs::read_to_string(next.join("app.txt")).unwrap(),
+            "committed in linked checkout\n"
+        );
     }
 }

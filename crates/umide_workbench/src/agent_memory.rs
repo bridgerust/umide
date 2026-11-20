@@ -59,7 +59,13 @@ fn read_regular(path: &Path) -> io::Result<Vec<u8>> {
     if !fs::metadata(path)?.is_file() {
         return Err(io::Error::other("Expected a regular file."));
     }
-    fs::read(path)
+    let mut file = fs::File::open(path)?;
+    // Windows enforces byte-range locks during reads. Read from the handle
+    // holding the shared lock so an in-progress append finishes first.
+    file.lock_shared()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 fn install_file(path: &Path) -> Result<(), String> {
@@ -247,6 +253,57 @@ mod tests {
                 .starts_with("My settings\n\n")
         );
         assert_eq!(fs::read_to_string(&alternate).unwrap(), " \n");
+    }
+
+    #[test]
+    fn waits_for_the_override_writer_before_choosing_the_global_file() {
+        use std::{sync::mpsc, time::Duration};
+
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let alternate = root.join("AGENTS.override.md");
+        let mut writer = fs::File::create(&alternate).unwrap();
+        writer.lock().unwrap();
+
+        std::thread::scope(|scope| {
+            let (started, ready) = mpsc::channel();
+            let (done, result) = mpsc::channel();
+            scope.spawn(move || {
+                started.send(()).unwrap();
+                done.send(install_codex(root)).unwrap();
+            });
+            ready.recv().unwrap();
+            let waiting = result.recv_timeout(Duration::from_millis(100));
+            writer.write_all(b"Personal override.").unwrap();
+            drop(writer);
+            assert!(matches!(waiting, Err(mpsc::RecvTimeoutError::Timeout)));
+            result
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap()
+                .unwrap();
+        });
+        assert!(!root.join("AGENTS.md").exists());
+        assert!(
+            fs::read_to_string(alternate)
+                .unwrap()
+                .starts_with("Personal override.\n\n")
+        );
+    }
+
+    #[test]
+    fn an_installed_read_only_guidance_file_needs_no_write_access() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("CLAUDE.md");
+        install_file(&path).unwrap();
+        let original = fs::read(&path).unwrap();
+        let permissions = fs::metadata(&path).unwrap().permissions();
+        let mut read_only = permissions.clone();
+        read_only.set_readonly(true);
+        fs::set_permissions(&path, read_only).unwrap();
+        let result = install_file(&path);
+        fs::set_permissions(&path, permissions).unwrap();
+        result.unwrap();
+        assert_eq!(fs::read(path).unwrap(), original);
     }
 
     #[test]

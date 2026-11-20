@@ -71,6 +71,19 @@ fn resolve(root: &Path, relative: &Path) -> Result<PathBuf, String> {
     Ok(target)
 }
 
+/// Resolve a file for another editor without imposing our text encoding or size limits.
+pub(crate) fn external_target(
+    root: &Path,
+    relative: &Path,
+) -> Result<(PathBuf, PathBuf), String> {
+    let root = workspace_root(root)?;
+    let target = resolve(&root, relative)?;
+    if !target.is_file() {
+        return Err("Choose a regular file in this workspace.".into());
+    }
+    Ok((root, target))
+}
+
 pub fn list(root: &Path, relative: &Path) -> Result<Vec<FileEntry>, String> {
     let root = workspace_root(root)?;
     let directory = resolve(&root, relative)?;

@@ -38,6 +38,10 @@ The workspace opens on **Conversation**. Choose **Terminal** in the toolbar to o
 
 Choose **Files** next to **Terminal** to browse the checkout used by the current conversation. Expand a folder and select a file to edit it alongside the chat. Use **Browse files** to switch files. A wide window can show the tree and editor side by side.
 
+To use your editor’s code completion, type information and refactoring tools, select **Open in…** above the file. Choose **VS Code**, **Android Studio**, **Xcode** on macOS, or **Other editor…** to pick an installed application. Umide opens the file from the conversation’s checkout, including an isolated Git copy. VS Code also receives the checkout folder. Android Studio and Xcode receive the corresponding project when it can be identified. A custom editor receives the file. Language features depend on the tools and extensions installed in that editor.
+
+If you have edits in Umide, **Save and open** writes them before opening the other editor. **Open disk version** opens the saved file and keeps your draft in Umide. When you return to the Workbench, a clean buffer picks up external changes. This action also works for files larger than the built-in editor’s limit.
+
 Use **Save**, **⌘S** on macOS or **Ctrl+S** on Windows and Linux. Press **Esc** in the editor to return to the conversation input when it is available. Switching to another file, project or preview keeps your edits in the window. The editor opens UTF-8 text files up to 2 MiB.
 
 If an agent or another program changes the file on disk, use **Copy edits** to keep your version before reloading. On a normal window close Umide stores unsaved drafts locally and restores them when you reopen the file. If the original file has moved or disappeared, open **Files** in the same checkout and choose **Copy edits** next to the original path.

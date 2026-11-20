@@ -4,6 +4,8 @@ mod browser;
 mod conversation;
 mod design;
 mod devices;
+mod editor_picker;
+mod external_editor;
 mod file_editor;
 mod file_explorer;
 mod files_panel;
@@ -601,6 +603,11 @@ fn app(
     .on_event_cont(floem::event::EventListener::ThemeChanged, move |event| {
         if let floem::event::Event::ThemeChanged(theme) = event {
             appearance.window_changed(*theme);
+        }
+    })
+    .on_event_cont(floem::event::EventListener::WindowGotFocus, move |_| {
+        if let Ok(workspace) = wb.selected_workspace() {
+            files.refresh_external(&workspace);
         }
     })
     .on_event_cont(floem::event::EventListener::WindowClosed, move |_| {

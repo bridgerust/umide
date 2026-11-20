@@ -1,4 +1,6 @@
 //! Native source editor. Documents live with the window, independently of the visible panel.
+mod external;
+
 use std::{
     cell::{Cell, OnceCell},
     collections::HashMap,
@@ -67,9 +69,18 @@ struct Entry {
     buffer: RwSignal<Option<Buffer>>,
     busy: RwSignal<bool>,
     message: RwSignal<Option<String>>,
-    confirm_reload: RwSignal<bool>,
+    confirm: RwSignal<Option<Confirmation>>,
+    external_opened: Cell<bool>,
+    external_error: RwSignal<Option<String>>,
     recovery_dir: RwSignal<Option<PathBuf>>,
     recovered_record: RwSignal<Option<PathBuf>>,
+}
+
+#[derive(Clone)]
+enum Confirmation {
+    Reload,
+    ChooseEditor,
+    Open(external::Target),
 }
 
 impl FileEditor {
@@ -98,7 +109,9 @@ impl FileEditor {
             buffer: scope.create_rw_signal(None),
             busy: scope.create_rw_signal(false),
             message: scope.create_rw_signal(None),
-            confirm_reload: scope.create_rw_signal(false),
+            confirm: scope.create_rw_signal(None),
+            external_opened: Cell::new(false),
+            external_error: scope.create_rw_signal(None),
             recovery_dir: scope.create_rw_signal(None),
             recovered_record: scope.create_rw_signal(None),
         });
@@ -165,6 +178,25 @@ impl FileEditor {
             all.get(&(workspace.clone(), path.to_owned()))
                 .is_some_and(|entry| entry.dirty())
         })
+    }
+
+    pub(crate) fn refresh_external(self, workspace: &Workspace) {
+        let Some(path) = self.selected.with_untracked(|s| s.get(workspace).cloned())
+        else {
+            return;
+        };
+        let entry = self
+            .entries
+            .with_untracked(|all| all.get(&(workspace.clone(), path)).cloned());
+        if let Some(entry) = entry
+            && entry.external_opened.get()
+            && !entry.busy.get_untracked()
+            && entry.buffer.with_untracked(|buf| {
+                buf.as_ref().is_some_and(|b| !b.dirty.get_untracked())
+            })
+        {
+            entry.read();
+        }
     }
 
     /// Flush unsaved documents to private application storage on normal window close.
@@ -239,7 +271,7 @@ impl Entry {
         if self.busy.get_untracked() {
             return;
         }
-        self.confirm_reload.set(false);
+        self.confirm.set(None);
         self.busy.set(true);
         let before = self
             .buffer
@@ -328,18 +360,24 @@ impl Entry {
         });
     }
 
-    fn save(self: &Rc<Self>) {
+    fn save(self: &Rc<Self>, open_after: Option<external::Target>) {
         let Some(buf) = self.buffer.get_untracked() else {
             return;
         };
-        if self.busy.get_untracked()
-            || !buf.dirty.get_untracked()
-            || buf.recovered_base.is_some()
-        {
+        if self.busy.get_untracked() {
+            return;
+        }
+        if !buf.dirty.get_untracked() {
+            if let Some(target) = open_after {
+                self.launch_external(target);
+            }
+            return;
+        }
+        if buf.recovered_base.is_some() {
             return;
         }
         self.busy.set(true);
-        self.confirm_reload.set(false);
+        self.confirm.set(None);
         let disk = buf.disk.get_untracked().as_ref().clone();
         let edited = buf.doc.text().to_string();
         let entry = self.clone();
@@ -348,19 +386,35 @@ impl Entry {
             move |result: Result<TextFile, String>| {
                 entry.busy.set(false);
                 entry.files.trim_cache();
-                match result {
-                    Ok(disk) => {
-                        let dirty = !matches_text(&buf.doc, &disk.text);
-                        buf.disk.set(Rc::new(disk));
-                        buf.dirty.set(dirty);
-                        entry.message.set(None);
-                        entry.remove_recovery();
+                let synchronized = entry.finish_save(&buf, result);
+                if let Some(target) = open_after {
+                    if synchronized {
+                        entry.launch_external(target);
+                    } else {
+                        entry.confirm.set(Some(Confirmation::Open(target)));
                     }
-                    Err(error) => entry.message.set(Some(error)),
                 }
             },
         );
         std::thread::spawn(move || report(project_files::save(&disk, &edited)));
+    }
+
+    // Only launch the external editor when the complete, current buffer reached disk.
+    fn finish_save(&self, buf: &Buffer, result: Result<TextFile, String>) -> bool {
+        match result {
+            Ok(disk) => {
+                let synchronized = matches_text(&buf.doc, &disk.text);
+                buf.disk.set(Rc::new(disk));
+                buf.dirty.set(!synchronized);
+                self.message.set(None);
+                self.remove_recovery();
+                synchronized
+            }
+            Err(error) => {
+                self.message.set(Some(error));
+                false
+            }
+        }
     }
 
     fn remove_recovery(&self) {
@@ -561,7 +615,8 @@ fn file_panel(
     let reload = entry.clone();
     let save = entry.clone();
     let can_save = entry.clone();
-    let header = Stack::horizontal((
+    let compact = RwSignal::new(false);
+    let identity = Stack::horizontal((
         icon(Glyph::Code, 17., accent).tooltip(|| {
             if cfg!(target_os = "macos") {
                 "⌘S to save · Esc to leave the editor"
@@ -569,25 +624,38 @@ fn file_panel(
                 "Ctrl+S to save · Esc to leave the editor"
             }
         }),
-        Label::new(title).style(|s| {
-            s.text_ellipsis()
-                .font_size(13)
-                .ui_bold()
-                .min_width(0)
-                .flex_grow(1_f32)
-                .color(ink())
-        }),
+        Label::new(title.clone())
+            .style(|s| {
+                s.text_ellipsis()
+                    .font_size(13)
+                    .ui_bold()
+                    .width_full()
+                    .color(ink())
+            })
+            .tooltip(move || title.clone())
+            .style(|s| s.min_width(0).flex_basis(0).flex_grow(1_f32)),
         Label::derived(move || if dirty.dirty() { "Edited" } else { "" })
             .style(|s| s.font_size(11).color(accent())),
+    ))
+    .style(move |s| {
+        s.min_width(0)
+            .items_center()
+            .gap(6)
+            .apply_if(compact.get(), |s| s.width_full())
+            .apply_if(!compact.get(), |s| s.flex_basis(0).flex_grow(1_f32))
+    });
+    let (picker, picker_id) = external::picker(entry.clone());
+    let actions = Stack::horizontal((
+        picker,
         action_button(Glyph::Refresh, "Reload", move || {
             if reload.dirty() {
-                reload.confirm_reload.set(true);
+                reload.confirm.set(Some(Confirmation::Reload));
             } else {
                 reload.read();
             }
         })
         .style(move |s| s.set_disabled(busy.get())),
-        button("Save", move || save.save()).style(move |s| {
+        button("Save", move || save.save(None)).style(move |s| {
             s.set_disabled(
                 busy.get()
                     || !can_save.buffer.with(|buf| {
@@ -598,18 +666,28 @@ fn file_panel(
             )
         }),
     ))
-    .style(|s| {
-        s.items_center()
-            .gap(8)
-            .height(44)
-            .width_full()
-            .padding_horiz(12)
-            .flex_shrink(0_f32)
-            .border_bottom(1)
-            .border_color(subtle_line())
-    });
+    .style(|s| s.items_center().gap(5).flex_shrink(0_f32));
+    let header = Stack::horizontal((identity, actions))
+        .on_resize(move |rect| {
+            let narrow = rect.width() < 420.;
+            if compact.get_untracked() != narrow {
+                compact.set(narrow);
+            }
+        })
+        .style(move |s| {
+            s.gap(6)
+                .apply_if(compact.get(), |s| {
+                    s.flex_col().items_start().padding_vert(7)
+                })
+                .apply_if(!compact.get(), |s| s.items_center().height(44))
+                .width_full()
+                .padding_horiz(12)
+                .flex_shrink(0_f32)
+                .border_bottom(1)
+                .border_color(subtle_line())
+        });
 
-    let confirm = entry.confirm_reload;
+    let confirm = entry.confirm;
     let reload = entry.clone();
     let warning = Stack::horizontal((
         Label::new("Discard unsaved edits and reload this file?").style(|s| {
@@ -618,7 +696,7 @@ fn file_panel(
                 .color(ink())
                 .text_overflow(TextOverflow::Wrap)
         }),
-        button("Cancel", move || confirm.set(false)),
+        button("Cancel", move || confirm.set(None)),
         button("Discard and reload", move || reload.read()),
     ))
     .style(move |s| {
@@ -627,8 +705,26 @@ fn file_panel(
             .gap(8)
             .items_center()
             .background(surface())
-            .apply_if(!confirm.get(), |s| s.hide())
+            .apply_if(
+                !confirm.with(|v| matches!(v, Some(Confirmation::Reload))),
+                |s| s.hide(),
+            )
     });
+    let external_prompt = external::confirmation(entry.clone(), picker_id);
+    let external_error = entry.external_error;
+    let launch_error =
+        Label::derived(move || external_error.get().unwrap_or_default()).style(
+            move |s| {
+                s.width_full()
+                    .padding_horiz(12)
+                    .padding_vert(7)
+                    .font_size(12)
+                    .color(danger())
+                    .background(surface())
+                    .text_overflow(TextOverflow::Wrap)
+                    .apply_if(external_error.get().is_none(), |s| s.hide())
+            },
+        );
     let message = entry.message;
     let buffer = entry.buffer;
     let clipboard_status = RwSignal::new(None::<String>);
@@ -699,8 +795,15 @@ fn file_panel(
         },
     )
     .style(|s| s.width_full().flex_grow(1_f32).min_size(0, 0));
-    Stack::vertical((header, warning, notice, content))
-        .style(|s| s.size_full().min_size(0, 0))
+    Stack::vertical((
+        header,
+        warning,
+        external_prompt,
+        launch_error,
+        notice,
+        content,
+    ))
+    .style(|s| s.size_full().min_size(0, 0))
 }
 
 fn editor_view(
@@ -722,7 +825,7 @@ fn editor_view(
         if key.modifiers == modifier
             && matches!(&key.key, Key::Character(k) if k.eq_ignore_ascii_case("s"))
         {
-            entry.save();
+            entry.save(None);
             return CommandExecuted::Yes;
         }
         defaults.get_or_init(|| default_key_handler(ed))(key.clone())
@@ -766,6 +869,65 @@ mod tests {
     fn replace(doc: &TextDocument, text: &str) {
         let all = Selection::region(0, doc.text().len(), CursorAffinity::Forward);
         doc.edit(&mut [(all, text)].into_iter(), EditType::Other);
+    }
+
+    #[test]
+    fn external_open_requires_a_choice_and_a_current_successful_save() {
+        use crate::external_editor::Editor;
+
+        let scope = Scope::new();
+        let project = tempfile::tempdir().unwrap();
+        let wb = scope.enter(crate::state::Workbench::new);
+        wb.root.set(Some(project.path().into()));
+        wb.isolated.set(false);
+        let workspace = wb.selected_workspace().unwrap();
+        let files = scope.enter(FileEditor::new);
+        let path = Path::new("example.rs");
+        let absolute = project.path().join(path);
+        fs::write(&absolute, "original").unwrap();
+        let entry = files.entry(workspace.clone(), path.into());
+        let disk = project_files::open(project.path(), path).unwrap();
+        let buffer = Buffer::new(entry.scope, disk.clone(), None);
+        entry.buffer.set(Some(buffer.clone()));
+        replace(&buffer.doc, "first edit");
+        entry.request_external(external::Target::Named(Editor::VsCode));
+        assert!(entry.confirm.with_untracked(|c| matches!(
+            c,
+            Some(Confirmation::Open(external::Target::Named(Editor::VsCode)))
+        )));
+        assert!(!entry.busy.get_untracked());
+        assert_eq!(fs::read_to_string(&absolute).unwrap(), "original");
+
+        // Saving takes place on a worker; newer edits must remain in Umide.
+        let first = project_files::save(&disk, "first edit").unwrap();
+        replace(&buffer.doc, "second edit");
+        assert!(!entry.finish_save(&buffer, Ok(first.clone())));
+        assert!(buffer.dirty.get_untracked());
+
+        let second = project_files::save(&first, "second edit").unwrap();
+        assert!(entry.finish_save(&buffer, Ok(second.clone())));
+        assert!(!buffer.dirty.get_untracked());
+
+        // An external edit in the same interval blocks the handoff.
+        replace(&buffer.doc, "unsaved draft");
+        fs::write(&absolute, "external change").unwrap();
+        assert!(
+            !entry
+                .finish_save(&buffer, project_files::save(&second, "unsaved draft"))
+        );
+        assert_eq!(fs::read_to_string(&absolute).unwrap(), "external change");
+        assert_eq!(buffer.doc.text().to_string(), "unsaved draft");
+        assert!(entry.message.with_untracked(Option::is_some));
+
+        // Focus changes after an external launch cannot reload a dirty buffer.
+        files.selected.update(|s| {
+            s.insert(workspace.clone(), path.into());
+        });
+        entry.external_opened.set(true);
+        files.refresh_external(&workspace);
+        assert!(!entry.busy.get_untracked());
+        assert!(buffer.dirty.get_untracked());
+        scope.dispose();
     }
 
     #[test]

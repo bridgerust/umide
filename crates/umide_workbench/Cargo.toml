@@ -17,6 +17,7 @@ tempfile.workspace = true
 sha2 = "0.10"
 pulldown-cmark = "0.13"
 open = "5.3"
+rfd = "0.17.2"
 uuid = { version = "1", features = ["v4"] }
 image = "0.25"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "process", "io-util"] }
@@ -25,6 +26,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "process", "io-u
 libc = "0.2"
 # Alacritty uses std-owned PTY descriptors with rustix-openpty.
 rustix = { version = "0.38", default-features = false, features = ["std"] }
+
+[target.'cfg(windows)'.dependencies]
+dunce = "1.0"
 
 [build-dependencies]
 cc = "1"

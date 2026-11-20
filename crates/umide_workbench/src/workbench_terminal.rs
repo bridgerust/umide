@@ -792,13 +792,7 @@ pub(crate) fn panel(
     terminals: Terminals,
     hide: impl Fn() + Copy + 'static,
 ) -> impl IntoView {
-    let selected = Memo::new(move |_| {
-        wb.root.track();
-        wb.current.track();
-        wb.history.track();
-        wb.isolated.track();
-        wb.selected_workspace()
-    });
+    let selected = wb.workspace_selection();
     dyn_container(
         move || selected.get(),
         move |workspace| {

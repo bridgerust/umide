@@ -34,6 +34,16 @@ You can also pass an app folder after `--`. To build a local macOS development b
 
 The workspace opens on **Conversation**. Choose **Terminal** in the toolbar to open a shell below the conversation, in the current project or isolated Git checkout. Drag the divider to resize it. Hide the terminal to give the conversation more space and reopen it to resume the same session. Umide closes the sessions when you close its window.
 
+## Project files
+
+Choose **Files** next to **Terminal** to browse the checkout used by the current conversation. Expand a folder and select a file to edit it alongside the chat. Use **Browse files** to switch files. A wide window can show the tree and editor side by side.
+
+Use **Save**, **⌘S** on macOS or **Ctrl+S** on Windows and Linux. Press **Esc** in the editor to return to the conversation input when it is available. Switching to another file, project or preview keeps your edits in the window. The editor opens UTF-8 text files up to 2 MiB.
+
+If an agent or another program changes the file on disk, use **Copy edits** to keep your version before reloading. On a normal window close Umide stores unsaved drafts locally and restores them when you reopen the file. If the original file has moved or disappeared, open **Files** in the same checkout and choose **Copy edits** next to the original path.
+
+![Editing a Swift file alongside the file tree, conversation and terminal](../../screenshots/umide-workbench-files.png)
+
 ## Web preview
 
 Choose **Web → Start server** to run the selected conversation’s checkout. Umide uses the `dev` or `start` script from `package.json` and detects npm, pnpm, Yarn or Bun. Install the project's dependencies before starting it. Custom scripts should accept `PORT` and bind to the supplied `HOST`. For a plain HTML project, open the folder containing `index.html`. Static previews use Python 3.

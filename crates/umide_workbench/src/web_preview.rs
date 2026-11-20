@@ -442,13 +442,7 @@ fn workspace_panel(
 }
 
 pub(crate) fn panel(wb: Workbench, web: WebPreview) -> impl IntoView {
-    let selected = Memo::new(move |_| {
-        wb.root.track();
-        wb.current.track();
-        wb.history.track();
-        wb.isolated.track();
-        wb.selected_workspace()
-    });
+    let selected = wb.workspace_selection();
     let title = "Web preview".style(|s| s.font_size(21).ui_bold().color(ink()));
     let folder = Label::derived(move || {
         wb.root.with(|root| {

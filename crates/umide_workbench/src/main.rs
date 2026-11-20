@@ -4,8 +4,13 @@ mod browser;
 mod conversation;
 mod design;
 mod devices;
+mod file_editor;
+mod file_explorer;
+mod files_panel;
 mod navigation;
 mod onboarding;
+mod orphan_drafts;
+mod project_files;
 mod projects;
 mod provider_setup;
 mod review;
@@ -23,7 +28,7 @@ use std::path::PathBuf;
 use conversation::chat;
 use design::{button, canvas};
 use floem::{
-    Application, FileDialogOptions, prelude::*, style::TextOverflow,
+    Application, FileDialogOptions, prelude::*, reactive::Memo, style::TextOverflow,
     window::WindowConfig,
 };
 use review::changes_view;
@@ -166,12 +171,19 @@ fn output_view(wb: Workbench, tab: Tab) -> impl IntoView {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum PreviewMode {
+enum SidePanel {
     Devices,
     Web,
+    Files,
 }
 
-fn preview_toggle_style(
+#[derive(Clone, Copy)]
+struct WorkspaceFocus {
+    composer: RwSignal<Option<floem::ViewId>>,
+    files_button: RwSignal<Option<floem::ViewId>>,
+}
+
+fn toolbar_toggle_style(
     s: floem::style::Style,
     selected: bool,
 ) -> floem::style::Style {
@@ -188,16 +200,16 @@ fn preview_toggle_style(
 
 fn workspace(
     wb: Workbench,
-    inspection: RwSignal<Option<PreviewMode>>,
+    side_panel: RwSignal<Option<SidePanel>>,
     terminals: workbench_terminal::Terminals,
+    focus: WorkspaceFocus,
 ) -> impl IntoView {
     let tight = RwSignal::new(false);
     let dock = terminal_dock::Dock::new();
-    let composer_focus: RwSignal<Option<floem::ViewId>> = RwSignal::new(None);
     let hide_terminal = move || {
         dock.visible.set(false);
         if wb.tab.get_untracked() == Tab::Chat
-            && let Some(input) = composer_focus.get_untracked()
+            && let Some(input) = focus.composer.get_untracked()
         {
             input.request_focus();
         }
@@ -236,10 +248,10 @@ fn workspace(
             })
             .tooltip(move || name)
     };
-    let preview_toggle = move |mode: PreviewMode, glyph, name: &'static str| {
+    let panel_toggle = move |mode: SidePanel, glyph, name: &'static str| {
         let content = Stack::horizontal((
             icon(glyph, 15., move || {
-                if inspection.get() == Some(mode) {
+                if side_panel.get() == Some(mode) {
                     accent()
                 } else {
                     muted()
@@ -248,23 +260,31 @@ fn workspace(
             name.style(move |s| s.font_size(11).apply_if(tight.get(), |s| s.hide())),
         ))
         .style(|s| s.items_center().gap(4));
-        Button::new(content)
+        let toggle = Button::new(content)
             .action(move || {
-                inspection.update(|v| {
+                side_panel.update(|v| {
                     *v = if *v == Some(mode) { None } else { Some(mode) }
                 })
             })
-            .style(move |s| preview_toggle_style(s, inspection.get() == Some(mode)))
-            .tooltip(move || {
-                format!(
-                    "{} {name} preview",
-                    if inspection.get() == Some(mode) {
-                        "Hide"
-                    } else {
-                        "Show"
-                    }
-                )
-            })
+            .style(move |s| toolbar_toggle_style(s, side_panel.get() == Some(mode)));
+        if mode == SidePanel::Files {
+            focus.files_button.set(Some(toggle.id()));
+        }
+        toggle.tooltip(move || {
+            format!(
+                "{} {}",
+                if side_panel.get() == Some(mode) {
+                    "Hide"
+                } else {
+                    "Show"
+                },
+                match mode {
+                    SidePanel::Devices => "mobile preview",
+                    SidePanel::Web => "web preview",
+                    SidePanel::Files => "project files",
+                }
+            )
+        })
     };
     let terminal_toggle = Button::new(
         Stack::horizontal((
@@ -287,7 +307,7 @@ fn workspace(
             dock.visible.set(true);
         }
     })
-    .style(move |s| preview_toggle_style(s, dock.visible.get()))
+    .style(move |s| toolbar_toggle_style(s, dock.visible.get()))
     .tooltip(move || {
         if dock.visible.get() {
             "Hide terminal"
@@ -302,8 +322,9 @@ fn workspace(
         tab("Logs", Glyph::Logs, Tab::Logs),
         Empty::new().style(|s| s.flex_grow(1_f32)),
         terminal_toggle,
-        preview_toggle(PreviewMode::Devices, Glyph::Device, "Mobile"),
-        preview_toggle(PreviewMode::Web, Glyph::Globe, "Web"),
+        panel_toggle(SidePanel::Files, Glyph::Folder, "Files"),
+        panel_toggle(SidePanel::Devices, Glyph::Device, "Mobile"),
+        panel_toggle(SidePanel::Web, Glyph::Globe, "Web"),
     ))
     .style(|s| {
         s.width_full()
@@ -318,7 +339,7 @@ fn workspace(
     let body = dyn_container(
         move || wb.tab.get(),
         move |t| match t {
-            Tab::Chat => chat(wb, composer_focus).into_any(),
+            Tab::Chat => chat(wb, focus.composer).into_any(),
             Tab::Changes => changes_view(wb).into_any(),
             Tab::Output | Tab::Logs => output_view(wb, t).into_any(),
         },
@@ -356,7 +377,7 @@ fn workspace(
     Stack::vertical((tabs, body, dock.view(wb, terminals, hide_terminal), status))
         .on_resize(move |rect| {
             dock.window_resized(rect.height());
-            let cramped = rect.width() < 560.;
+            let cramped = rect.width() < 600.;
             if tight.get_untracked() != cramped {
                 tight.set(cramped);
             }
@@ -446,12 +467,29 @@ fn app(
         wb.open(&project);
     }
     let narrow = RwSignal::new(false);
+    let window_width = RwSignal::new(1280.);
     let rail_override = RwSignal::new(None::<bool>);
-    let inspection = RwSignal::new(Some(PreviewMode::Devices));
+    let side_panel = RwSignal::new(Some(SidePanel::Devices));
     let setup_open = RwSignal::new(provider_setup::first_run());
     let setup = provider_setup::ProviderSetup::new();
     let web = web_preview::WebPreview::new();
     let terminals = workbench_terminal::Terminals::new();
+    let files = file_editor::FileEditor::new();
+    let focus = WorkspaceFocus {
+        composer: RwSignal::new(None),
+        files_button: RwSignal::new(None),
+    };
+    let leave_editor = move || {
+        let target =
+            if wb.tab.get_untracked() == Tab::Chat && !wb.busy.get_untracked() {
+                focus.composer.get_untracked()
+            } else {
+                focus.files_button.get_untracked()
+            };
+        if let Some(target) = target {
+            target.request_focus();
+        }
+    };
     let page = dyn_container(
         move || setup_open.get(),
         move |first_run| {
@@ -482,11 +520,44 @@ fn app(
                 },
             )
             .style(|s| s.height_full().flex_shrink(0_f32));
+            // Keep the native editor, caret, scroll and expanded tree alive when
+            // visiting a preview. Defer filesystem access until Files is opened.
+            let files_visited = Memo::new(move |previous| {
+                previous == Some(&true) || side_panel.get() == Some(SidePanel::Files)
+            });
+            let files_view = dyn_container(
+                move || files_visited.get(),
+                move |visited| {
+                    if visited {
+                        files_panel::panel(wb, files, leave_editor)
+                            .style(|s| s.size_full())
+                            .into_any()
+                    } else {
+                        Empty::new().into_any()
+                    }
+                },
+            )
+            .style(move |s| {
+                let width: f64 = window_width.get();
+                let compact = rail_override.get().unwrap_or_else(|| narrow.get());
+                let rail = if compact { 62. } else { 220. };
+                let available = width - rail - 400.;
+                s.width((width * 0.43).min(available).clamp(316., 780.))
+                    .height_full()
+                    .min_height(0)
+                    .flex_shrink(0_f32)
+                    .background(panel())
+                    .border_left(1)
+                    .border_color(subtle_line())
+                    .apply_if(side_panel.get() != Some(SidePanel::Files), |s| {
+                        s.hide()
+                    })
+            });
             let preview = dyn_container(
-                move || inspection.get(),
+                move || side_panel.get(),
                 move |mode| match mode {
-                    Some(PreviewMode::Devices) => inspector(wb, narrow).into_any(),
-                    Some(PreviewMode::Web) => web_preview::panel(wb, web)
+                    Some(SidePanel::Devices) => inspector(wb, narrow).into_any(),
+                    Some(SidePanel::Web) => web_preview::panel(wb, web)
                         .style(move |s| {
                             s.width(if narrow.get() { 378 } else { 490 })
                                 .height_full()
@@ -497,13 +568,18 @@ fn app(
                                 .border_color(subtle_line())
                         })
                         .into_any(),
-                    None => Empty::new().into_any(),
+                    None | Some(SidePanel::Files) => Empty::new().into_any(),
                 },
             )
             .style(|s| s.height_full().flex_shrink(0_f32));
-            Stack::horizontal((rail, workspace(wb, inspection, terminals), preview))
-                .style(|s| s.size_full())
-                .into_any()
+            Stack::horizontal((
+                rail,
+                workspace(wb, side_panel, terminals, focus),
+                files_view,
+                preview,
+            ))
+            .style(|s| s.size_full())
+            .into_any()
         },
     );
     page.style(|s| {
@@ -514,6 +590,9 @@ fn app(
             .font_size(14)
     })
     .on_resize(move |rect| {
+        if rect.width() != window_width.get_untracked() {
+            window_width.set(rect.width());
+        }
         let small = rect.width() < 1080.;
         if narrow.get_untracked() != small {
             narrow.set(small);
@@ -525,6 +604,9 @@ fn app(
         }
     })
     .on_event_cont(floem::event::EventListener::WindowClosed, move |_| {
+        if let Err(error) = files.close() {
+            eprintln!("Could not store unsaved editor drafts: {error}");
+        }
         setup.close();
         web.close();
         terminals.close();

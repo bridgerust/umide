@@ -13,7 +13,10 @@ use std::{
 };
 
 use floem::{
-    action::exec_after, ext_event::create_ext_action, prelude::*, reactive::Scope,
+    action::exec_after,
+    ext_event::create_ext_action,
+    prelude::*,
+    reactive::{Memo, Scope},
 };
 use tempfile::NamedTempFile;
 use umide_workbench_agents::{self as agents, Event, Provider, Run};
@@ -346,6 +349,16 @@ impl Workbench {
         self.history
             .with_untracked(|h| projects::save_history(&root, h))
             .map_err(|e| format!("Could not save conversation: {e}"))
+    }
+
+    pub(crate) fn workspace_selection(self) -> Memo<Result<Workspace, String>> {
+        Memo::new(move |_| {
+            self.root.track();
+            self.current.track();
+            self.history.track();
+            self.isolated.track();
+            self.selected_workspace()
+        })
     }
 
     pub(crate) fn selected_workspace(self) -> Result<Workspace, String> {
